@@ -43473,7 +43473,18 @@ class SupervertalerQt(QMainWindow):
         if not self.current_project or not self.current_project.segments:
             return
 
-        cursor = preview_text.textCursor()
+        # PERF: build the entire document OFF-SCREEN in a detached QTextDocument
+        # (undo disabled, no attached view), then swap it in with a single
+        # setDocument() call below. Editing the live, word-wrapped QTextEdit
+        # segment-by-segment re-laid-out and repainted on every insert (≈O(n²) on a
+        # 500+ segment file — the ~2s rebuild cost); building detached defers all
+        # layout to one pass. The rendering logic and the recorded character
+        # positions are otherwise identical.
+        from PyQt6.QtGui import QTextDocument
+        doc = QTextDocument()
+        doc.setUndoRedoEnabled(False)
+        doc.setDefaultFont(preview_text.document().defaultFont())
+        cursor = QTextCursor(doc)
         cursor.movePosition(QTextCursor.MoveOperation.Start)
 
         # Pre-calculate list numbers for numbered list items
@@ -43686,6 +43697,9 @@ class SupervertalerQt(QMainWindow):
 
         # Add final newline at end of document
         cursor.insertText("\n")
+
+        # Swap the fully-built off-screen document in — a single layout pass.
+        preview_text.setDocument(doc)
 
         # Scroll to current segment if we have one
         if hasattr(widget, 'current_segment_start_pos') and widget.current_segment_start_pos is not None:

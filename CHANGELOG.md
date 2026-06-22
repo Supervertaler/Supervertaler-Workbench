@@ -2,7 +2,14 @@
 
 All notable changes to Supervertaler Workbench are documented in this file.
 
-**Current Version:** v1.10.304 (June 22, 2026)
+**Current Version:** v1.10.305 (June 22, 2026)
+
+
+## v1.10.305 – June 22, 2026
+
+### Changed (Preview · ~10× faster render via off-screen build)
+
+- **The Document Preview now renders in a single layout pass instead of one per segment.** It used to be built by inserting each segment into the live, word-wrapped preview widget, which re-laid-out and repainted the whole document on every insert (≈O(n²)) — ~2 seconds to rebuild a 500-segment file (the cost behind a slow Ctrl+Alt+P after editing). It now builds the document **off-screen** in a detached `QTextDocument` (undo disabled) and swaps it in with one `setDocument()` call, so the rebuild after an edit is roughly an order of magnitude faster. Output, formatting, paragraph structure, status tints and click-to-navigate positions are unchanged. Reported by Michael.
 
 
 ## v1.10.304 – June 22, 2026
