@@ -1,7 +1,10 @@
 {
   "note": "Canonical LLM price list shared by Supervertaler for Trados and Supervertaler Workbench. Single source of truth. Prices are USD per 1,000,000 tokens (input, output). To override prices for BOTH products at once, copy this file to <home>/Supervertaler/pricing.json and edit it there; each app prefers that shared copy over its bundled default. Cache-discount multipliers are applied in code per provider and are not listed here. Keep the bundled copies in both repos in sync.",
-  "version": "2026-07-24",
+  "version": "2026-07-27",
   "models": {
+    "gpt-5.6-sol": { "input": 5.0, "output": 30.0 },
+    "gpt-5.6-terra": { "input": 2.5, "output": 15.0 },
+    "gpt-5.6-luna": { "input": 1.0, "output": 6.0 },
     "gpt-5.5": { "input": 5.0, "output": 30.0 },
     "gpt-5.4-mini": { "input": 0.75, "output": 4.5 },
     "gpt-5.4": { "input": 10.0, "output": 30.0 },
