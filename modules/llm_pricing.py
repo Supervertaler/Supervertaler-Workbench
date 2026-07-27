@@ -53,6 +53,9 @@ def _load_pricing() -> Dict[str, Tuple[float, float]]:
             continue
     # Minimal safety net — only reached if both files fail to load.
     return {
+        "gpt-5.6-sol": (5.0, 30.0),
+        "gpt-5.6-terra": (2.5, 15.0),
+        "gpt-5.6-luna": (1.0, 6.0),
         "gpt-5.5": (5.0, 30.0),
         "claude-fable-5": (10.0, 50.0),
         "claude-opus-5": (5.0, 25.0),
