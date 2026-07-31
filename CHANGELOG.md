@@ -2,8 +2,13 @@
 
 All notable changes to Supervertaler Workbench are documented in this file.
 
-**Current Version:** v1.10.364 (July 24, 2026)
+**Current Version:** v1.10.365 (July 31, 2026)
 
+
+## v1.10.365 - July 31, 2026
+
+### Added
+- **Superbrowser is back.** The multi-chat AI browser – ChatGPT, Claude, and Gemini side by side in three resizable columns, with persistent login sessions – was removed in v1.9.385 as part of a simplification series, and a user asked after it. It has been restored from the repository history, with one change to fit the current interface: the Tools tab it used to live in no longer exists, so Superbrowser now opens in its own window from **Tools → 🌐 Superbrowser…**, like the other tools. If you used it before v1.9.385, your logins should still be there – the removal deliberately left the `workbench/superbrowser_profiles/` folder on disk, and the restored tool picks it straight back up.
 
 ## v1.10.364 – July 24, 2026
 

@@ -15,6 +15,7 @@
   - PDF Rescue (AI OCR)
   - Superbench (LLM Translation Quality Benchmarking System)
   - Superlookup: unified concordance search
+  - Superbrowser (Multi-Chat AI Browser)
   - Supervoice: dictation stuff
   - Text Encoding Repair
   - TMX Editor
