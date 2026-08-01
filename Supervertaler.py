@@ -1196,7 +1196,13 @@ def extract_all_tags(text: str) -> list:
 # matches self-closing forms (numbered <2/> and HTML <x1/>) which the SDLXLIFF/
 # Trados standalone tags use. Kept separate so extract_all_tags' behaviour (used
 # by other features) is unchanged.
-_AUTOTAG_TAG_PATTERN = r'(\[\d+\}|\{\d+\]|\[\d+\]|</?\d+/?>|</?[a-zA-Z][a-zA-Z0-9-]*(?:\s+[^>]*)?/?>)'
+# The name part allows XML QName characters — letters, digits, '.', '_', '-'
+# and ':'. The colon matters: memoQ bilingual files carry NAMESPACED tags such
+# as <mq:ch val="→" />, and a name class of [a-zA-Z0-9-] stopped at the colon,
+# so those tags were not recognised as tags at all. AutoTagger then reported
+# "the source segment has no inline tags" on most segments of a real memoQ
+# file and did nothing.
+_AUTOTAG_TAG_PATTERN = r'(\[\d+\}|\{\d+\]|\[\d+\]|</?\d+/?>|</?[a-zA-Z][a-zA-Z0-9._:-]*(?:\s+[^>]*)?/?>)'
 
 
 def autotag_extract_tags(text: str) -> list:
@@ -1318,7 +1324,7 @@ def _classify_tag(tag: str):
         m = re.fullmatch(pat, tag)
         if m:
             return (kind, pre + m.group(1))
-    m = re.fullmatch(r'<([a-zA-Z][a-zA-Z0-9-]*)(?:\s+[^>]*)?/>', tag)
+    m = re.fullmatch(r'<([a-zA-Z][a-zA-Z0-9._:-]*)(?:\s+[^>]*)?/>', tag)
     if m:
         return ('self', 'h' + m.group(1).lower())
     # Closing tags may carry ATTRIBUTES. Okapi-extracted DOCX content uses
@@ -1328,10 +1334,10 @@ def _classify_tag(tag: str):
     # fallback, their opener was never popped, and validation rejected a
     # perfectly good placement with "unclosed tag(s): hrpr" — reported as
     # "AutoTagger does nothing" (Workbench issue #244).
-    m = re.fullmatch(r'</([a-zA-Z][a-zA-Z0-9-]*)(?:\s+[^>]*)?>', tag)
+    m = re.fullmatch(r'</([a-zA-Z][a-zA-Z0-9._:-]*)(?:\s+[^>]*)?>', tag)
     if m:
         return ('close', 'h' + m.group(1).lower())
-    m = re.fullmatch(r'<([a-zA-Z][a-zA-Z0-9-]*)(?:\s+[^>]*)?>', tag)
+    m = re.fullmatch(r'<([a-zA-Z][a-zA-Z0-9._:-]*)(?:\s+[^>]*)?>', tag)
     if m:
         return ('open', 'h' + m.group(1).lower())
     return ('self', tag)
@@ -4346,6 +4352,32 @@ class ReadOnlyGridTextEditor(QTextEdit):
             )
             menu.addAction(add_comment_action)
 
+        # Segment operations (confirm / status / lock / AutoTagger / clear),
+        # from the same helper the row and target-cell menus use, so all three
+        # context menus offer the same segment actions. Previously each menu
+        # had its own subset and which one you got depended on which column you
+        # happened to right-click.
+        try:
+            _at_mw = self._get_main_window()
+            if (_at_mw is not None
+                    and hasattr(_at_mw, 'add_segment_actions_to_menu')
+                    and getattr(_at_mw, 'current_project', None)):
+                _row = getattr(self, 'row', None)
+                if isinstance(_row, int) and 0 <= _row < len(_at_mw.current_project.segments):
+                    try:
+                        _sel_rows = {ix.row() for ix in _at_mw.table.selectionModel().selectedIndexes()}
+                    except Exception:
+                        _sel_rows = set()
+                    if _row not in _sel_rows:
+                        _at_mw.table.selectRow(_row)
+                    _segs_for_menu = _at_mw.get_selected_segments_from_grid()
+                    if not _segs_for_menu:
+                        _segs_for_menu = [_at_mw.current_project.segments[_row]]
+                    menu.addSeparator()
+                    _at_mw.add_segment_actions_to_menu(menu, _segs_for_menu, _row)
+        except Exception:
+            pass   # a menu extra must never break the context menu
+
         # QuickLauncher (prompt-based actions + QuickTrans)
         try:
             main_window = self._get_main_window()
@@ -5457,6 +5489,34 @@ class EditableGridTextEditor(QTextEdit):
                 )
             )
             menu.addAction(add_comment_action)
+
+        # Segment operations (confirm / status / lock / AutoTagger / clear).
+        # Built from the SAME helper as the row context menu: these used to live
+        # only in that menu, so they were invisible to anyone who right-clicked
+        # in the target cell - which is where you actually are while working.
+        try:
+            _at_mw = self.table.parent() if self.table else None
+            while _at_mw and not hasattr(_at_mw, 'add_segment_actions_to_menu'):
+                _at_mw = _at_mw.parent()
+            if _at_mw is not None and getattr(_at_mw, 'current_project', None):
+                _row = getattr(self, 'row', None)
+                if isinstance(_row, int) and 0 <= _row < len(_at_mw.current_project.segments):
+                    # Right-clicking in a cell doesn't change the table's row
+                    # selection, so act on the selection when this row is part
+                    # of it, and on this row alone when it isn't.
+                    try:
+                        _sel_rows = {ix.row() for ix in _at_mw.table.selectionModel().selectedIndexes()}
+                    except Exception:
+                        _sel_rows = set()
+                    if _row not in _sel_rows:
+                        _at_mw.table.selectRow(_row)
+                    _segs_for_menu = _at_mw.get_selected_segments_from_grid()
+                    if not _segs_for_menu:
+                        _segs_for_menu = [_at_mw.current_project.segments[_row]]
+                    menu.addSeparator()
+                    _at_mw.add_segment_actions_to_menu(menu, _segs_for_menu, _row)
+        except Exception:
+            pass   # a menu extra must never break the context menu
 
         # QuickLauncher (prompt-based actions + QuickTrans)
         try:
@@ -46457,7 +46517,7 @@ class SupervertalerQt(QMainWindow):
             badge.installEventFilter(self)
             layout.addWidget(badge)
             if is_locked:
-                lock_lbl = QLabel(self.tr('<span style="font-size:14px; line-height:1;">🔒</span>'))
+                lock_lbl = QLabel(self.tr('<span style="font-size:14px; line-height:1.25;">🔒</span>'))
                 lock_lbl.setTextFormat(Qt.TextFormat.RichText)
                 lock_lbl.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
                 lock_lbl.setContentsMargins(0, 0, 0, 0)
@@ -46469,11 +46529,16 @@ class SupervertalerQt(QMainWindow):
             layout.addStretch(1)
             return widget
 
+        # Icon colour now comes from the status definition (icon_color) instead
+        # of a hard-coded special case for "confirmed". Statuses whose glyph is
+        # a colour emoji leave icon_color empty and draw in their own colours;
+        # the two commonest statuses use monochrome Dingbats text glyphs
+        # (✔ U+2714 / ✘ U+2718) precisely so they obey font-size and cannot be
+        # clipped by the tight single-line row.
         icon_text = "🔒" if is_locked else status_def.icon
-        if segment.status == "confirmed" and not is_locked:
-            icon_html = f'<span style="color:#2e7d32; font-size:14px; line-height:1;">{icon_text}</span>'
-        else:
-            icon_html = f'<span style="font-size:14px; line-height:1;">{icon_text}</span>'
+        icon_colour = "" if is_locked else (status_def.icon_color or "")
+        colour_css = f"color:{icon_colour}; " if icon_colour else ""
+        icon_html = f'<span style="{colour_css}font-size:14px; line-height:1.25;">{icon_text}</span>'
 
         status_label = QLabel(icon_html)
         status_label.setTextFormat(Qt.TextFormat.RichText)  # Enable HTML rendering
@@ -46642,6 +46707,11 @@ class SupervertalerQt(QMainWindow):
                     status_tooltip += f"\nProofreading comment: {model_count} LLM result{'s' if model_count != 1 else ''}"
                 item.setToolTip(2, status_tooltip)
                 item.setBackground(2, QColor(status_def.color))
+                # Monochrome text-glyph icons carry their colour in the status
+                # definition; without this the list view would draw the ✘/✔ in
+                # plain black now that they are no longer colour emoji.
+                if status_def.icon_color:
+                    item.setForeground(2, QColor(status_def.icon_color))
 
         # Recalculate row height after status cell update to prevent layout corruption
         if updated_row is not None:
@@ -49904,24 +49974,28 @@ class SupervertalerQt(QMainWindow):
         dialog.exec()
 
     
-    def show_grid_context_menu(self, position):
-        """Show context menu for grid view with bulk operations"""
-        selected_segments = self.get_selected_segments_from_grid()
+    def add_segment_actions_to_menu(self, menu, selected_segments, clicked_row=None):
+        """Append the per-segment actions (confirm, status, lock, AutoTagger,
+        clear) to <menu>.
 
+        Shared by BOTH context menus – the one on the row columns and the one
+        inside the target editor. They used to be entirely separate, so these
+        actions existed only if you happened to right-click the number/status/
+        source column; anyone working in the target cell (i.e. most of the time)
+        never saw them. Building both from here keeps them identical by
+        construction rather than by discipline.
+        """
         if not selected_segments:
             return
 
-        menu = QMenu(self)
+        n = len(selected_segments)
 
-        # Confirm selected segments action
-        if len(selected_segments) >= 1:
-            confirm_action = menu.addAction(f"✅ Confirm {len(selected_segments)} Segment(s)")
-            confirm_action.setToolTip(f"Confirm {len(selected_segments)} selected segment(s)")
-            confirm_action.triggered.connect(self.confirm_selected_segments)
+        confirm_action = menu.addAction(f"✅ Confirm {n} Segment(s)")
+        confirm_action.setToolTip(f"Confirm {n} selected segment(s)")
+        confirm_action.triggered.connect(self.confirm_selected_segments)
 
         # Change Status submenu
-        from modules.statuses import get_status
-        status_menu = menu.addMenu(f"🏷️ Change Status ({len(selected_segments)})")
+        status_menu = menu.addMenu(f"🏷️ Change Status ({n})")
         # Common user-settable statuses (excluding TM-specific ones like pm, cm, tm_100, etc.)
         user_statuses = [
             ("not_started", "❌ Not started"),
@@ -49938,7 +50012,7 @@ class SupervertalerQt(QMainWindow):
 
         # Lock / Unlock toggle
         locked_count = sum(1 for seg in selected_segments if getattr(seg, 'locked', False))
-        unlocked_count = len(selected_segments) - locked_count
+        unlocked_count = n - locked_count
         if locked_count and unlocked_count:
             # Mixed: offer both
             lock_action = menu.addAction(f"🔒 Lock {unlocked_count} Segment(s)")
@@ -49949,24 +50023,97 @@ class SupervertalerQt(QMainWindow):
             unlock_action = menu.addAction(f"🔓 Unlock {locked_count} Segment(s)")
             unlock_action.triggered.connect(lambda: self._set_locked_on_selected(selected_segments, False))
         else:
-            lock_action = menu.addAction(f"🔒 Lock {len(selected_segments)} Segment(s)")
+            lock_action = menu.addAction(f"🔒 Lock {n} Segment(s)")
             lock_action.triggered.connect(lambda: self._set_locked_on_selected(selected_segments, True))
+
+        menu.addSeparator()
+
+        # AutoTagger – only offered for segments it can actually act on (source
+        # has inline tags AND there is a translation to place them into), so the
+        # item never appears just to explain why it can't run.
+        taggable = [s for s in selected_segments
+                    if autotag_extract_tags(s.source) and (s.target or "").strip()]
+        if taggable:
+            if n == 1:
+                autotag_action = menu.addAction(
+                    f"🏷️ AutoTagger – place tags ({format_shortcut_for_display('Ctrl+Alt+G')})")
+                autotag_action.setToolTip(
+                    "Insert the source segment's inline tags into this translation. "
+                    "The wording is never changed.")
+                # The right-clicked row isn't necessarily the current row, and
+                # autotag_current_segment() works on the current row - so point
+                # it at the row under the cursor before running.
+                autotag_action.triggered.connect(
+                    lambda checked=False, r=clicked_row: self._autotag_row_from_context(r))
+            else:
+                autotag_action = menu.addAction(
+                    f"🏷️ AutoTagger – place tags in {len(taggable)} segment(s)")
+                autotag_action.setToolTip(
+                    "Re-place each segment's source tags into its translation "
+                    "(one AI call per segment). Wording is never changed.")
+                autotag_action.triggered.connect(self.autotag_segments_bulk)
 
         menu.addSeparator()
 
         # Clear translations action
         clear_action = menu.addAction("🗑️ Clear Translations")
-        clear_action.setToolTip(f"Clear translations for {len(selected_segments)} selected segment(s)")
+        clear_action.setToolTip(f"Clear translations for {n} selected segment(s)")
         clear_action.triggered.connect(lambda: self.clear_selected_translations(selected_segments, 'grid'))
 
         menu.addSeparator()
 
-        # Select all action
-        select_all_action = menu.addAction(f"📋 Select All ({format_shortcut_for_display('Ctrl+A')})")
+        # "Segments" is in the label on purpose: inside a text cell Ctrl+A means
+        # "select all text", so a bare "Select All" would be ambiguous exactly
+        # where this menu is most often opened.
+        select_all_action = menu.addAction(
+            f"📋 Select All Segments ({format_shortcut_for_display('Ctrl+A')})")
+        select_all_action.setToolTip("Select every segment in the grid")
         select_all_action.triggered.connect(lambda: self.table.selectAll())
 
+    def show_grid_context_menu(self, position):
+        """Show context menu for grid view with bulk operations"""
+        selected_segments = self.get_selected_segments_from_grid()
+
+        if not selected_segments:
+            return
+
+        clicked_row = self.table.indexAt(position).row()
+
+        # The #, Type and Status columns have no text of their own, so this
+        # menu used to be a stripped-down variant — meaning which actions you
+        # were offered depended on which column you happened to right-click.
+        # Delegate to the source cell's menu instead: it carries the same
+        # segment actions PLUS the comment / QuickLauncher / termbase items,
+        # so every column now offers one identical menu.
+        try:
+            from PyQt6.QtGui import QContextMenuEvent
+            src_widget = self.table.cellWidget(clicked_row, 2)
+            if isinstance(src_widget, ReadOnlyGridTextEditor):
+                global_pos = self.table.viewport().mapToGlobal(position)
+                src_widget.contextMenuEvent(QContextMenuEvent(
+                    QContextMenuEvent.Reason.Mouse,
+                    src_widget.mapFromGlobal(global_pos),
+                    global_pos))
+                return
+        except Exception:
+            pass   # fall through to the plain menu below
+
+        menu = QMenu(self)
+        self.add_segment_actions_to_menu(menu, selected_segments, clicked_row)
         menu.exec(self.table.viewport().mapToGlobal(position))
     
+    def _autotag_row_from_context(self, row: int):
+        """Run the single-segment AutoTagger on the row the user right-clicked.
+
+        Right-clicking a cell does not move Qt's current index, but
+        autotag_current_segment() reads self.table.currentRow() - so without
+        this the menu item would silently tag whichever row happened to be
+        current, not the one under the cursor."""
+        if row is None or row < 0:
+            return
+        self.table.setCurrentCell(row, self.table.currentColumn() if self.table.currentColumn() >= 0 else 0)
+        self.autotag_current_segment()
+
     def _set_locked_on_selected(self, segments, locked: bool):
         """Lock or unlock selected segments."""
         changed = 0
@@ -63103,11 +63250,24 @@ class SupervertalerQt(QMainWindow):
         except Exception:
             pass
 
+        # Push the DISPLAY form into the cell, not the raw text: the grid renders
+        # target cells through compact_tags + apply_invisible_replacements at load
+        # time, so writing raw text here left the new content rendered differently
+        # from every other cell — most visibly a tab inside a tag (memoQ's
+        # <mq:ch val="\t" />) showing as a bare gap in the target while the source
+        # cell showed the → marker, which reads as "the tag lost its content".
         target_widget = self.table.cellWidget(current_row, 3)
+        display_target = new_target
+        try:
+            if target_widget is not None and getattr(target_widget, '_compact_tag_map', None) is not None:
+                display_target = compact_tags(display_target, target_widget._compact_tag_map)
+            display_target = self.apply_invisible_replacements(display_target)
+        except Exception:
+            display_target = new_target   # display nicety only; never block the write
         if target_widget and isinstance(target_widget, EditableGridTextEditor):
-            target_widget.setPlainText(new_target)
+            target_widget.setPlainText(display_target)
         else:
-            self.table.setItem(current_row, 3, QTableWidgetItem(new_target))
+            self.table.setItem(current_row, 3, QTableWidgetItem(display_target))
         self.update_status_icon(current_row, segment.status)
         self._auto_resize_single_row(current_row)
         self.project_modified = True

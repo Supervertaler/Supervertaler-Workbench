@@ -18,13 +18,25 @@ class StatusDefinition:
     badge_text: str = ""   # Trados-style coloured text badge shown in place of the icon (e.g. "PM", "CM")
     badge_bg: str = ""     # Badge background colour
     badge_fg: str = "#ffffff"  # Badge text colour
+    # Colour for a MONOCHROME (text-glyph) icon, e.g. "#c62828". Empty means the
+    # glyph draws in its own colours — which is what a colour-emoji icon does.
+    #
+    # Why this exists: colour-emoji glyphs (❌, ✅, 🟪 …) are bitmap glyphs that
+    # IGNORE font-size and line-height, so they overflow the tight single-line
+    # status cell and are clipped at the bottom — the recurring "the red X is
+    # cut off" bug. Text glyphs from the Dingbats block (✔ U+2714 / ✘ U+2718)
+    # obey font-size and accept a CSS colour, so they scale with the row and
+    # cannot clip. The two most common statuses therefore use a matched
+    # text-glyph PAIR rather than one glyph of each kind.
+    icon_color: str = ""
 
 
 STATUSES: Dict[str, StatusDefinition] = {
     "not_started": StatusDefinition(
         key="not_started",
         label="Not started",
-        icon="❌",  # Red X emoji (naturally colored, slightly larger)
+        icon="✘",  # Heavy ballot X (U+2718) - text glyph, pairs with ✔ U+2714
+        icon_color="#d32f2f",  # red, matching the old ❌ emoji's colour
         color="#ffe6e6",
         memoq_label="Not started",
         memoQ_equivalents=("not started", "not translated"),
@@ -51,7 +63,8 @@ STATUSES: Dict[str, StatusDefinition] = {
     "confirmed": StatusDefinition(
         key="confirmed",
         label="Confirmed",
-        icon="✔",  # Checkmark (text character - will be black)
+        icon="✔",  # Heavy check mark (U+2714) - text glyph, pairs with ✘
+        icon_color="#2e7d32",  # green (was hard-coded in the grid widget)
         color="#d1ffd6",
         memoq_label="Confirmed",
         memoQ_equivalents=("confirmed",),

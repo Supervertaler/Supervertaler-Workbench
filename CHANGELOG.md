@@ -2,7 +2,25 @@
 
 All notable changes to Supervertaler Workbench are documented in this file.
 
-**Current Version:** v1.10.366 (August 1, 2026)
+**Current Version:** v1.10.367 (August 1, 2026)
+
+
+## v1.10.367 - August 1, 2026
+
+### Fixed (AutoTagger · memoQ .mqxliff files, continued from v1.10.366)
+
+- **AutoTagger reported "the source segment has no inline tags" on memoQ bilingual files that plainly had them.** memoQ writes NAMESPACED tags – `<mq:ch val="→" />` and friends – and the tag pattern allowed only letters, digits and hyphens in a tag name, so it stopped dead at the colon and never recognised those tags at all. Namespaced names are now matched, which is what makes AutoTagger usable on `.mqxliff` at all. (Found while testing a real client file.)
+- **A tab inside a tag looked like it had been lost after tagging.** The newly tagged text was written into the grid raw, while every other cell is rendered through the invisible-character markers – so a tab inside `<mq:ch val="→" />` showed as the → marker in the source cell but as a bare gap in the target, which reads as "the tag lost its contents". The written text was always correct; only the display differed. Freshly tagged targets now render exactly like every other cell.
+
+### Fixed (Grid · status icons no longer clipped)
+
+- **The red X in the Status column was cut off at the bottom** – a bug that has come back more than once. The cause was mixing two kinds of glyph: `✔` is an ordinary text character that obeys `font-size`, while `❌` was a colour emoji, and colour emoji are bitmap glyphs that IGNORE font-size and line-height. No amount of CSS could make it fit the tight single-line row, so it overflowed and was clipped. Both statuses now use the matched Dingbats text pair – **✔ U+2714** in green and **✘ U+2718** in red – which share a design, obey font-size, take a colour, and cannot clip. Icon colours moved out of the grid code into the status definitions, so the List view shows them correctly too.
+
+### Changed (Grid · one context menu instead of three)
+
+- **Right-clicking the grid now gives the same menu wherever you click.** There were three separate menus – the row/status columns offered Confirm, Change Status, Lock and Clear; the source and target cells offered comments, QuickLauncher and termbase actions; and neither was a superset of the other. Which actions you were offered depended on which column your cursor happened to be over, so the segment operations were effectively invisible to anyone working in the target cell. All three now build from one shared definition and are identical.
+- **AutoTagger is available from the context menu**, on a single segment or across a selection, shown only when the segments actually have source tags and a translation to place them into.
+- "Select All" is now **"Select All Segments"** – unambiguous next to a text cell, where Ctrl+A means "select all text".
 
 
 ## v1.10.366 - August 1, 2026
