@@ -1300,8 +1300,19 @@ def _reinsert_tags_into_target(candidate: str, clean_target: str):
 def _classify_tag(tag: str):
     """Classify a tag as ('open'|'close'|'self', key) for nesting checks."""
     import re
+    # memoQ paired tags are keyed on a CONSTANT, not their number: memoQ numbers
+    # tags sequentially across a segment, so an opener and its closer normally
+    # carry DIFFERENT numbers ("[1}De uitvoer{2]"). Keying on the number made
+    # every memoQ pair look mismatched, and AutoTagger refused the placement
+    # with "unpaired or out of order". A constant key also still pairs the
+    # same-number convention ("[1}…{1]") correctly, so it is right either way.
+    for pat, kind, key in (
+        (r'\[\d+\}', 'open', 'mq'), (r'\{\d+\]', 'close', 'mq'),
+    ):
+        if re.fullmatch(pat, tag):
+            return (kind, key)
     for pat, kind, pre in (
-        (r'\[(\d+)\}', 'open', 'mq'), (r'\{(\d+)\]', 'close', 'mq'), (r'\[(\d+)\]', 'self', 'mq'),
+        (r'\[(\d+)\]', 'self', 'mq'),
         (r'<(\d+)/>', 'self', 'n'), (r'<(\d+)>', 'open', 'n'), (r'</(\d+)>', 'close', 'n'),
     ):
         m = re.fullmatch(pat, tag)
@@ -1310,7 +1321,14 @@ def _classify_tag(tag: str):
     m = re.fullmatch(r'<([a-zA-Z][a-zA-Z0-9-]*)(?:\s+[^>]*)?/>', tag)
     if m:
         return ('self', 'h' + m.group(1).lower())
-    m = re.fullmatch(r'</([a-zA-Z][a-zA-Z0-9-]*)\s*>', tag)
+    # Closing tags may carry ATTRIBUTES. Okapi-extracted DOCX content uses
+    # forms like <rpr id="4">…</rpr id="4" transform="close"> and
+    # <bmk id="3" …>…</bmk id="3" transform="close">. The old pattern allowed
+    # only </name>, so these closers fell through to the ('self', tag)
+    # fallback, their opener was never popped, and validation rejected a
+    # perfectly good placement with "unclosed tag(s): hrpr" — reported as
+    # "AutoTagger does nothing" (Workbench issue #244).
+    m = re.fullmatch(r'</([a-zA-Z][a-zA-Z0-9-]*)(?:\s+[^>]*)?>', tag)
     if m:
         return ('close', 'h' + m.group(1).lower())
     m = re.fullmatch(r'<([a-zA-Z][a-zA-Z0-9-]*)(?:\s+[^>]*)?>', tag)

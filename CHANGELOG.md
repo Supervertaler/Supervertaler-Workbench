@@ -2,8 +2,16 @@
 
 All notable changes to Supervertaler Workbench are documented in this file.
 
-**Current Version:** v1.10.365 (July 31, 2026)
+**Current Version:** v1.10.366 (August 1, 2026)
 
+
+## v1.10.366 - August 1, 2026
+
+### Fixed (AutoTagger · refused to place tags on Word and memoQ files)
+
+- **AutoTagger reported "Couldn't place the tags reliably, so the target was left unchanged" on documents imported from Word**, whatever provider or model you tried. The AI was doing its job; the safety check that inspects the result was wrong. Word content carries closing tags that include attributes – `<rpr id="4">…</rpr id="4" transform="close">`, `<bmk id="3" …>…</bmk id="3" transform="close">` – and the validator only recognised the plain `</name>` form. It therefore never matched those closers to their openers, concluded the tags were unclosed, and discarded a perfectly good placement. Closing tags with attributes are now recognised. (Reported by a user, with a sample segment that made it reproducible in minutes.)
+- **The same check also rejected every memoQ tag pair.** memoQ numbers tags sequentially across a segment, so an opening tag and its closer normally carry *different* numbers (`[1}De uitvoer{2]`) – but the validator paired them by number and concluded they were "unpaired or out of order". memoQ pairs are now matched by position rather than by number, which also handles the same-number convention correctly.
+- Genuinely broken output is still rejected: tags that close before they open, unclosed tags, and crossed nesting all fail as before, so AutoTagger still never writes broken tags.
 
 ## v1.10.365 - July 31, 2026
 
