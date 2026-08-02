@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Buy Supervertaler for Trados</title>
+
+<!--
+  Short, stable purchase link: https://supervertaler.com/buy
+
+  Why this page exists: the raw Lemon Squeezy checkout URL ends in a long UUID.
+  Mail clients (Gmail especially) append tracking parameters to links they
+  rewrite - "...72204&source=gmail&ust=...&sa=E" - which turns the checkout into
+  a 404. On a long opaque URL the damage is invisible until a customer clicks
+  and gives up. A short link is easy to read, easy to say out loud, and obvious
+  when something has been appended to it.
+
+  It also decouples the address from the payment provider: if the checkout URL
+  ever changes, links already sent to customers keep working - only this file
+  changes.
+
+  GitHub Pages serves static files only, so the redirect is done three ways:
+  a meta refresh (works with JS disabled), a script (instant), and a visible
+  link (works even if both are blocked).
+-->
+
+<link rel="canonical" href="https://supervertaler-for-trados.lemonsqueezy.com/checkout/buy/86e8dcb3-2a38-4396-aa38-9a67e5c72204">
+<meta http-equiv="refresh" content="0; url=https://supervertaler-for-trados.lemonsqueezy.com/checkout/buy/86e8dcb3-2a38-4396-aa38-9a67e5c72204">
+<meta name="robots" content="noindex, follow">
+
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    display: flex; align-items: center; justify-content: center;
+    min-height: 100vh; margin: 0; padding: 1.5rem;
+    text-align: center; line-height: 1.6;
+  }
+  .card { max-width: 32rem; }
+  h1 { font-size: 1.25rem; font-weight: 600; margin: 0 0 .5rem; }
+  p { margin: .5rem 0; color: #555; }
+  a.go {
+    display: inline-block; margin-top: 1rem; padding: .7rem 1.4rem;
+    background: #2563eb; color: #fff; text-decoration: none; border-radius: 6px;
+    font-weight: 600;
+  }
+  a.go:hover { background: #1d4ed8; }
+  @media (prefers-color-scheme: dark) {
+    body { background: #16181d; color: #e6e6e6; }
+    p { color: #a9b0bb; }
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>Taking you to the checkout…</h1>
+    <p>You are being redirected to the secure Supervertaler for Trados checkout,
+       handled by Lemon Squeezy.</p>
+    <p>If nothing happens:</p>
+    <a class="go" href="https://supervertaler-for-trados.lemonsqueezy.com/checkout/buy/86e8dcb3-2a38-4396-aa38-9a67e5c72204">Continue to checkout →</a>
+  </div>
+  <script>
+    location.replace("https://supervertaler-for-trados.lemonsqueezy.com/checkout/buy/86e8dcb3-2a38-4396-aa38-9a67e5c72204");
+  </script>
+</body>
+</html>
