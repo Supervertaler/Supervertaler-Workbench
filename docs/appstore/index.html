@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Supervertaler for Trados on the RWS AppStore</title>
+
+<!--
+  Short, stable link to the plugin's RWS AppStore page:
+  https://supervertaler.com/appstore
+
+  Same reasoning as /buy. Two problems this solves:
+
+  1. Mail clients rewrite links. Gmail appends "&source=gmail&ust=...&sa=E"
+     (and sometimes wraps the whole thing in google.com/url?q=...) whenever a
+     draft is opened - not only when it is edited. A short link makes that
+     damage obvious and one keystroke to repair; a long one hides it until the
+     recipient clicks and gets a 404.
+  2. The AppStore URL format is easy to mistype (appstore.rws.com/plugin/432 -
+     common variants 404), and it now appears in almost every support email,
+     the docs and the release notes.
+
+  If RWS ever changes the URL scheme, only this file needs updating - every
+  link already sent to a customer keeps working.
+-->
+
+<link rel="canonical" href="https://appstore.rws.com/plugin/432">
+<meta http-equiv="refresh" content="0; url=https://appstore.rws.com/plugin/432">
+<meta name="robots" content="noindex, follow">
+
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    display: flex; align-items: center; justify-content: center;
+    min-height: 100vh; margin: 0; padding: 1.5rem;
+    text-align: center; line-height: 1.6;
+  }
+  .card { max-width: 32rem; }
+  h1 { font-size: 1.25rem; font-weight: 600; margin: 0 0 .5rem; }
+  p { margin: .5rem 0; color: #555; }
+  a.go {
+    display: inline-block; margin-top: 1rem; padding: .7rem 1.4rem;
+    background: #2563eb; color: #fff; text-decoration: none; border-radius: 6px;
+    font-weight: 600;
+  }
+  a.go:hover { background: #1d4ed8; }
+  @media (prefers-color-scheme: dark) {
+    body { background: #16181d; color: #e6e6e6; }
+    p { color: #a9b0bb; }
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>Taking you to the RWS AppStore…</h1>
+    <p>You are being redirected to the Supervertaler for Trados page on the
+       RWS AppStore, where the plugin is published.</p>
+    <p>If nothing happens:</p>
+    <a class="go" href="https://appstore.rws.com/plugin/432">Continue to the AppStore →</a>
+  </div>
+  <script>
+    location.replace("https://appstore.rws.com/plugin/432");
+  </script>
+</body>
+</html>
