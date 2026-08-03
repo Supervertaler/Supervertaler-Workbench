@@ -51,6 +51,20 @@ Legacy settings files are auto-migrated at startup and renamed to `.migrated`.
 3. Block signals during programmatic text updates to avoid cascades.
 4. Style issues can be timing-related (hidden widgets, deferred visibility).
 5. XML namespace formats (SDLXLIFF): always use namespace dicts.
+6. **Never add `"global": True` to a shortcut whose chord Supervertaler for
+   Trados also uses.** A global hotkey is registered at OS level and fires
+   whichever application is in front, so it reaches Trados as well – and many
+   users run both products side by side. The two apps share 17 chords quite
+   deliberately (Alt+↓, Ctrl+Alt+T, Alt+1…9 and so on do the same job in each),
+   which is safe *only* while the Workbench side stays in-app and focus decides
+   the winner. Promoting one of those to global turns a parallel into a
+   collision. Two of these shipped in one day: Ctrl+Alt+A (Always-On vs Add term
+   with abbreviation) and Ctrl+Alt+V (voice PTT vs voice toggle). The second was
+   the nastier kind – Workbench's was a *hold* and Trados's a *toggle*, so
+   releasing the key stopped only Workbench's and left the Trados listener
+   latched on with nothing visible having started it.
+   Run `python tools/shortcut_overlap.py` before changing any binding: it prints
+   the current intersection and exits non-zero if a global one collides.
 
 ## Testing
 
