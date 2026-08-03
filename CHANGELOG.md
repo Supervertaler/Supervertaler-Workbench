@@ -2,7 +2,20 @@
 
 All notable changes to Supervertaler Workbench are documented in this file.
 
-**Current Version:** v1.10.367 (August 1, 2026)
+**Current Version:** v1.10.368 (August 3, 2026)
+
+
+## v1.10.368 - August 3, 2026
+
+### Changed (Voice · Always-On moves to Ctrl+Alt+O)
+
+- **The Voice Always-On toggle is now Ctrl+Alt+O ("always-On") instead of Ctrl+Alt+A.** Supervertaler for Trados has taken Ctrl+Alt+A for its new "Add term with abbreviation", and plenty of people run the Workbench and the Trados plugin side by side. This is not the ordinary sort of clash where whichever window has focus wins: Always-On is registered as an OS-level **global** hotkey, so it fires no matter which application is in front – including while you are working in Trados. One press would have done both things at once. Ctrl+Alt+O is free in both products.
+- **If your binding was still the old default, it moves for you.** Anyone who had deliberately chosen a different key keeps it. Anyone who had deliberately set it to Ctrl+Alt+A will find it back on the default – if that was you and you would rather have Ctrl+Alt+A, you can set it again, but it will go on fighting with Trados for as long as both are running.
+- Push-to-talk voice commands (Ctrl+Alt+V) and dictation (Ctrl+Shift+Space) are unchanged.
+
+### Fixed (Settings · the Global Hotkeys box named a hotkey that does not exist)
+
+- **The Keyboard Shortcuts page advertised "Ctrl+Alt+A (QuickLauncher)" as a global hotkey**, which had been wrong in two ways for some time: QuickLauncher moved to Alt+K and is no longer a global hotkey at all, and Ctrl+Alt+A actually belonged to Voice Always-On. The box now names the Clipboard manager (Ctrl+Alt+C), which genuinely is one.
 
 
 ## v1.10.367 - August 1, 2026

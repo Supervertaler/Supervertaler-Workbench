@@ -393,7 +393,7 @@ class KeyboardShortcutsWidget(QWidget):
         # Global Hotkeys Settings group (cross-platform)
         # Note: && is used so Qt displays a literal ampersand instead of treating
         # the next character as a mnemonic accelerator.
-        hotkey_group = QGroupBox("⌨️ Global Hotkeys (Superlookup, QuickTrans && QuickLauncher)")
+        hotkey_group = QGroupBox("⌨️ Global Hotkeys (Superlookup, QuickTrans && Clipboard)")
         hotkey_layout = QVBoxLayout()
 
         if IS_MACOS:
@@ -403,11 +403,15 @@ class KeyboardShortcutsWidget(QWidget):
         else:
             sl_key = format_shortcut_for_display('Ctrl+Alt+L')
             qt_key = format_shortcut_for_display('Ctrl+Alt+Q')
-            qm_key = format_shortcut_for_display('Ctrl+Alt+A')
+            # Was Ctrl+Alt+A labelled "QuickLauncher", which was wrong twice
+            # over: QuickLauncher moved to Alt+K and is no longer a global
+            # hotkey at all, while Ctrl+Alt+A belonged to Voice Always-On
+            # (now Ctrl+Alt+O). Clipboard is named instead - it really is global.
+            qm_key = format_shortcut_for_display('Ctrl+Alt+C')
         hotkey_info = QLabel(
             f"Global hotkeys allow {sl_key} (Superlookup), "
             f"{qt_key} (QuickTrans), and "
-            f"{qm_key} (QuickLauncher) to work from any application."
+            f"{qm_key} (Clipboard manager) to work from any application."
         )
         hotkey_info.setWordWrap(True)
         hotkey_info.setStyleSheet(

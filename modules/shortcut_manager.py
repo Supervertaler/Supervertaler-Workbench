@@ -198,7 +198,7 @@ class ShortcutManager:
         # with an external dictation app (Wispr Flow, etc.) without the
         # always-on mic open all the time. Holding the chord temporarily
         # starts the ContinuousVoiceListener; releasing stops it. Same
-        # code path as the Ctrl+Alt+A toggle, just gated by a hold.
+        # code path as the Ctrl+Alt+O toggle, just gated by a hold.
         "voice_command_ptt": {
             "category": "Special",
             "description": "Voice commands push-to-talk (hold to listen for commands)",
@@ -614,10 +614,14 @@ class ShortcutManager:
             "action": "open_clipboard_tab",
             "global": True,
         },
+        # Ctrl+Alt+O ("always-On"), not Ctrl+Alt+A. This is an OS-level global
+        # hotkey, so it fires whatever application is in front - and Supervertaler
+        # for Trados uses Ctrl+Alt+A for "Add term with abbreviation". Many people
+        # run both at once, so the two would have fought over every press.
         "voice_alwayson_toggle": {
             "category": "Special",
             "description": "Voice Always-On (toggle)",
-            "default": "Ctrl+Alt+A",
+            "default": "Ctrl+Alt+O",
             "action": "toggle_alwayson",
             "global": True,
         },
@@ -763,6 +767,18 @@ class ShortcutManager:
         sk = self.custom_shortcuts.get('global_sidekick')
         if sk and sk.lower() == 'ctrl+shift+a':
             del self.custom_shortcuts['global_sidekick']
+            self.save_shortcuts()
+
+        # Default-value upgrade for voice_alwayson_toggle: Ctrl+Alt+A → Ctrl+Alt+O.
+        # Ctrl+Alt+A is registered as an OS-level global hotkey, so it fired no
+        # matter which application was in front - including Trados Studio, where
+        # Supervertaler for Trados now uses Ctrl+Alt+A for "Add term with
+        # abbreviation". Without this, anyone whose binding had been persisted at
+        # the old default would go on colliding, which is precisely the case the
+        # move exists to fix. An override to anything else is left alone.
+        av = self.custom_shortcuts.get('voice_alwayson_toggle')
+        if av and av.lower() == 'ctrl+alt+a':
+            del self.custom_shortcuts['voice_alwayson_toggle']
             self.save_shortcuts()
 
         # Merge the old `global_*` entries into the corresponding action

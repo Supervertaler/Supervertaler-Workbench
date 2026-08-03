@@ -10204,7 +10204,7 @@ class SupervertalerQt(QMainWindow):
         )
         create_shortcut("sidekick_open", "Alt+K", self.open_quicklauncher)
         create_shortcut(
-            "voice_alwayson_toggle", "Ctrl+Alt+A",
+            "voice_alwayson_toggle", "Ctrl+Alt+O",
             self._toggle_alwayson_listening,
         )
 
@@ -27877,7 +27877,7 @@ class SupervertalerQt(QMainWindow):
                 self.alwayson_indicator_label.hide()
             # When the listener confirms it has fully stopped, clear
             # the PTT-owned flag so subsequent non-PTT sessions
-            # (manual Ctrl+Alt+A toggle) get the regular UI back.
+            # (manual Ctrl+Alt+O toggle) get the regular UI back.
             # Holding it until *now* also lets _on_alwayson_dictation
             # suppress any late transcription that arrived after the
             # release (see _on_voice_command_ptt_release docstring).
@@ -58117,8 +58117,11 @@ class SupervertalerQt(QMainWindow):
         # command tries to send a synthetic Ctrl+A right now, the OS
         # sees Ctrl+Alt held + synthetic Ctrl+A added on top → the
         # net chord is Ctrl+Alt+A, not Ctrl+A, and the foreground
-        # window misinterprets it (or in your case, matches the
-        # Ctrl+Alt+A global hotkey for Always-On toggle). Queueing
+        # window misinterprets it. (Until 1.10.x that also matched our
+        # own Always-On global hotkey, which was Ctrl+Alt+A; it is now
+        # Ctrl+Alt+O, but the underlying hazard is unchanged - any
+        # synthetic key sent under held modifiers becomes a different
+        # chord than intended, whoever ends up receiving it.) Queueing
         # the keystrokes and draining the queue ~200 ms after release
         # gives the OS time to register the user's physical key-up
         # events before the synthetic ones fire.
