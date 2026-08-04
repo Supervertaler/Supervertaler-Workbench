@@ -140,6 +140,25 @@ class ClipboardManagerWidget(QWidget):
 
     _THUMB_SIZE = QSize(48, 48)   # icon size shown in the list
 
+    # Privacy defaults (issue #246). Capture stays ON so existing installs
+    # behave exactly as before; everything else is opt-in.
+    DEFAULT_PRIVACY = {
+        'capture_enabled':      True,
+        'auto_delete_enabled':  False,
+        'auto_delete_minutes':  60,
+        'excluded_apps':        [],     # process names, e.g. "keepass.exe"
+    }
+
+    # Offered by the Settings page's one-click button. Not a default: a user
+    # who copies a URL out of KeePass and finds it missing from the history
+    # would rightly call that broken, so the exclusion list starts empty and
+    # the user opts in with full knowledge of what it does.
+    COMMON_SECRET_APPS = [
+        "keepass.exe", "keepassxc.exe", "1password.exe", "bitwarden.exe",
+        "dashlane.exe", "lastpass.exe", "nordpass.exe", "protonpass.exe",
+        "roboform.exe", "enpass.exe", "keeper.exe", "passwordsafe.exe",
+    ]
+
     def __init__(self, parent_app, paste_text_callback=None,
                  paste_image_callback=None, parent=None):
         super().__init__(parent)
@@ -166,8 +185,21 @@ class ClipboardManagerWidget(QWidget):
         # so we just set the clipboard and stay in Workbench.
         self._source_window = None
 
+        # Privacy controls (issue #246). Loaded before the UI is built so the
+        # header can show the paused state immediately on startup.
+        self._privacy = dict(self.DEFAULT_PRIVACY)
+        self._load_privacy_settings()
+
         self._init_ui()
         self._start_monitoring()
+        self._update_capture_state_ui()
+
+        # Auto-delete sweeper. Created unconditionally, started only when the
+        # feature is on (see _apply_auto_delete_timer).
+        self._purge_timer = QTimer(self)
+        self._purge_timer.setInterval(60_000)      # one sweep per minute
+        self._purge_timer.timeout.connect(self._purge_expired_items)
+        self._apply_auto_delete_timer()
 
         # v1.10.16: light up the column header whose widget currently
         # holds keyboard focus, so users navigating between the three
@@ -218,6 +250,16 @@ class ClipboardManagerWidget(QWidget):
             f"font-weight: bold; font-size: {scaled_pt(9):.1f}pt; color: #3D5A80; border: none;"
         )
         header.addWidget(self._count_label)
+
+        # Paused indicator (issue #246) – hidden unless capture is off.
+        self._capture_state_label = QLabel("")
+        self._capture_state_label.setStyleSheet(
+            f"color: #C62828; font-size: {scaled_pt(8):.1f}pt; "
+            f"font-weight: bold; border: none; padding-left: 8px;"
+        )
+        self._capture_state_label.hide()
+        header.addWidget(self._capture_state_label)
+
         header.addStretch()
 
         clear_btn = QPushButton("Clear all")
@@ -668,6 +710,16 @@ class ClipboardManagerWidget(QWidget):
             self._suppress_next = False
             return
 
+        # Privacy gate (issue #246). Deliberately the FIRST thing after the
+        # self-copy guard: when capture is off or the foreground app is
+        # excluded, the clip must never be read, hashed, displayed or written
+        # to the database. Filtering later - after reading the text - would
+        # still pull a password into this process's memory.
+        if not self._privacy.get('capture_enabled', True):
+            return
+        if self._foreground_app_is_excluded():
+            return
+
         clip = QApplication.clipboard()
         mime = clip.mimeData()
 
@@ -706,6 +758,144 @@ class ClipboardManagerWidget(QWidget):
         label = f"🖼 Image {qimage.width()}×{qimage.height()} ({self._fmt_size(len(png_bytes))})"
         self._add_image_clip(label, png_bytes, item_id=None,
                              pasted=False, save_to_db=True)
+
+    # ------------------------------------------------------------------
+    # Privacy controls (issue #246)
+    # ------------------------------------------------------------------
+
+    def _load_privacy_settings(self):
+        """Pull the persisted privacy settings from the parent app, falling
+        back to defaults. Never raises: a settings problem must not stop the
+        clipboard tab from loading."""
+        try:
+            loader = getattr(self._parent_app, 'load_clipboard_privacy_settings', None)
+            if callable(loader):
+                stored = loader() or {}
+                merged = dict(self.DEFAULT_PRIVACY)
+                merged.update({k: v for k, v in stored.items()
+                               if k in self.DEFAULT_PRIVACY})
+                self._privacy = merged
+        except Exception as e:
+            print(f"[ClipboardManagerWidget] privacy settings load failed: {e}")
+
+    def refresh_privacy_settings(self):
+        """Re-read the settings and apply them live. Called by the Settings
+        page so a change takes effect without restarting Workbench - the
+        whole point of a privacy switch is that it acts NOW."""
+        self._load_privacy_settings()
+        self._apply_auto_delete_timer()
+        self._update_capture_state_ui()
+        if self._privacy.get('auto_delete_enabled'):
+            # Apply the new window immediately rather than up to a minute
+            # later, so shortening it visibly does something at once.
+            self._purge_expired_items()
+
+    def _apply_auto_delete_timer(self):
+        timer = getattr(self, '_purge_timer', None)
+        if timer is None:
+            return
+        if self._privacy.get('auto_delete_enabled'):
+            if not timer.isActive():
+                timer.start()
+        elif timer.isActive():
+            timer.stop()
+
+    def _purge_expired_items(self):
+        """Drop history older than the configured window, from both the
+        database and the two lists."""
+        try:
+            minutes = int(self._privacy.get('auto_delete_minutes', 60) or 0)
+        except (TypeError, ValueError):
+            return
+        if minutes <= 0:
+            return
+
+        db = self._get_db()
+        if not db:
+            return
+        purge = getattr(db, 'purge_clipboard_items_older_than', None)
+        if not callable(purge):
+            return
+        try:
+            removed_ids = set(purge(minutes) or [])
+        except Exception as e:
+            print(f"[ClipboardManagerWidget] auto-delete failed: {e}")
+            return
+        if not removed_ids:
+            return
+
+        for list_widget in (self._text_list, self._image_list):
+            for row in range(list_widget.count() - 1, -1, -1):
+                item = list_widget.item(row)
+                if item is not None and item.data(_ROLE_DB_ID) in removed_ids:
+                    list_widget.takeItem(row)
+
+        # An in-memory hash of an image that no longer exists would suppress
+        # the next legitimate copy of that same image.
+        self._last_image_hash = None
+        self._update_empty_state(self._text_list)
+        self._update_empty_state(self._image_list)
+        self._update_count()
+
+    def _foreground_app_is_excluded(self) -> bool:
+        """True when the window that currently has focus belongs to a process
+        the user has excluded. Windows-only; other platforms always return
+        False (the master switch still works everywhere)."""
+        names = self._privacy.get('excluded_apps') or []
+        if not names:
+            return False
+        current = self._foreground_process_name()
+        if not current:
+            return False
+        current = current.lower()
+        for name in names:
+            if not name:
+                continue
+            candidate = str(name).strip().lower()
+            if not candidate:
+                continue
+            # Match with or without the .exe the user may or may not type.
+            if current == candidate or current == candidate + ".exe":
+                return True
+        return False
+
+    @staticmethod
+    def _foreground_process_name():
+        """Process name of the foreground window, or None when it cannot be
+        determined (non-Windows, permissions, race with a closing window)."""
+        import sys
+        if not sys.platform.startswith("win"):
+            return None
+        try:
+            import ctypes
+            user32 = ctypes.windll.user32
+            hwnd = user32.GetForegroundWindow()
+            if not hwnd:
+                return None
+            pid = ctypes.c_ulong()
+            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            if not pid.value:
+                return None
+            import psutil
+            return psutil.Process(pid.value).name()
+        except Exception:
+            return None
+
+    def _update_capture_state_ui(self):
+        """Reflect the capture state in the header. Without this a user who
+        switched capture off would later see an empty history and reasonably
+        conclude the feature was broken."""
+        label = getattr(self, '_capture_state_label', None)
+        if label is None:
+            return
+        if self._privacy.get('capture_enabled', True):
+            label.hide()
+            return
+        label.setText("⏸ Capture off")
+        label.setToolTip(
+            "Clipboard capture is switched off in Settings → Clipboard.\n"
+            "Existing history is still shown and can be pasted.")
+        label.show()
 
     @staticmethod
     def _encode_png(qimage: QImage) -> bytes:
@@ -1132,6 +1322,18 @@ class ClipboardManagerWidget(QWidget):
             # history instead of silently showing an empty list forever.
             return
         self._db_loaded = True
+        # Enforce the retention window BEFORE loading (issue #246). Workbench
+        # may have been closed for hours; without this, clips that expired
+        # while it was shut would reappear in the list and sit there until
+        # the first timer sweep a minute later.
+        if self._privacy.get('auto_delete_enabled'):
+            try:
+                minutes = int(self._privacy.get('auto_delete_minutes', 60) or 0)
+                purge = getattr(db, 'purge_clipboard_items_older_than', None)
+                if minutes > 0 and callable(purge):
+                    purge(minutes)
+            except Exception as e:
+                print(f"[ClipboardManager] startup purge failed: {e}")
         try:
             # Pull both kinds; per-kind caps are enforced separately on the
             # widget side so the DB query just needs to be generous enough

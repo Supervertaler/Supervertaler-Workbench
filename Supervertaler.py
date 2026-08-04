@@ -23795,6 +23795,10 @@ class SupervertalerQt(QMainWindow):
         voice_tab = self._create_voice_settings_tab()
         settings_tabs.addTab(scroll_area_wrapper(voice_tab), self.tr("🎤 Voice"))
 
+        # ===== TAB: Clipboard privacy (issue #246) =====
+        clipboard_tab = self._create_clipboard_settings_tab()
+        settings_tabs.addTab(scroll_area_wrapper(clipboard_tab), self.tr("📋 Clipboard"))
+
         # ===== TAB 3: Language Pair Settings =====
         lang_tab = self._create_language_pair_tab()
         settings_tabs.addTab(scroll_area_wrapper(lang_tab), self.tr("🌐 Language Pair"))
@@ -26693,6 +26697,236 @@ class SupervertalerQt(QMainWindow):
         
         return tab
     
+    def _create_clipboard_settings_tab(self):
+        """v1.10.369: Settings tab for clipboard capture privacy (issue #246).
+
+        A user pointed out that the clipboard history happily records
+        usernames and passwords copied out of a password manager. This tab
+        gives three levels of control, from bluntest to finest:
+
+          1. turn capture off entirely;
+          2. keep it on but forget entries after N minutes;
+          3. keep it on but never capture while a named app has the focus.
+
+        Like the AutoCorrect tab there is no Save button - every control
+        writes on change and is applied to the live clipboard widget
+        immediately, because a privacy switch that needs a restart is not a
+        privacy switch.
+        """
+        from PyQt6.QtWidgets import (QGroupBox, QSpinBox, QListWidget,
+                                     QListWidgetItem, QLineEdit, QPushButton,
+                                     QAbstractItemView)
+        from modules.clipboard_manager_widget import ClipboardManagerWidget
+
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
+        set_help_topic(tab, HelpTopics.CLIPBOARD)
+
+        current = dict(ClipboardManagerWidget.DEFAULT_PRIVACY)
+        try:
+            saved = self.load_clipboard_privacy_settings()
+            if isinstance(saved, dict):
+                current.update({k: v for k, v in saved.items() if k in current})
+        except Exception as e:
+            self.log(f"⚠ Could not read clipboard privacy settings: {e}")
+
+        # Guard so populating the widgets below doesn't trigger a save per
+        # control while the tab is still being built.
+        self._clipboard_settings_loading = True
+
+        def _persist():
+            if getattr(self, '_clipboard_settings_loading', False):
+                return
+            self.save_clipboard_privacy_settings({
+                'capture_enabled':     master_cb.isChecked(),
+                'auto_delete_enabled': autodel_cb.isChecked(),
+                'auto_delete_minutes': minutes_spin.value(),
+                'excluded_apps':       [apps_list.item(i).text()
+                                        for i in range(apps_list.count())],
+            })
+
+        # ── Capture group ────────────────────────────────────────────────
+        group = QGroupBox(self.tr("📋 Clipboard history"))
+        glayout = QVBoxLayout()
+
+        header_row = QHBoxLayout()
+        header_row.addStretch()
+        try:
+            from modules.styled_widgets import HelpButton as _HelpBtn
+            header_row.addWidget(_HelpBtn(
+                HelpTopics.CLIPBOARD,
+                tooltip="Open the Clipboard help page",
+            ))
+        except Exception as _e:
+            self.log(f"[Clipboard settings] Could not add help button: {_e}")
+        glayout.addLayout(header_row)
+
+        info = QLabel(self.tr(
+            "The Clipboard tab keeps a history of everything you copy while "
+            "Supervertaler is running, so you can paste it again later. That "
+            "includes anything you copy from other programs — passwords and "
+            "licence keys among them.\n\n"
+            "Changes apply immediately — there's no Save button on this tab."
+        ))
+        info.setWordWrap(True)
+        info.setStyleSheet("color: #666; font-size: 9pt; padding: 5px;")
+        glayout.addWidget(info)
+
+        master_cb = CheckmarkCheckBox(self.tr("Capture clipboard history"))
+        master_cb.setChecked(bool(current.get('capture_enabled', True)))
+        master_cb.setToolTip(
+            "Master switch. When this is off, nothing you copy is read or\n"
+            "stored, and the Clipboard tab shows a 'Capture off' badge.\n"
+            "Entries already in the history are kept — use 'Clear all'\n"
+            "on the Clipboard tab to remove them."
+        )
+        glayout.addWidget(master_cb)
+
+        group.setLayout(glayout)
+        layout.addWidget(group)
+
+        # ── Auto-delete group ────────────────────────────────────────────
+        ad_group = QGroupBox(self.tr("⏱ Automatic deletion"))
+        adlayout = QVBoxLayout()
+
+        autodel_cb = CheckmarkCheckBox(self.tr("Forget clipboard entries after a set time"))
+        autodel_cb.setChecked(bool(current.get('auto_delete_enabled', False)))
+        autodel_cb.setToolTip(
+            "Old entries are deleted from the database, not just hidden.\n"
+            "Checked about once a minute, and once at startup so entries\n"
+            "that expired while Supervertaler was closed don't come back."
+        )
+        adlayout.addWidget(autodel_cb)
+
+        minutes_row = QHBoxLayout()
+        minutes_row.addSpacing(24)
+        minutes_row.addWidget(QLabel(self.tr("Delete entries older than")))
+        minutes_spin = QSpinBox()
+        minutes_spin.setRange(1, 10080)          # 1 minute … 7 days
+        minutes_spin.setValue(int(current.get('auto_delete_minutes', 60) or 60))
+        minutes_spin.setSuffix(self.tr(" minutes"))
+        minutes_spin.setFixedWidth(140)
+        minutes_row.addWidget(minutes_spin)
+        minutes_row.addStretch()
+        adlayout.addLayout(minutes_row)
+
+        ad_group.setLayout(adlayout)
+        layout.addWidget(ad_group)
+
+        # ── Application exclusions ───────────────────────────────────────
+        ex_group = QGroupBox(self.tr("🚫 Never capture from these applications"))
+        exlayout = QVBoxLayout()
+
+        ex_info = QLabel(self.tr(
+            "While one of these programs has the focus, copying is ignored "
+            "entirely — the text is never read, so it never reaches the "
+            "history or the database. Enter the process name as it appears "
+            "in Task Manager, for example <code>keepass.exe</code>."
+        ))
+        ex_info.setWordWrap(True)
+        ex_info.setStyleSheet("color: #666; font-size: 9pt; padding: 5px;")
+        exlayout.addWidget(ex_info)
+
+        if not sys.platform.startswith("win"):
+            plat_note = QLabel(self.tr(
+                "⚠ Detecting which application has the focus is only "
+                "supported on Windows. On this system the list below is "
+                "saved but has no effect — use the master switch or "
+                "automatic deletion instead."
+            ))
+            plat_note.setWordWrap(True)
+            plat_note.setStyleSheet("color: #C62828; font-size: 9pt; padding: 5px;")
+            exlayout.addWidget(plat_note)
+
+        apps_list = QListWidget()
+        apps_list.setMaximumHeight(160)
+        apps_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        for name in (current.get('excluded_apps') or []):
+            if isinstance(name, str) and name.strip():
+                apps_list.addItem(QListWidgetItem(name.strip()))
+        exlayout.addWidget(apps_list)
+
+        add_row = QHBoxLayout()
+        new_app_edit = QLineEdit()
+        new_app_edit.setPlaceholderText(self.tr("e.g. keepass.exe"))
+        add_row.addWidget(new_app_edit)
+        add_btn = QPushButton(self.tr("Add"))
+        remove_btn = QPushButton(self.tr("Remove selected"))
+        add_row.addWidget(add_btn)
+        add_row.addWidget(remove_btn)
+        exlayout.addLayout(add_row)
+
+        common_btn = QPushButton(self.tr("Add common password managers"))
+        common_btn.setToolTip(
+            "Adds the process names of the widely used password managers\n"
+            "(KeePass, 1Password, Bitwarden, and so on). Ones already in\n"
+            "the list are skipped."
+        )
+        exlayout.addWidget(common_btn)
+
+        ex_group.setLayout(exlayout)
+        layout.addWidget(ex_group)
+
+        # ── Behaviour ────────────────────────────────────────────────────
+        def _existing_names():
+            return {apps_list.item(i).text().lower()
+                    for i in range(apps_list.count())}
+
+        def _add_app():
+            name = new_app_edit.text().strip()
+            if not name:
+                return
+            if name.lower() in _existing_names():
+                new_app_edit.clear()
+                return
+            apps_list.addItem(QListWidgetItem(name))
+            new_app_edit.clear()
+            _persist()
+
+        def _remove_apps():
+            # Remove by row descending: deleting low rows first would shift
+            # the rows still to be deleted.
+            rows = sorted((apps_list.row(i) for i in apps_list.selectedItems()),
+                          reverse=True)
+            if not rows:
+                return
+            for row in rows:
+                apps_list.takeItem(row)
+            _persist()
+
+        def _add_common():
+            existing = _existing_names()
+            added = False
+            for name in ClipboardManagerWidget.COMMON_SECRET_APPS:
+                if name.lower() not in existing:
+                    apps_list.addItem(QListWidgetItem(name))
+                    existing.add(name.lower())
+                    added = True
+            if added:
+                _persist()
+
+        def _sync_enabled():
+            enabled = master_cb.isChecked()
+            for w in (autodel_cb, ad_group, ex_group):
+                w.setEnabled(enabled)
+            minutes_spin.setEnabled(enabled and autodel_cb.isChecked())
+
+        add_btn.clicked.connect(_add_app)
+        new_app_edit.returnPressed.connect(_add_app)
+        remove_btn.clicked.connect(_remove_apps)
+        common_btn.clicked.connect(_add_common)
+        master_cb.toggled.connect(lambda _: (_sync_enabled(), _persist()))
+        autodel_cb.toggled.connect(lambda _: (_sync_enabled(), _persist()))
+        minutes_spin.valueChanged.connect(lambda _: _persist())
+
+        _sync_enabled()
+        self._clipboard_settings_loading = False
+
+        layout.addStretch()
+        return tab
+
     def _create_autocorrect_settings_tab(self):
         """v1.10.230: Settings tab for the AutoCorrect-while-typing engine
         (issue #213). Each checkbox lives-saves to ``settings.json`` on
@@ -47882,6 +48116,44 @@ class SupervertalerQt(QMainWindow):
         all_settings = self._load_unified_settings()
         all_settings[section] = section_data
         self._save_unified_settings(all_settings)
+
+    # ------------------------------------------------------------------
+    # Clipboard privacy settings (issue #246)
+    # ------------------------------------------------------------------
+    # Kept in the "features" section rather than "ui": these are not display
+    # preferences, they decide whether the clipboard is read at all.
+
+    def load_clipboard_privacy_settings(self) -> Dict[str, Any]:
+        """Persisted clipboard capture / retention / exclusion settings.
+        Returns {} when nothing has been saved, so the widget's own defaults
+        apply (capture on, matching pre-1.10.369 behaviour)."""
+        try:
+            return self._load_settings_section("features").get('clipboard_privacy', {}) or {}
+        except Exception as e:
+            self.log(f"⚠ Could not load clipboard privacy settings: {e}")
+            return {}
+
+    def save_clipboard_privacy_settings(self, settings: Dict[str, Any]):
+        """Persist clipboard privacy settings and apply them to the live
+        widget immediately - a privacy switch that only takes effect after a
+        restart is not a privacy switch."""
+        try:
+            all_settings = self._load_unified_settings()
+            features = all_settings.setdefault("features", {})
+            features['clipboard_privacy'] = settings
+            self._save_unified_settings(all_settings)
+        except Exception as e:
+            self.log(f"⚠ Could not save clipboard privacy settings: {e}")
+            return
+
+        # The Clipboard tab is built lazily, so the widget may not exist yet -
+        # that is fine, it reads these settings when it is constructed.
+        try:
+            widget = getattr(self, '_clipboard_top_widget', None)
+            if widget is not None and hasattr(widget, 'refresh_privacy_settings'):
+                widget.refresh_privacy_settings()
+        except Exception as e:
+            self.log(f"⚠ Could not apply clipboard privacy settings live: {e}")
 
     def _migrate_settings_to_unified(self):
         """One-time migration from old settings files to unified settings/settings.json"""

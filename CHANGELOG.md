@@ -2,7 +2,20 @@
 
 All notable changes to Supervertaler Workbench are documented in this file.
 
-**Current Version:** v1.10.368 (August 3, 2026)
+**Current Version:** v1.10.369 (August 4, 2026)
+
+
+## v1.10.369 - August 4, 2026
+
+### Added (Clipboard · you can now switch capture off, expire old entries, or exclude particular applications)
+
+Settings → **📋 Clipboard** is a new page, added after a user pointed out something entirely fair: the Clipboard tab records *everything* you copy while Supervertaler is running, and that includes the username and password you just copied out of your password manager. There was no way to stop it. Now there are three ways, from bluntest to finest, and you can combine them (issue #246).
+
+- **"Capture clipboard history" – the master switch.** Turn it off and nothing you copy is read, hashed, shown or written to the database. The check sits at the very top of the capture path, *before* the clipboard is read, so a password never enters Supervertaler's memory in the first place – it is genuinely off, not filtered after the fact. Anything already in the history stays there and can still be pasted; use **Clear all** on the Clipboard tab if you want it gone. The Clipboard tab shows a red **⏸ Capture off** badge while the switch is off, so an empty history never looks like a bug.
+- **"Forget clipboard entries after a set time".** Set a window – anything from a minute to a week – and older entries are **deleted from the database**, not merely hidden. Sweeps run about once a minute *and* once when Supervertaler starts, so entries that expired while Supervertaler was closed do not reappear and then vanish again a minute later.
+- **"Never capture from these applications".** List process names as they appear in Task Manager (`keepass.exe`, `1password.exe`, …) and copying is ignored entirely while one of them has the focus. A one-click **Add common password managers** button fills in the dozen most widely used ones. Matching is case-insensitive and you may leave the `.exe` off. This one is Windows-only – detecting which application has the focus needs the Windows API – and the page says so plainly on other platforms, where the master switch and automatic deletion still work.
+
+**Nothing changes unless you change it.** Capture stays on, automatic deletion stays off and the exclusion list starts empty, so existing installations behave exactly as before. The exclusion list is deliberately *not* pre-filled with password managers: if you copied a URL out of KeePass and it silently failed to appear in your history, you would rightly call that broken – so it is offered as one click rather than imposed as a default. Every control saves and takes effect the moment you change it; there is no Save button and no restart, because a privacy switch that waits for a restart is not a privacy switch.
 
 
 ## v1.10.368 - August 3, 2026

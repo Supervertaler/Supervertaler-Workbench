@@ -3262,3 +3262,30 @@ class DatabaseManager:
         except Exception as e:
             self.log(f"[Clipboard] Failed to clear history: {e}")
             return False
+
+    def purge_clipboard_items_older_than(self, minutes: int) -> List[int]:
+        """Delete clipboard rows older than `minutes` minutes (issue #246
+        auto-delete). Returns the ids of the deleted rows so the UI can drop
+        exactly those items from its lists without a full reload.
+
+        copied_at is stored in UTC (the column default is datetime('now')),
+        so the cutoff also uses SQLite's own clock - comparing it against a
+        Python-side local timestamp would silently shift the window by the
+        UTC offset.
+        """
+        try:
+            self.cursor.execute(
+                "SELECT id FROM clipboard_history WHERE copied_at < datetime('now', ?)",
+                (f"-{int(minutes)} minutes",)
+            )
+            ids = [row[0] for row in self.cursor.fetchall()]
+            if ids:
+                self.cursor.executemany(
+                    "DELETE FROM clipboard_history WHERE id = ?",
+                    [(i,) for i in ids]
+                )
+                self.connection.commit()
+            return ids
+        except Exception as e:
+            self.log(f"[Clipboard] Failed to purge old items: {e}")
+            return []
