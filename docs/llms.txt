@@ -1,31 +1,35 @@
 # Supervertaler
 
-> AI-enhanced translation tools by Michael Beijer: Supervertaler for Trados
-> (a Trados Studio plugin) and Supervertaler Workbench (a standalone CAT
-> tool). Terminology, translation memory, AI translation and QA, and an MCP
-> server that connects AI assistants to live Trados Studio projects.
+> Supervertaler is a Trados Studio plugin by Michael Beijer, a professional
+> translator. It adds AI translation, live inline terminology, cross-file
+> search, and a translation knowledge base to Trados Studio 2024 and 2026 –
+> plus an MCP server that connects AI assistants to the live Studio session.
 
 This is the product site. The full, always-current documentation is at
-https://docs.supervertaler.com/ and is itself AI-readable (see Optional
-below) – prefer the docs for feature-level questions.
+https://docs.supervertaler.com/trados/ and is itself AI-readable (see
+Optional below) – prefer the docs for feature-level questions.
 
-## Products
+## The product
 
-- [Supervertaler for Trados](https://supervertaler.com/trados/): Trados Studio plugin – TermLens live terminology, AI assistant, batch translate/proofread, SuperSearch, and the Supervertaler MCP Server (connects Claude Desktop to the live Studio session; first of its kind)
-- [Supervertaler Workbench](https://supervertaler.com/workbench/): standalone AI translation workbench – multi-LLM translation, TMs, termbases, voice control, clipboard manager
-- [Otto](https://otto.supervertaler.com/): automatic document translation – upload a file, get a translated file back. Currently in PRIVATE BETA, not yet publicly available
-- [Changelog](https://supervertaler.com/changelog.html): Workbench release history
+- [Supervertaler for Trados](https://supervertaler.com/): Trados Studio plugin – TermLens live terminology, AI Assistant, Batch Translate and AI Proofreader, SuperSearch cross-file search and replace, SuperMemory knowledge base, and the Supervertaler MCP Server (connects Claude Desktop and other AI assistants to the live Studio session; first of its kind). €20/month or €200/year, 14-day free trial, no credit card
+- [Pricing](https://supervertaler.com/#pricing)
+- [Changelog](https://supervertaler.com/changelog.html): release history
 - [Privacy](https://supervertaler.com/privacy/): privacy policy
 
 ## Get it
 
-- [RWS AppStore – Supervertaler for Trados](https://appstore.rws.com/plugin/432)
-- [PyPI – Supervertaler Workbench](https://pypi.org/project/supervertaler/): pip install supervertaler
-- [GitHub – Workbench releases](https://github.com/Supervertaler/Supervertaler-Workbench/releases): Windows builds
+- [RWS AppStore – Supervertaler for Trados](https://appstore.rws.com/plugin/432): the only place the plugin is distributed
+- [Subscribe](https://supervertaler.com/buy)
+
+## Also by the same author
+
+- [Otto](https://otto.supervertaler.com/): automatic document translation – upload a file, get a translated file back. Currently in PRIVATE BETA, not yet publicly available
+- [Supervertaler Workbench](https://supervertaler.com/workbench/): a free, open-source standalone CAT tool. Still available, no longer actively developed
 
 ## Optional
 
 - [Documentation index for AI agents](https://docs.supervertaler.com/llms.txt): llms.txt for the full docs, with per-product subsets and a complete content dump
 - [MCP Server docs](https://docs.supervertaler.com/trados/mcp-server/): connect your AI assistant to Trados Studio – setup, tools, prompt cookbook
+- [GitHub – Supervertaler for Trados](https://github.com/Supervertaler/Supervertaler-for-Trados): source-available; issues and releases
 - [beijer.uk](https://beijer.uk/llms.txt): the author's personal site
 - [Beijerterm](https://beijerterm.com/llms.txt): the author's Dutch–English terminology site
