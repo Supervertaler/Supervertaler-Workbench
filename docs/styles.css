@@ -335,6 +335,17 @@ body {
     grid-template-columns: 1fr 1fr;
     gap: var(--spacing-lg);
     align-items: center;
+    position: relative;
+}
+
+/* Wider visual column, for heroes whose screenshot needs the room.
+   This lives here rather than as an inline style on the page: an inline
+   grid-template-columns beats any stylesheet rule, so the max-width:768px
+   reset below could never take effect and the hero stayed a two-column
+   grid on phones - text squeezed into 5/12 of the screen next to an empty
+   column, because .hero-visual is display:none there. */
+.hero .container.hero-split {
+    grid-template-columns: 5fr 7fr;
 }
 
 .hero-content {
@@ -872,6 +883,13 @@ body {
     gap: var(--spacing-md);
 }
 
+/* Force exactly two columns (see the max-width:768px reset, which unsets
+   this again on phones). Use in place of an inline grid-template-columns. */
+.features-grid.cols-2,
+.screenshots-grid.cols-2 {
+    grid-template-columns: repeat(2, 1fr);
+}
+
 .feature-card {
     background: white;
     padding: var(--spacing-md);
@@ -1372,7 +1390,8 @@ body {
    ============================================= */
 
 @media (max-width: 768px) {
-    .hero .container {
+    .hero .container,
+    .hero .container.hero-split {
         grid-template-columns: 1fr;
     }
     
@@ -1386,7 +1405,9 @@ body {
     
     .features-grid,
     .download-grid,
-    .screenshots-grid {
+    .screenshots-grid,
+    .features-grid.cols-2,
+    .screenshots-grid.cols-2 {
         grid-template-columns: 1fr;
     }
     
