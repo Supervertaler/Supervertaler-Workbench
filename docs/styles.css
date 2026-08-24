@@ -1545,6 +1545,26 @@ body {
     align-items: start;
 }
 
+/* One product, one price: a single centred card.
+   Wider than the free-trial banner above it (520px) rather than narrower -
+   a 380px card left the secondary element visually outweighing the thing
+   being sold, and made a 813px-tall ribbon stranded in a 1200px container.
+   The feature list runs in two columns so the card is wide rather than long. */
+.pricing-row.pricing-solo {
+    grid-template-columns: minmax(0, 560px);
+    justify-content: center;
+    max-width: 560px;
+}
+
+.pricing-row.pricing-solo .pricing-features {
+    columns: 2;
+    column-gap: var(--spacing-md);
+}
+
+.pricing-row.pricing-solo .pricing-features li {
+    break-inside: avoid;
+}
+
 /* Product badge on each card */
 .pricing-badge {
     display: inline-block;
@@ -1724,6 +1744,14 @@ body {
 @media (max-width: 768px) {
     .product-cards {
         grid-template-columns: 1fr;
+    }
+    .pricing-row.pricing-solo {
+        grid-template-columns: 1fr;
+        max-width: 520px;
+    }
+
+    .pricing-row.pricing-solo .pricing-features {
+        columns: 1;
     }
     .pricing-row {
         grid-template-columns: 1fr;
