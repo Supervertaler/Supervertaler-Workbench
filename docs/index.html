@@ -31,31 +31,6 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
         rel="stylesheet">
     <style>
-        /* "Make Trados fun again!" campaign badge, carried over from the old
-           two-card homepage so the campaign survives the restructure. */
-        .mtga-button {
-            position: absolute; top: -18px; right: 0;
-            width: 132px; height: 132px; border-radius: 50%;
-            background: radial-gradient(circle at 35% 35%, #FBBF24, #F59E0B);
-            color: #78350F; display: flex; align-items: center; justify-content: center;
-            text-align: center; font-family: 'Inter', sans-serif;
-            font-size: 1rem; font-weight: 800; line-height: 1.2;
-            text-transform: uppercase; letter-spacing: 0.5px; z-index: 10;
-            box-shadow: 0 4px 15px rgba(245,158,11,0.4), inset 0 -2px 4px rgba(0,0,0,0.15), inset 0 2px 4px rgba(255,255,255,0.3);
-            border: 3px solid #fff; transform: rotate(8deg); pointer-events: none;
-        }
-        .mtga-inner { padding: 10px; }
-        @media (max-width: 900px) {
-            .mtga-button { width: 96px; height: 96px; font-size: 0.68rem; top: -8px; right: 0; }
-            .mtga-inner { padding: 6px; }
-        }
-        /* Below 768px the hero collapses to one column and .hero-visual is
-           hidden, so the badge sits over the heading block. Keep it clear of
-           the wrapped h1 by pinning it under the navbar, right-aligned. */
-        @media (max-width: 768px) {
-            .mtga-button { width: 84px; height: 84px; font-size: 0.6rem; top: 0; right: 0; }
-            .hero-content { padding-top: 96px; }
-        }
         /* Footer: Workbench sits here and nowhere else. */
         .footer-legacy-note { font-size: 0.8rem; color: var(--text-light, #9ca3af); line-height: 1.6; }
         .footer-legacy-note a { color: inherit; text-decoration: underline; }
@@ -101,7 +76,6 @@
     <!-- Hero Section -->
     <section class="hero">
         <div class="container hero-split">
-            <div class="mtga-button"><div class="mtga-inner">Make<br>Trados<br>fun<br>again!</div></div>
             <div class="hero-content">
                 <h1 class="hero-title">
                     Supervertaler
