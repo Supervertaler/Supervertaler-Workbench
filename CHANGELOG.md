@@ -2,7 +2,22 @@
 
 All notable changes to Supervertaler Workbench are documented in this file.
 
-**Current Version:** v1.10.369 (August 4, 2026)
+**Current Version:** v1.10.370 (September 7, 2026)
+
+
+## v1.10.370 - September 7, 2026
+
+### Fixed (TM · a TM full of entries that produced no matches at all)
+
+Reported by a user whose Italian-to-English project showed nothing in the match pane, while the same TM opened perfectly in TM Edit/Maintain. Three separate faults could each cause exactly that, and all three are fixed.
+
+- **A TM whose entries are tagged with a bare uppercase language code was invisible to every project.** The match query compared languages with SQL `=`, which is case-sensitive, plus a prefix test that requires a hyphen. An entry tagged `IT` therefore matched neither `it` nor `it-IT` nor even a project set to `IT` – there was no spelling of the project's languages that could find it. Entries written before v1.10.253 were stored exactly as the TMX spelled them, so any TM imported before then can be affected. Language comparison is now case-insensitive throughout, in both search directions, for exact and fuzzy matches alike. Nothing needs re-importing: existing entries start matching as soon as you update.
+- **The memoQ bilingual import guessed the wrong languages and said nothing.** It recognised 26 language names, in English only, from the table header, and when it recognised neither column it quietly created an English-to-Dutch project. Every subsequent TM lookup then searched for the wrong pair and found nothing, with no indication anywhere that this had happened. The header is now read through the same language table the rest of Supervertaler uses, so codes (`IT`, `it-IT`), names in other languages (`Italiano`, `Deutsch`) and regional forms (`English (United Kingdom)`) are all understood. When a column still cannot be read, Supervertaler **asks** for the pair instead of assuming one. The same guard covers memoQ XLIFF files that declare no languages, which used to produce a project whose language was literally "unknown".
+- **An empty match pane no longer stays silent about the commonest cause.** Importing a document deliberately switches every TM off, so that a new job does not inherit the last one's resources – but nothing said so, and the pane simply stayed blank. The log now explains once per project that no TM is switched on and points at the Read tickbox in Resources → TM.
+
+### Added (Support · a diagnostic script for TM match problems)
+
+`scripts/sv_tm_diagnose.py` reads the database read-only and prints the project's language pair, the language pairs actually stored on the TM entries, which TMs are switched on, and a verdict on whether the two can see each other. Run it with `python sv_tm_diagnose.py` when matches are missing.
 
 
 ## v1.10.369 - August 4, 2026

@@ -1217,7 +1217,7 @@ class DatabaseManager:
             src_variants = get_lang_match_variants(source_lang)
             src_conditions = []
             for variant in src_variants:
-                src_conditions.append("source_lang = ?")
+                src_conditions.append("source_lang = ? COLLATE NOCASE")
                 params.append(variant)
                 src_conditions.append("source_lang LIKE ?")
                 params.append(f"{variant}-%")
@@ -1227,7 +1227,7 @@ class DatabaseManager:
             tgt_variants = get_lang_match_variants(target_lang)
             tgt_conditions = []
             for variant in tgt_variants:
-                tgt_conditions.append("target_lang = ?")
+                tgt_conditions.append("target_lang = ? COLLATE NOCASE")
                 params.append(variant)
                 tgt_conditions.append("target_lang LIKE ?")
                 params.append(f"{variant}-%")
@@ -1280,14 +1280,14 @@ class DatabaseManager:
             
             src_conditions = []
             for variant in tgt_variants:  # TM source_lang = our target_lang
-                src_conditions.append("source_lang = ?")
+                src_conditions.append("source_lang = ? COLLATE NOCASE")
                 params.append(variant)
                 src_conditions.append("source_lang LIKE ?")
                 params.append(f"{variant}-%")
             
             tgt_conditions = []
             for variant in src_variants:  # TM target_lang = our source_lang
-                tgt_conditions.append("target_lang = ?")
+                tgt_conditions.append("target_lang = ? COLLATE NOCASE")
                 params.append(variant)
                 tgt_conditions.append("target_lang LIKE ?")
                 params.append(f"{variant}-%")
@@ -1367,7 +1367,7 @@ class DatabaseManager:
         if src_base and src_variants:
             src_conditions = []
             for variant in src_variants:
-                src_conditions.append("source_lang = ?")
+                src_conditions.append("source_lang = ? COLLATE NOCASE")
                 lang_params.append(variant)
                 src_conditions.append("source_lang LIKE ?")
                 lang_params.append(f"{variant}-%")
@@ -1376,7 +1376,7 @@ class DatabaseManager:
         if tgt_base and tgt_variants:
             tgt_conditions = []
             for variant in tgt_variants:
-                tgt_conditions.append("target_lang = ?")
+                tgt_conditions.append("target_lang = ? COLLATE NOCASE")
                 lang_params.append(variant)
                 tgt_conditions.append("target_lang LIKE ?")
                 lang_params.append(f"{variant}-%")
@@ -1498,7 +1498,7 @@ class DatabaseManager:
                 # TM source_lang should match our TARGET language (in reverse)
                 src_conditions_rev = []
                 for variant in tgt_variants:
-                    src_conditions_rev.append("source_lang = ?")
+                    src_conditions_rev.append("source_lang = ? COLLATE NOCASE")
                     reverse_lang_params.append(variant)
                     src_conditions_rev.append("source_lang LIKE ?")
                     reverse_lang_params.append(f"{variant}-%")
@@ -1507,7 +1507,7 @@ class DatabaseManager:
                 # TM target_lang should match our SOURCE language (in reverse)
                 tgt_conditions_rev = []
                 for variant in src_variants:
-                    tgt_conditions_rev.append("target_lang = ?")
+                    tgt_conditions_rev.append("target_lang = ? COLLATE NOCASE")
                     reverse_lang_params.append(variant)
                     tgt_conditions_rev.append("target_lang LIKE ?")
                     reverse_lang_params.append(f"{variant}-%")
@@ -1632,7 +1632,7 @@ class DatabaseManager:
         if src_base and src_variants:
             src_conditions = []
             for variant in src_variants:
-                src_conditions.append("source_lang = ?")
+                src_conditions.append("source_lang = ? COLLATE NOCASE")
                 lang_params.append(variant)
                 src_conditions.append("source_lang LIKE ?")
                 lang_params.append(f"{variant}-%")
@@ -1641,7 +1641,7 @@ class DatabaseManager:
         if tgt_base and tgt_variants:
             tgt_conditions = []
             for variant in tgt_variants:
-                tgt_conditions.append("target_lang = ?")
+                tgt_conditions.append("target_lang = ? COLLATE NOCASE")
                 lang_params.append(variant)
                 tgt_conditions.append("target_lang LIKE ?")
                 lang_params.append(f"{variant}-%")
@@ -1698,7 +1698,7 @@ class DatabaseManager:
             # TM source_lang = our TARGET language
             src_conditions_rev = []
             for variant in tgt_variants:
-                src_conditions_rev.append("source_lang = ?")
+                src_conditions_rev.append("source_lang = ? COLLATE NOCASE")
                 reverse_lang_params.append(variant)
                 src_conditions_rev.append("source_lang LIKE ?")
                 reverse_lang_params.append(f"{variant}-%")
@@ -1707,7 +1707,7 @@ class DatabaseManager:
             # TM target_lang = our SOURCE language
             tgt_conditions_rev = []
             for variant in src_variants:
-                tgt_conditions_rev.append("target_lang = ?")
+                tgt_conditions_rev.append("target_lang = ? COLLATE NOCASE")
                 reverse_lang_params.append(variant)
                 tgt_conditions_rev.append("target_lang LIKE ?")
                 reverse_lang_params.append(f"{variant}-%")
@@ -1984,7 +1984,7 @@ class DatabaseManager:
             src_variants = get_lang_match_variants(source_lang)
             src_conditions = []
             for variant in src_variants:
-                src_conditions.append("tu.source_lang = ?")
+                src_conditions.append("tu.source_lang = ? COLLATE NOCASE")
                 params.append(variant)
                 src_conditions.append("tu.source_lang LIKE ?")
                 params.append(f"{variant}-%")
@@ -1994,7 +1994,7 @@ class DatabaseManager:
             tgt_variants = get_lang_match_variants(target_lang)
             tgt_conditions = []
             for variant in tgt_variants:
-                tgt_conditions.append("tu.target_lang = ?")
+                tgt_conditions.append("tu.target_lang = ? COLLATE NOCASE")
                 params.append(variant)
                 tgt_conditions.append("tu.target_lang LIKE ?")
                 params.append(f"{variant}-%")
@@ -2048,7 +2048,7 @@ class DatabaseManager:
             # TM target_lang = our source_lang
             tgt_conditions = []
             for variant in src_variants:
-                tgt_conditions.append("tu.target_lang = ?")
+                tgt_conditions.append("tu.target_lang = ? COLLATE NOCASE")
                 params.append(variant)
                 tgt_conditions.append("tu.target_lang LIKE ?")
                 params.append(f"{variant}-%")
@@ -2057,7 +2057,7 @@ class DatabaseManager:
             # TM source_lang = our target_lang  
             src_conditions = []
             for variant in tgt_variants:
-                src_conditions.append("tu.source_lang = ?")
+                src_conditions.append("tu.source_lang = ? COLLATE NOCASE")
                 params.append(variant)
                 src_conditions.append("tu.source_lang LIKE ?")
                 params.append(f"{variant}-%")

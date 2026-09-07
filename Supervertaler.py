@@ -39135,31 +39135,41 @@ class SupervertalerQt(QMainWindow):
                 QMessageBox.warning(self, "Warning", "No segments found in the bilingual file.")
                 return
             
-            # Detect languages from table header (row 1, columns 1 and 2)
+            # Detect languages from table header (row 1, columns 1 and 2).
+            # Resolved through modules.language_codes, which understands names,
+            # ISO codes and region variants in any spelling, rather than the
+            # 26-name English-only map this used to carry. When either column
+            # cannot be resolved we ASK instead of silently assuming en -> nl:
+            # a project created with the wrong pair shows zero TM matches while
+            # the TM still looks complete in TM Edit/Maintain, which is close to
+            # undiagnosable from the user's side.
             header_row = table.rows[1]
-            source_lang = "en"  # Default
-            target_lang = "nl"  # Default
-            
+            source_lang = target_lang = None
+            source_header = target_header = ""
+
             if len(header_row.cells) >= 3:
-                source_header = header_row.cells[1].text.strip().lower()
-                target_header = header_row.cells[2].text.strip().lower()
-                
-                # Try to detect language from header
-                lang_map = {
-                    'english': 'en', 'dutch': 'nl', 'german': 'de', 'french': 'fr',
-                    'spanish': 'es', 'italian': 'it', 'portuguese': 'pt', 'polish': 'pl',
-                    'czech': 'cs', 'slovak': 'sk', 'hungarian': 'hu', 'romanian': 'ro',
-                    'bulgarian': 'bg', 'greek': 'el', 'russian': 'ru', 'ukrainian': 'uk',
-                    'swedish': 'sv', 'danish': 'da', 'finnish': 'fi', 'norwegian': 'no',
-                    'japanese': 'ja', 'chinese': 'zh', 'korean': 'ko', 'arabic': 'ar',
-                    'turkish': 'tr', 'hebrew': 'he'
-                }
-                
-                for lang_name, lang_code in lang_map.items():
-                    if lang_name in source_header:
-                        source_lang = lang_code
-                    if lang_name in target_header:
-                        target_lang = lang_code
+                source_header = header_row.cells[1].text.strip()
+                target_header = header_row.cells[2].text.strip()
+                source_lang = self._lang_from_column_header(source_header)
+                target_lang = self._lang_from_column_header(target_header)
+
+            if not source_lang or not target_lang:
+                self.log(
+                    "⚠️ Could not read the language pair from the memoQ table header "
+                    f"(source column: {source_header!r}, target column: {target_header!r}) "
+                    "— asking the user."
+                )
+                chosen = self._confirm_language_pair(
+                    source_lang, target_lang,
+                    context=(
+                        f"Source column header: {source_header or '(empty)'}" + chr(10) +
+                        f"Target column header: {target_header or '(empty)'}"
+                    ),
+                )
+                if not chosen:
+                    self.log("✗ User cancelled memoQ import at the language prompt")
+                    return
+                source_lang, target_lang = chosen
             
             # SAFETY STEP: Save source segments to TXT file for user verification
             txt_file_path = Path(file_path).with_suffix('.txt')
@@ -40034,9 +40044,28 @@ class SupervertalerQt(QMainWindow):
             self.mqxliff_handler = handler
             self.mqxliff_source_file = file_path
             
-            # Get language codes from handler
+            # Get language codes from handler. A .mqxliff with no <file>
+            # element (or no language attributes on it) leaves these as
+            # 'unknown'/None, which used to sail straight into the project and
+            # make every TM lookup filter on a language that matches nothing.
+            # Ask rather than carry a bogus pair forward.
             source_lang = self._normalize_language_code(handler.source_lang)
             target_lang = self._normalize_language_code(handler.target_lang)
+            if not self._is_known_language(source_lang) or not self._is_known_language(target_lang):
+                self.log(
+                    "⚠️ memoQ XLIFF did not declare a usable language pair "
+                    f"(source: {handler.source_lang!r}, target: {handler.target_lang!r}) "
+                    "— asking the user."
+                )
+                chosen = self._confirm_language_pair(
+                    source_lang if self._is_known_language(source_lang) else None,
+                    target_lang if self._is_known_language(target_lang) else None,
+                    context=f"File declares: {handler.source_lang} → {handler.target_lang}",
+                )
+                if not chosen:
+                    self.log("✗ User cancelled memoQ XLIFF import at the language prompt")
+                    return
+                source_lang, target_lang = chosen
             
             # Create new project
             file_name = Path(file_path).stem
@@ -40124,6 +40153,103 @@ class SupervertalerQt(QMainWindow):
         back to the original input when the language is not recognised."""
         from modules import language_codes as _lc
         return _lc.english_name(lang_code) or lang_code
+
+    @staticmethod
+    def _is_known_language(value) -> bool:
+        """True when `value` resolves to a language the canonical table knows.
+
+        Guards against placeholders like 'unknown' (which base_code() turns
+        into 'un') and empty values reaching a project's language pair.
+        """
+        from modules import language_codes as _lc
+        return bool(_lc.iso_to_english_name(_lc.base_code(value)))
+
+    @staticmethod
+    def _lang_from_column_header(header_text: str):
+        """Resolve a bilingual-table column header to a base ISO code, or None.
+
+        memoQ writes whatever its UI language calls the column: "Italian",
+        "Italian (Italy)", "IT", "it-IT", sometimes with extra words around it.
+        Everything recognisable is routed through modules.language_codes (the
+        single normalisation authority) rather than a local name list, so the
+        26 hardcoded English names this used to accept no longer limit us.
+
+        Returns None when nothing recognisable is present. That matters: the
+        old code silently fell back to English -> Dutch, and a project created
+        with the wrong pair finds zero TM matches while the TM still looks
+        perfectly healthy in TM Edit/Maintain. A None here makes the caller
+        ask instead of guess.
+        """
+        from modules import language_codes as _lc
+
+        text = (header_text or "").strip()
+        if not text:
+            return None
+
+        def _valid(code):
+            # base_code() will happily turn "Source" into "so"; only accept a
+            # code the canonical table actually knows.
+            return code if (code and _lc.iso_to_english_name(code)) else None
+
+        # Whole cell first ("Italian (Italy)", "it-IT", "IT").
+        found = _valid(_lc.base_code(text))
+        if found:
+            return found
+
+        # Then any single word in it ("Target: Italian", "Italian text").
+        for word in re.split(r"[^A-Za-z\-]+", text):
+            if len(word) < 2:
+                continue
+            found = _valid(_lc.base_code(word))
+            if found:
+                return found
+        return None
+
+    def _confirm_language_pair(self, source_lang, target_lang, context=""):
+        """Let the user confirm/correct a document's language pair.
+
+        Shown when an importer could not read the pair off the file. Returns
+        (source_code, target_code), or None if the user cancelled.
+        """
+        from PySide6.QtWidgets import (QDialog, QVBoxLayout, QFormLayout, QComboBox,
+                                       QDialogButtonBox, QLabel)
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle(self.tr("Confirm language pair"))
+        layout = QVBoxLayout(dlg)
+        msg = QLabel(self.tr(
+            "Supervertaler could not read the language pair from this file.\n\n"
+            "Please set it now. If this is wrong, the TM is searched for the "
+            "wrong languages and no matches are ever shown, even though the TM "
+            "itself looks fine in TM Edit/Maintain."))
+        msg.setWordWrap(True)
+        layout.addWidget(msg)
+        if context:
+            hint = QLabel(context)
+            hint.setWordWrap(True)
+            layout.addWidget(hint)
+
+        form = QFormLayout()
+        src_combo, tgt_combo = QComboBox(), QComboBox()
+        for name, code in _import_language_pairs():
+            src_combo.addItem(name, code)
+            tgt_combo.addItem(name, code)
+        _select_lang_in_combo(src_combo, source_lang or "en")
+        _select_lang_in_combo(tgt_combo, target_lang or "nl")
+        form.addRow(self.tr("Source language:"), src_combo)
+        form.addRow(self.tr("Target language:"), tgt_combo)
+        layout.addLayout(form)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(dlg.accept)
+        buttons.rejected.connect(dlg.reject)
+        layout.addWidget(buttons)
+
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return None
+        return (src_combo.currentData() or src_combo.currentText(),
+                tgt_combo.currentData() or tgt_combo.currentText())
 
     def export_memoq_rtf(self):
         """Export to memoQ bilingual RTF format with translations"""
@@ -66056,14 +66182,25 @@ class SupervertalerQt(QMainWindow):
                 try:
                     # Get activated TM IDs for current project
                     tm_ids = None
+                    project_id = None
                     if hasattr(self, 'tm_metadata_mgr') and self.tm_metadata_mgr and self.current_project:
                         project_id = self.current_project.id if hasattr(self.current_project, 'id') else None
                         if project_id:
                             tm_ids = self.tm_metadata_mgr.get_active_tm_ids(project_id)
 
-                    # Skip TM search if no TMs are activated
+                    # Skip TM search if no TMs are activated.
+                    # Say so once per project rather than returning an empty
+                    # pane in silence: importing a document deliberately clears
+                    # every TM's Read tickbox, and "my TM is loaded but nothing
+                    # ever matches" is the commonest support question there is.
                     if tm_ids is not None and isinstance(tm_ids, list) and len(tm_ids) == 0:
-                        pass  # No TMs active, skip search
+                        if getattr(self, '_warned_no_active_tm_for_project', None) != project_id:
+                            self._warned_no_active_tm_for_project = project_id
+                            self.log(
+                                "ℹ️ No TM is switched on for this project, so no TM "
+                                "matches can be shown. Tick 'Read' for the TM you want in "
+                                "Resources → TM. (A new project starts with every TM off.)"
+                            )
                     else:
                         # Strip outer structural tags if setting is enabled (for cleaner TM matching)
                         search_source = segment.source
