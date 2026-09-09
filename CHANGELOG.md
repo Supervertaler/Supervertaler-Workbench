@@ -2,7 +2,26 @@
 
 All notable changes to Supervertaler Workbench are documented in this file.
 
-**Current Version:** v1.10.370 (September 7, 2026)
+**Current Version:** v1.10.371 (September 9, 2026)
+
+
+## v1.10.371 - September 9, 2026
+
+### Fixed (TM · fuzzy matches were impossible on a database whose full-text index had died)
+
+v1.10.370 fixed three real faults, but not the one a user was actually hitting. Their TM was full, switched on, and correctly paired Italian to English, and still nothing appeared. The cause was the full-text index, and it was invisible from every angle.
+
+- **A dead full-text index silently disables all fuzzy matching.** Fuzzy matches find their candidates through an FTS5 index; exact matches use a hash and never touch it. So when that index stops returning rows, exact matches keep working perfectly, TM Edit/Maintain still lists every entry, and fuzzy matching returns nothing at all – with no error anywhere. That combination is precisely what "my TM is full but shows no matches" looks like from the outside.
+- **The health check could not detect it, so the automatic repair never ran.** `translation_units_fts` is an external-content table, so `SELECT COUNT(*)` on it reads the *content* table and returns the same number as `translation_units` even when the index holds nothing whatsoever. The check compared those two counts, found them equal, and declared the index healthy every single time. FTS5's own `integrity-check` does not catch this either: an empty index is internally consistent. The check now asks the index to find rows we know exist, sampling from both ends of the table so a part-finished import is caught too. It costs about 7 ms on 200,000 units.
+- **The repair itself had never once worked.** It issued `DELETE FROM translation_units_fts`, which is invalid on an external-content table and raises "database disk image is malformed", then called `self.conn.commit()` – and there is no `self.conn`, the attribute is `self.connection`. Either fault alone was fatal. It now uses FTS5's `rebuild` command, which takes about 2.6 seconds on 200,000 units. A database that needs it is repaired on the next startup, and says so in the log rather than appearing to hang.
+
+### Fixed (TM · a failed match search looked exactly like an empty TM)
+
+The background TM search caught every exception, discarded the error and returned an empty result. An empty match pane and a broken match pane were therefore indistinguishable, and any fault – a locked database, a damaged index, a bad language value – was silently reported to the user as "this TM has nothing for you". Failures now say so in the log and name the cause.
+
+### Changed (Support · the diagnostic script tests the index and can repair it)
+
+`scripts/sv_tm_diagnose.py` previously inferred what *ought* to work and, in this case, confidently reached the wrong conclusion. It now reports the version, operating system, Python and SQLite build; resolves the Read tickbox for the specific project rather than dumping every activation row; tests whether the full-text index can actually find rows; and gives a verdict based on what it measured. Run it with `--repair` to rebuild a dead index in place.
 
 
 ## v1.10.370 - September 7, 2026

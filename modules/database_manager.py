@@ -195,12 +195,26 @@ class DatabaseManager:
                 import traceback
                 traceback.print_exc()
             
-            # Auto-sync FTS5 index if out of sync
+            # Auto-repair the FTS5 index if it can no longer find its own rows.
+            # While it is damaged, fuzzy matches silently return nothing and
+            # exact matches keep working, so nothing in the UI looks wrong.
+            # Rebuild cost scales with the TM: a few hundred thousand units take
+            # seconds, so say what is happening rather than appear to hang.
             try:
                 fts_status = self.check_fts_index()
                 if not fts_status.get('in_sync', True):
-                    self.log(f"[TM] FTS5 index out of sync ({fts_status.get('fts_count', 0)} vs {fts_status.get('main_count', 0)}), rebuilding...")
-                    self.rebuild_fts_index()
+                    rows = fts_status.get('main_count', 0)
+                    self.log(
+                        f"[TM] The full-text index cannot find its own rows, so fuzzy "
+                        f"matches would come back empty. Rebuilding it from {rows:,} "
+                        f"translation units - this may take a moment.")
+                    if self.rebuild_fts_index():
+                        recheck = self.check_fts_index()
+                        if recheck.get('in_sync', False):
+                            self.log("[TM] Full-text index rebuilt; fuzzy matching is working again.")
+                        else:
+                            self.log("[TM] WARNING: the full-text index is still not returning rows "
+                                     "after a rebuild. Fuzzy matches will be missing.")
             except Exception as e:
                 self.log(f"[WARNING] FTS5 index check failed: {e}")
             
@@ -2476,54 +2490,110 @@ class DatabaseManager:
     
     def rebuild_fts_index(self) -> int:
         """
-        Rebuild the FTS5 full-text search index from scratch.
-        Use this after importing TMs or if FTS search isn't returning results.
-        
-        Returns:
-            Number of entries indexed
+        Rebuild the FTS5 full-text search index from translation_units.
+
+        Fuzzy matching finds its candidates through this index, so while it is
+        damaged fuzzy matches silently return nothing while exact matches (which
+        go through source_hash, not FTS) keep working perfectly. That asymmetry
+        is what a "my TM is full but shows no matches" report usually looks like.
+
+        Uses FTS5's own 'rebuild' command. The previous implementation issued
+        `DELETE FROM translation_units_fts` followed by a re-INSERT, which is
+        invalid on an EXTERNAL-CONTENT table (content=translation_units) and
+        raised "database disk image is malformed" every time - the same trap the
+        tu_fts_delete trigger above documents. It then called `self.conn.commit()`,
+        and there is no `self.conn` (the attribute is `self.connection`), so even
+        a working rebuild could not have been committed. Between the two, this
+        function had never once succeeded.
+
+        Returns: number of rows indexed, or 0 on failure.
         """
         try:
-            # Clear existing FTS data
-            self.cursor.execute("DELETE FROM translation_units_fts")
-            
-            # Repopulate from translation_units table
-            self.cursor.execute("""
-                INSERT INTO translation_units_fts(rowid, source_text, target_text)
-                SELECT id, source_text, target_text FROM translation_units
-            """)
-            
-            self.conn.commit()
-            
-            # Get count
-            self.cursor.execute("SELECT COUNT(*) FROM translation_units_fts")
+            self.cursor.execute(
+                "INSERT INTO translation_units_fts(translation_units_fts) VALUES('rebuild')")
+            self.connection.commit()
+            self.cursor.execute("SELECT COUNT(*) FROM translation_units")
             count = self.cursor.fetchone()[0]
-            print(f"[TM] FTS5 index rebuilt with {count:,} entries")
+            self.log(f"[TM] FTS5 index rebuilt from {count:,} translation units")
             return count
         except Exception as e:
-            print(f"[TM] Error rebuilding FTS index: {e}")
+            self.log(f"[TM] Error rebuilding FTS index: {e}")
             return 0
     
-    def check_fts_index(self) -> Dict:
+    def check_fts_index(self, sample_size: int = 4) -> Dict:
         """
-        Check if FTS5 index is in sync with main table.
-        
-        Returns:
-            Dict with 'main_count', 'fts_count', 'in_sync' keys
+        Check whether the FTS5 index can actually find rows in translation_units.
+
+        Row counts CANNOT answer this. translation_units_fts is an
+        EXTERNAL-CONTENT table (content=translation_units), so
+        `SELECT COUNT(*) FROM translation_units_fts` reads the *content* table
+        and returns the same number as translation_units even when the index
+        itself is completely empty. The old count-comparison therefore reported
+        "in sync" for a totally dead index, and the auto-repair it guards never
+        fired once. FTS5's own 'integrity-check' does not catch this either - it
+        verifies internal consistency, and an empty index is internally
+        consistent.
+
+        What does catch it is asking the index to find a row we know is there.
+        We sample a few rows from each end of the table (cheap and index-driven
+        - never ORDER BY RANDOM() on a table that may hold millions of units),
+        pick a distinctive word from each, and check the row comes back. A
+        sample from both ends also catches the common partial failure where
+        indexing stopped part-way through a large import.
+
+        Returns dict with 'main_count', 'probes', 'probes_found', 'in_sync'.
         """
+        result = {'main_count': 0, 'probes': 0, 'probes_found': 0, 'in_sync': True}
         try:
             self.cursor.execute("SELECT COUNT(*) FROM translation_units")
             main_count = self.cursor.fetchone()[0]
-            
-            self.cursor.execute("SELECT COUNT(*) FROM translation_units_fts")
-            fts_count = self.cursor.fetchone()[0]
-            
-            return {
-                'main_count': main_count,
-                'fts_count': fts_count,
-                'in_sync': main_count == fts_count
-            }
+            result['main_count'] = main_count
+            if main_count == 0:
+                return result  # nothing to index: trivially fine
+
+            half = max(1, sample_size // 2)
+            rows = []
+            self.cursor.execute(
+                "SELECT id, source_text FROM translation_units ORDER BY id LIMIT ?", (half,))
+            rows.extend(self.cursor.fetchall())
+            self.cursor.execute(
+                "SELECT id, source_text FROM translation_units ORDER BY id DESC LIMIT ?", (half,))
+            rows.extend(self.cursor.fetchall())
+
+            for row_id, source_text in rows:
+                term = self._fts_probe_term(source_text)
+                if not term:
+                    continue  # nothing distinctive enough to search for
+                result['probes'] += 1
+                try:
+                    self.cursor.execute(
+                        "SELECT 1 FROM translation_units_fts "
+                        "WHERE translation_units_fts MATCH ? AND rowid = ? LIMIT 1",
+                        (f'"{term}"', row_id))
+                    if self.cursor.fetchone():
+                        result['probes_found'] += 1
+                except Exception:
+                    pass  # a bad probe term is not evidence of a bad index
+
+            # Only call it broken when we actually probed and found nothing.
+            # A row of digits or CJK may legitimately yield no usable term.
+            if result['probes'] > 0 and result['probes_found'] == 0:
+                result['in_sync'] = False
+            return result
         except Exception as e:
-            return {'main_count': 0, 'fts_count': 0, 'in_sync': False, 'error': str(e)}
+            result['in_sync'] = False
+            result['error'] = str(e)
+            return result
+
+    @staticmethod
+    def _fts_probe_term(text: str) -> Optional[str]:
+        """Longest plain word in `text` usable as an FTS5 probe, or None."""
+        if not text:
+            return None
+        words = re.findall(r"[^\W\d_]{4,}", text, flags=re.UNICODE)
+        if not words:
+            return None
+        return max(words, key=len)
 
     # ============================================
     # termbase METHODS (Placeholder for Phase 3)

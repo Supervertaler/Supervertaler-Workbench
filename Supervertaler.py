@@ -7634,6 +7634,9 @@ class TMSearchWorker(QThread):
 
     # Signal: segment_id, list of match dicts
     results_ready = pyqtSignal(int, list)
+    # Signal: segment_id, error description - so a failed search reaches the log
+    # instead of looking like a TM with no matches.
+    search_failed = pyqtSignal(int, str)
 
     def __init__(self, db_path: str, source_text: str, segment_id: int,
                  tm_ids: list = None, source_lang: str = None, target_lang: str = None,
@@ -7737,6 +7740,17 @@ class TMSearchWorker(QThread):
                 conn.close()
             except:
                 pass
+            # Never fail silently here. This except used to swallow `e` and emit
+            # an empty result, which renders as "no TM matches" - visually
+            # identical to a TM that genuinely has nothing to offer. Any fault in
+            # the search (a locked database, a malformed FTS index, a bad
+            # language value) therefore looked like an empty TM, with nothing in
+            # the log to say otherwise.
+            import traceback
+            print(f"[TM search] FAILED for segment {self.segment_id}: "
+                  f"{type(e).__name__}: {e}")
+            traceback.print_exc()
+            self.search_failed.emit(self.segment_id, f"{type(e).__name__}: {e}")
             if not self._cancelled:
                 self.results_ready.emit(self.segment_id, [])
 
@@ -66227,6 +66241,7 @@ class SupervertalerQt(QMainWindow):
                         # Store segment reference for result handler
                         self._tm_search_pending_segment = segment
                         self._tm_search_worker.results_ready.connect(self._on_tm_search_results)
+                        self._tm_search_worker.search_failed.connect(self._on_tm_search_failed)
                         self._tm_search_worker.start()
                 except Exception as e:
                     self.log(f"Error launching TM search worker: {e}")
@@ -66237,6 +66252,18 @@ class SupervertalerQt(QMainWindow):
         except Exception as e:
             self.log(f"Error in MT/LLM search: {e}")
     
+    def _on_tm_search_failed(self, segment_id: int, error: str):
+        """Report a TM search that raised, instead of showing an empty pane.
+
+        An empty match pane and a broken match pane look exactly the same to the
+        user, so a failure that is never surfaced gets read as "my TM has no
+        matches" and can go unexplained for months.
+        """
+        if getattr(self, '_last_tm_search_error', None) != error:
+            self._last_tm_search_error = error
+            self.log(f"⚠️ TM search failed, so the match pane is empty: {error}")
+            self.log("   This is a fault, not an empty TM. Run scripts/sv_tm_diagnose.py for details.")
+
     def _on_tm_search_results(self, segment_id: int, all_tm_matches: list):
         """Handle TM search results from background TMSearchWorker thread.
 
