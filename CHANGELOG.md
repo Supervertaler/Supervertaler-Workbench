@@ -24,6 +24,10 @@ If you work on the AI-friendly bilingual text in an AI chat, you no longer need 
 
 **Edit → ➕ Add Source Text…** lets you paste or type a few more sentences into a project you already have, instead of creating a text file and importing it (issue #173). The text is split into sentences the same way as when a project is created, added as new segments at the end, and the grid jumps to the first new one. Ctrl+Z takes it back out. Each pasted line becomes its own paragraph, so a plain-text export puts the added text on new lines rather than gluing it onto the last one. It is available on the same projects as Delete Segment(s): pasted, plain-text/Markdown and Start-Empty ones. A DOCX, Okapi or bilingual project is exported back into its original file, which has no place for new text, and the command says so.
 
+### Added (SuperLookup · text size for TM results, right beside the results)
+
+The **📖 TMs** results in SuperLookup have a **Text size** box next to the Horizontal / Vertical switch (issue #69), so you can make concordance hits larger or smaller without going to Settings. It applies to both views at once, the table rows grow to fit, and the size is remembered. Until you change it, the results look exactly as before.
+
 ### Added (Project Information · shows the AI model in use)
 
 **File → Project Information** now lists the AI model the project is being translated with, and its provider, at the top of the **AI & Prompts** section (issue #93). For a custom OpenAI-compatible endpoint it also names the active profile. The model is read the same way as the status-bar indicator, so the two always agree.
