@@ -15,6 +15,10 @@ Reported by a user running a local model through KoboldCPP (issue #250): transla
 
 Settings → AI Settings → **Local LLM (Ollama) Advanced Settings** has a new **Request timeout** (issue #180). A local model on a computer without a dedicated GPU can need much longer than the automatic limit of 3–10 minutes for a single batch request, and there was no way to allow it. Set anything from 1 minute to 24 hours, or leave it on **Automatic** to keep the previous behaviour exactly, which is the default. The value takes effect as soon as you save, and applies to every Ollama request: batch and single-segment translation, the AI Assistant and QuickTrans. The timeout error message now points to the setting.
 
+### Added (Concordance · export the hits to Excel or CSV)
+
+The **📖 TMs** results in SuperLookup (where Ctrl+K concordance searches land) have a new **💾 Export Results…** button (issue #170). It saves every hit for the current search, with source, target and the TM it came from, as an Excel workbook or a CSV file. This is useful for documenting inconsistencies in a client TM, or for keeping a cross-TM view of a term. The rows are written in the order the table shows them, so sort by a column first if you want the file sorted. The workbook also has a small "Search" sheet recording the search term, hit count and export time. The CSV is UTF-8 with a byte-order mark, so Excel opens accented letters correctly, and TM text that starts with "=" stays text instead of turning into a formula.
+
 ### Fixed (AI Settings · saving them deleted your custom MT endpoints)
 
 Clicking **Save AI Settings** rewrote the stored AI settings from scratch, and the rewrite did not include the custom OpenAI-compatible **MT** endpoints configured on the QuickTrans page. Every save of the AI Settings page therefore silently deleted them. The save now keeps everything it does not itself manage.

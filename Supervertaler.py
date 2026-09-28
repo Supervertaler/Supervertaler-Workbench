@@ -67600,8 +67600,14 @@ class SuperlookupTab(QWidget):
         
         # Action buttons
         button_layout = QHBoxLayout()
+
+        export_btn = QPushButton(self.tr("💾 Export Results…"))
+        export_btn.setToolTip(self.tr("Save all TM hits for the current search to Excel (.xlsx) or CSV"))
+        export_btn.clicked.connect(self.export_tm_results)
+        button_layout.addWidget(export_btn)
+
         button_layout.addStretch()
-        
+
         copy_btn = QPushButton(self.tr("📋 Copy Target"))
         copy_btn.clicked.connect(self.copy_selected_tm_target)
         button_layout.addWidget(copy_btn)
@@ -70748,7 +70754,55 @@ class SuperlookupTab(QWidget):
                 )
                 # Could auto-paste here if we wanted to be aggressive
                 # pyautogui.hotkey('ctrl', 'v')
-    
+
+    def export_tm_results(self):
+        """Export every TM hit for the current search to .xlsx or .csv (issue #170).
+
+        Rows come from the table rather than _current_tm_results so the file
+        follows whatever column sort the user has applied."""
+        rows = []
+        for row in range(self.tm_results_table.rowCount()):
+            tm_item = self.tm_results_table.item(row, 2)
+            data = tm_item.data(Qt.ItemDataRole.UserRole) if tm_item else None
+            if data:
+                rows.append(data)
+        if not rows:
+            QMessageBox.information(self, self.tr("Export Results"),
+                                    self.tr("There are no TM results to export. Run a search first."))
+            return
+
+        query = self.source_text.currentText().strip()
+        safe_query = re.sub(r'[^\w\- ]+', '', query).strip().replace(' ', '_')[:40]
+        default_name = f"concordance_{safe_query}.xlsx" if safe_query else "concordance.xlsx"
+        start_dir = str(Path.home())
+        project_path = getattr(self.main_window, 'project_file_path', None) if self.main_window else None
+        if project_path:
+            start_dir = str(Path(project_path).parent)
+
+        path, selected_filter = QFileDialog.getSaveFileName(
+            self, self.tr("Export Concordance Results"),
+            str(Path(start_dir) / default_name),
+            "Excel Workbook (*.xlsx);;CSV (comma-separated) (*.csv)")
+        if not path:
+            return
+        wanted_ext = '.csv' if 'csv' in selected_filter.lower() else '.xlsx'
+        if Path(path).suffix.lower() not in ('.xlsx', '.csv'):
+            path += wanted_ext
+
+        headers = [self.tm_results_table.horizontalHeaderItem(c).text()
+                   if self.tm_results_table.horizontalHeaderItem(c) else ''
+                   for c in range(2)]
+        try:
+            from modules.concordance_export import export_concordance_results
+            count = export_concordance_results(rows, path, query=query,
+                                               source_label=headers[0],
+                                               target_label=headers[1])
+        except Exception as e:
+            QMessageBox.warning(self, self.tr("Export Results"),
+                                self.tr("Could not export the results:") + f"\n\n{e}")
+            return
+        self.status_label.setText(f"✓ Exported {count} TM result(s) to {Path(path).name}")
+
     def _init_search_history(self):
         """Initialize search history from file."""
         self.search_history = []
