@@ -9253,6 +9253,9 @@ class SupervertalerQt(QMainWindow):
             except Exception:
                 pass
             usage_log.configure(self.user_data_path, __version__, enabled=_enabled)
+            # Calls made outside a batch (Ctrl+T, chat, AutoTagger) still count
+            # towards the open project in the per-project cost report (#8).
+            usage_log.set_default_context(self._usage_log_default_context)
         except Exception:
             pass
 
@@ -11216,6 +11219,49 @@ class SupervertalerQt(QMainWindow):
                 model = profile.get('model').strip()
         return model
 
+    def _usage_log_default_context(self):
+        """Attribution for AI calls made outside a batch run (usage log, #8)."""
+        proj = getattr(self, 'current_project', None)
+        if not proj:
+            return {}
+        return {'project': getattr(proj, 'name', None),
+                'src_lang': getattr(proj, 'source_lang', None),
+                'tgt_lang': getattr(proj, 'target_lang', None)}
+
+    def _estimate_batch_ai_cost(self, segments, provider, model, per_segment=False):
+        """Estimated tokens and cost of AI-translating ``segments`` the way batch
+        translation sends them: current prompt + glossary, configured batch
+        size (one segment per call for FuzzyFixer). Issue #8."""
+        from modules.cost_estimate import estimate_batch_translation
+        segments = [s for s in segments if (s.source or '').strip()]
+        system_chars = 0
+        pm = getattr(self, 'prompt_manager_qt', None)
+        proj = self.current_project
+        if pm and segments and proj:
+            try:
+                prompt = pm.build_final_prompt(
+                    source_text=segments[0].source, source_lang=proj.source_lang,
+                    target_lang=proj.target_lang, mode="single")
+                system_chars = len(prompt.split("**SOURCE TEXT:**")[0])
+            except Exception:
+                system_chars = 0
+        try:
+            batch_size = int(self.load_general_settings().get('batch_size', 20) or 20)
+        except Exception:
+            batch_size = 20
+        return estimate_batch_translation(
+            provider, model, [s.source for s in segments],
+            batch_size=1 if per_segment else batch_size,
+            system_prompt_chars=system_chars)
+
+    def _cost_display_settings(self):
+        """``(currency, usd_to_eur_rate)`` for showing costs."""
+        from modules.cost_estimate import currency_settings
+        try:
+            return currency_settings(self.load_general_settings())
+        except Exception:
+            return currency_settings({})
+
     def _update_llm_indicator(self):
         """Update the LLM provider/model indicator in the status bar"""
         try:
@@ -12324,7 +12370,16 @@ class SupervertalerQt(QMainWindow):
             try:
                 from modules.usage_report_dialog import UsageReportDialog
                 budget = float(getattr(self, 'monthly_budget_usd', 0.0) or 0.0)
-                UsageReportDialog(self, budget=budget).exec()
+                currency, rate = self._cost_display_settings()
+
+                def _save_currency(new_currency, new_rate):
+                    general = self.load_general_settings()
+                    general['cost_currency'] = new_currency
+                    general['usd_to_eur_rate'] = new_rate
+                    self.save_general_settings(general)
+
+                UsageReportDialog(self, budget=budget, currency=currency, rate=rate,
+                                  on_currency_changed=_save_currency).exec()
             except Exception as e:
                 print(f"[Usage report] failed to open: {e}")
 
@@ -55490,6 +55545,45 @@ class SupervertalerQt(QMainWindow):
                 f"<span style='color: #999;'>({_html.escape(provider_text)})</span>"))
         except Exception as e:
             self.log(f"Error getting AI model info: {e}")
+            provider = model = None
+
+        # Per-job AI cost (issue #8): what the usage log has recorded for this
+        # project so far, and an estimate for AI-translating what is left.
+        try:
+            from modules import usage_log
+            from modules.cost_estimate import format_cost
+            currency, rate = self._cost_display_settings()
+            spent = usage_log.project_totals(proj.name)
+            if spent['calls']:
+                spent_text = self.tr("{} over {:,} AI call(s) · {:,} tokens in / {:,} out").format(
+                    format_cost(spent['cost_usd'], currency, rate),
+                    spent['calls'], spent['input'], spent['output'])
+                if spent.get('unpriced'):
+                    spent_text += self.tr(" · {:,} call(s) with a model not in the price list").format(
+                        spent['unpriced'])
+            else:
+                spent_text = self.tr("none recorded yet")
+            spent_label = QLabel(f"<b>{self.tr('AI cost so far:')}</b> {spent_text}")
+            spent_label.setToolTip(self.tr(
+                "From the token-usage log (Tools → Token Usage & Costs), matched on the\n"
+                "project name. Calls made while the log was switched off are not counted."))
+            ai_layout.addWidget(spent_label)
+
+            remaining = [s for s in proj.segments if (s.source or '').strip()
+                         and not (s.target or '').strip()]
+            if remaining and provider and model:
+                est = self._estimate_batch_ai_cost(remaining, provider, model)
+                if provider == 'ollama':
+                    est_text = self.tr("free (local model)")
+                elif est['cost_usd'] is None:
+                    est_text = self.tr("unknown – this model is not in the price list")
+                else:
+                    est_text = "~" + format_cost(est['cost_usd'], currency, rate)
+                ai_layout.addWidget(QLabel(
+                    f"<b>{self.tr('Estimated cost to AI-translate the rest:')}</b> "
+                    + self.tr("{} for {:,} empty segment(s)").format(est_text, len(remaining))))
+        except Exception as e:
+            self.log(f"Error getting AI cost info: {e}")
 
         primary_prompt_text = "None"
         attached_count = 0
@@ -65014,6 +65108,17 @@ class SupervertalerQt(QMainWindow):
             llm_info.setStyleSheet("color: #666; font-size: 9pt; padding: 5px 0;")
             dialog_layout.addWidget(llm_info)
 
+            # Up-front cost estimate for the LLM option (issue #8)
+            cost_estimate_label = QLabel()
+            cost_estimate_label.setWordWrap(True)
+            cost_estimate_label.setStyleSheet("color: #666; font-size: 9pt; padding: 0 0 5px 0;")
+            cost_estimate_label.setToolTip(self.tr(
+                "Estimated from the source text length (about 4 characters per token),\n"
+                "your current prompt and glossary, and the batch size, priced with the\n"
+                "shared price list (pricing.json). Actual costs are logged per call –\n"
+                "see Tools → Token Usage & Costs."))
+            dialog_layout.addWidget(cost_estimate_label)
+
             dialog_layout.addSpacing(10)
         
             # Options group
@@ -65062,6 +65167,41 @@ class SupervertalerQt(QMainWindow):
             )
             fuzzy_fixer_checkbox.setChecked(getattr(self, 'fuzzy_fixer_enabled', False))
             options_layout.addWidget(fuzzy_fixer_checkbox)
+
+            _estimates = {}
+
+            def update_cost_estimate(*_):
+                """Refresh the estimate: LLM only, one call per segment with FuzzyFixer."""
+                if not llm_checkbox.isChecked():
+                    cost_estimate_label.setVisible(False)
+                    return
+                per_segment = fuzzy_fixer_checkbox.isChecked()
+                try:
+                    if per_segment not in _estimates:
+                        _estimates[per_segment] = self._estimate_batch_ai_cost(
+                            [seg for _row, seg in segments_to_translate], llm_provider,
+                            self._resolve_provider_model(settings, llm_provider, llm_model),
+                            per_segment=per_segment)
+                    est = _estimates[per_segment]
+                    from modules.cost_estimate import format_cost
+                    currency, rate = self._cost_display_settings()
+                    if est['cost_usd'] is None:
+                        cost_text = self.tr("unknown – this model is not in the price list")
+                    elif llm_provider == 'ollama':
+                        cost_text = self.tr("free (local model)")
+                    else:
+                        cost_text = "~" + format_cost(est['cost_usd'], currency, rate)
+                    cost_estimate_label.setText(self.tr(
+                        "💰 Estimated cost: {} · ~{:,} tokens in / ~{:,} out in {:,} call(s)").format(
+                            cost_text, est['input_tokens'], est['output_tokens'], est['batches']))
+                    cost_estimate_label.setVisible(True)
+                except Exception as e:
+                    self.log(f"⚠ Cost estimate unavailable: {e}")
+                    cost_estimate_label.setVisible(False)
+
+            llm_checkbox.toggled.connect(update_cost_estimate)
+            fuzzy_fixer_checkbox.toggled.connect(update_cost_estimate)
+            update_cost_estimate()
 
             # Note: the old "Fix tags with AutoTagger after translating" toggle was
             # removed (Workbench #229) — Translate already places inline tags, so it

@@ -7,6 +7,15 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ## Unreleased
 
+### Added (AI cost · per-job cost, an estimate before you start, and euros)
+
+Supervertaler has logged the tokens and cost of every AI call since v1.9.461, and **Tools → 💰 Token Usage & Costs** can already total them by project, model or task. What was missing was the cost of a job at a glance, a figure before you spend anything, and euros (issue #8):
+
+- **File → Project Information** now shows, under AI & Prompts, **what the project has cost in AI so far**: the total, the number of calls, and the tokens in and out. It also shows **an estimate of what it would cost to AI-translate the segments that are still empty** with your current model.
+- **The Batch Translate dialog shows the estimated cost of the run** before you click Start, for example "💰 Estimated cost: ~$0.42 · ~120,000 tokens in / ~35,000 out in 12 call(s)". It updates when you tick FuzzyFixer, which sends one call per segment and so costs more, and is hidden when TM or MT is selected. The estimate uses your actual prompt and glossary, your batch size and the same price list as the usage log. When your prompt is long enough for the provider to cache it, it prices batches 2 onwards at the cheaper cached rate, as they will be billed. A model that is not in the price list says "unknown" rather than pretending to be free.
+- **Costs can be shown in euros.** Token Usage & Costs has a **Show costs in: USD / EUR** switch, with the exchange rate next to it. There is no online lookup, so set it to your bank's or card's rate. The choice is remembered and applies to Project Information and the Batch Translate estimate too. Prices and the exported ledger stay in US dollars, as in Supervertaler for Trados.
+- **Calls outside a batch now count towards the open project.** Previously only batch translation recorded which project a call belonged to, so Ctrl+T, the AI Assistant and AutoTagger went under "(none)" in the per-project report. They are now filed under the project that is open.
+
 ### Fixed (AI Assistant · chat failed on every message to a local model with no price entry)
 
 Reported by a user running a local model through KoboldCPP (issue #250): translation worked, but every message in the AI Assistant chat failed with "unsupported format string passed to NoneType.\_\_format\_\_". A model with no entry in the pricing table – which is every local model behind the custom OpenAI-compatible provider – deliberately has its cost reported as *unknown* rather than *free*, and the chat panel's log line tried to print that unknown cost as a number. The reply had already arrived and was thrown away. The log now says "cost unknown", which is what the chat bubble itself already showed.
