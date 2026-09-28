@@ -230,10 +230,14 @@ class ChatBackend(QObject):
                 'duration_s': round(elapsed, 1),
             }
 
+            # cost is None for a model with no pricing entry (e.g. a local
+            # KoboldCPP/LM Studio model behind the custom OpenAI provider),
+            # so it must not be passed to a float format spec.
+            cost_text = "cost unknown" if cost is None else f"~${cost:.4f}"
             self._log(
                 f"[ChatBackend] Response: {len(response_text)} chars, "
                 f"{tokens_in} in / {tokens_out} out, "
-                f"~${cost:.4f}, {elapsed:.1f}s"
+                f"{cost_text}, {elapsed:.1f}s"
             )
 
             return response_text, metadata

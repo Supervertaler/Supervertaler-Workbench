@@ -5,6 +5,13 @@ All notable changes to Supervertaler Workbench are documented in this file.
 **Current Version:** v1.10.371 (September 9, 2026)
 
 
+## Unreleased
+
+### Fixed (AI Assistant · chat failed on every message to a local model with no price entry)
+
+Reported by a user running a local model through KoboldCPP (issue #250): translation worked, but every message in the AI Assistant chat failed with "unsupported format string passed to NoneType.\_\_format\_\_". A model with no entry in the pricing table – which is every local model behind the custom OpenAI-compatible provider – deliberately has its cost reported as *unknown* rather than *free*, and the chat panel's log line tried to print that unknown cost as a number. The reply had already arrived and was thrown away. The log now says "cost unknown", which is what the chat bubble itself already showed.
+
+
 ## v1.10.371 - September 9, 2026
 
 ### Fixed (TM · fuzzy matches were impossible on a database whose full-text index had died)
