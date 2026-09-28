@@ -5779,68 +5779,111 @@ Output ONLY the delimiters and prompt content. No text before ===PROMPT_START===
         
         return "\n".join(lines)
 
-    def _get_tm_context_data(self) -> str:
-        """Get Translation Memory data for AI context"""
+    def _context_current_segment(self):
+        """The segment selected in the grid, or None."""
+        app = self.parent_app
         try:
-            if not hasattr(self.parent_app, 'tm_databases') or not self.parent_app.tm_databases:
+            row = app.table.currentRow()
+            if row >= 0 and hasattr(app, '_segment_for_grid_row'):
+                return app._segment_for_grid_row(row)[0]
+        except Exception:
+            pass
+        return None
+
+    def _get_tm_context_data(self) -> str:
+        """TM data for the AI context: the project's active TMs, and the TM
+        matches for the segment selected in the grid (issue #111).
+
+        Reads the real stores (tm_metadata_mgr / tm_database). The previous
+        version looked for a ``tm_databases`` attribute that the main window
+        has never had, so switching TM data on only ever sent the AI
+        "No translation memories loaded"."""
+        try:
+            app = self.parent_app
+            project = getattr(app, 'current_project', None)
+            mgr = getattr(app, 'tm_metadata_mgr', None)
+            tm_db = getattr(app, 'tm_database', None)
+            if not project or not mgr or not tm_db:
                 return "No translation memories loaded"
+            project_id = getattr(project, 'id', None)
+            tm_ids = mgr.get_active_tm_ids(project_id) if project_id else []
+            if not tm_ids:
+                return "No translation memories are switched on for this project"
 
-            lines = []
-            total_entries = 0
+            lines = ["Translation memories switched on for this project:"]
+            names = {}
+            for tm in mgr.get_all_tms():
+                if tm.get('tm_id') in tm_ids:
+                    names[tm['tm_id']] = tm.get('name') or tm['tm_id']
+                    lines.append(f"- {names[tm['tm_id']]} "
+                                 f"({tm.get('entry_count', 0) or 0:,} entries)")
 
-            for tm_name, tm_db in self.parent_app.tm_databases.items():
-                if hasattr(tm_db, 'entries'):
-                    count = len(tm_db.entries)
-                    total_entries += count
-                    lines.append(f"- **{tm_name}**: {count} entries")
-
-                    # Show sample entries (first 10)
-                    for i, entry in enumerate(list(tm_db.entries.values())[:10]):
-                        if hasattr(entry, 'source') and hasattr(entry, 'target'):
-                            lines.append(f"  {i+1}. {entry.source[:50]}... → {entry.target[:50]}...")
-
-            if not lines:
-                return "Translation memories are empty"
-
-            return f"Total: {total_entries} TM entries\n" + "\n".join(lines)
+            seg = self._context_current_segment()
+            if seg is not None and (seg.source or '').strip():
+                matches = tm_db.search_all(seg.source, tm_ids=tm_ids, max_matches=5)
+                lines.append(f"\nTM matches for the current segment ({seg.id}): {seg.source}")
+                if matches:
+                    for m in matches:
+                        pct = m.get('match_pct', 0)
+                        tm_name = names.get(m.get('tm_id'), m.get('tm_name', ''))
+                        lines.append(f"- {pct}% [{tm_name}] "
+                                     f"{m.get('source', '')} → {m.get('target', '')}")
+                else:
+                    lines.append("- (no TM matches)")
+            return "\n".join(lines)
 
         except Exception as e:
             return f"Error loading TM data: {e}"
 
+    # Upper bounds that keep the termbase context a reasonable size in the prompt.
+    _CONTEXT_TERM_SEGMENTS = 2000
+    _CONTEXT_TERM_LIMIT = 150
+
     def _get_termbase_context_data(self) -> str:
-        """Get Termbase data for AI context"""
+        """Termbase data for the AI context: the terms from the project's active
+        termbases that actually occur in the document (issue #111).
+
+        Uses the main window's in-memory termbase index – the same lookup that
+        feeds TermLens – so forbidden and non-translatable terms are marked as
+        such. The previous version looked for ``termbases`` /
+        ``termbase_manager`` attributes that do not exist, so it only ever
+        sent "No termbases loaded"."""
         try:
-            if not hasattr(self.parent_app, 'termbases') or not self.parent_app.termbases:
-                # Try to get termbase entries from the termbase manager
-                if hasattr(self.parent_app, 'termbase_manager'):
-                    terms = self.parent_app.termbase_manager.get_all_terms()
-                    if terms:
-                        lines = [f"Total: {len(terms)} termbase entries\n"]
-                        for i, term in enumerate(terms[:50]):  # First 50 terms
-                            source = term.get('source_term', term.get('source', ''))
-                            target = term.get('target_term', term.get('target', ''))
-                            if source and target:
-                                lines.append(f"| {source} | {target} |")
-                        return "\n".join(lines)
+            app = self.parent_app
+            project = getattr(app, 'current_project', None)
+            if not project or not getattr(project, 'segments', None) \
+                    or not hasattr(app, '_search_termbase_in_memory'):
                 return "No termbases loaded"
 
-            lines = []
-            total_terms = 0
+            found = {}
+            for seg in project.segments[:self._CONTEXT_TERM_SEGMENTS]:
+                if not (seg.source or '').strip():
+                    continue
+                for match in (app._search_termbase_in_memory(seg.source) or {}).values():
+                    source = match.get('source', '')
+                    if not source or source.lower() in found:
+                        continue
+                    found[source.lower()] = match
+                    if len(found) >= self._CONTEXT_TERM_LIMIT:
+                        break
+                if len(found) >= self._CONTEXT_TERM_LIMIT:
+                    break
 
-            for tb_name, tb in self.parent_app.termbases.items():
-                if hasattr(tb, 'terms'):
-                    count = len(tb.terms)
-                    total_terms += count
-                    lines.append(f"- **{tb_name}**: {count} terms")
+            if not found:
+                return "No termbase terms occur in this document"
 
-                    # Show sample terms (first 20)
-                    for i, (source, target) in enumerate(list(tb.terms.items())[:20]):
-                        lines.append(f"  | {source} | {target} |")
-
-            if not lines:
-                return "Termbases are empty"
-
-            return f"Total: {total_terms} terms\n" + "\n".join(lines)
+            lines = [f"{len(found)} termbase terms that occur in this document "
+                     "(source | target):"]
+            for match in found.values():
+                note = ""
+                if match.get('is_nontranslatable'):
+                    note = "  (non-translatable: keep as is)"
+                elif match.get('forbidden'):
+                    note = "  (FORBIDDEN translation: do not use)"
+                lines.append(f"| {match.get('source', '')} | {match.get('translation', '')} |{note}")
+            if len(found) >= self._CONTEXT_TERM_LIMIT:
+                lines.append(f"(first {self._CONTEXT_TERM_LIMIT} terms only)")
+            return "\n".join(lines)
 
         except Exception as e:
             return f"Error loading termbase data: {e}"
@@ -6247,6 +6290,16 @@ Output ONLY the delimiters and prompt content. No text before ===PROMPT_START===
 
         parts.append(f"- Prompt Library: {len(self.library.prompts)} prompts")
         parts.append(f"- Attached Files: {len(self.attached_files)} files")
+
+        # TM / termbase data, when switched on in Available Context or with the
+        # chat's TM / Termbase chips (issue #111). Chat messages never carried
+        # these before, even with the toggles on.
+        if getattr(self, 'include_tm_data', False):
+            parts.append("\nTRANSLATION MEMORY:")
+            parts.append(self._get_tm_context_data())
+        if getattr(self, 'include_termbase_data', False):
+            parts.append("\nTERMBASE:")
+            parts.append(self._get_termbase_context_data())
 
         # Add action system instructions (Phase 2)
         parts.append(self.ai_action_system.get_system_prompt_addition())

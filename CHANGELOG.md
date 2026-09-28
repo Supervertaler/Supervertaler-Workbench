@@ -44,6 +44,14 @@ Settings → AI Settings → **Local LLM (Ollama) Advanced Settings** has a new 
 
 The **📖 TMs** results in SuperLookup (where Ctrl+K concordance searches land) have a new **💾 Export Results…** button (issue #170). It saves every hit for the current search, with source, target and the TM it came from, as an Excel workbook or a CSV file. This is useful for documenting inconsistencies in a client TM, or for keeping a cross-TM view of a term. The rows are written in the order the table shows them, so sort by a column first if you want the file sorted. The workbook also has a small "Search" sheet recording the search term, hit count and export time. The CSV is UTF-8 with a byte-order mark, so Excel opens accented letters correctly, and TM text that starts with "=" stays text instead of turning into a formula.
 
+### Fixed (AI Assistant · "include TM data" and "include termbase data" sent the AI nothing)
+
+Switching on **💾 Translation Memories** or **📚 Termbases** under **Available Context** in the AI Assistant, or the TM and Termbase chips in the chat, changed the look of the box and nothing else (issue #111). The code that gathers the data looked for places in the program where TMs and termbases have not been kept for a long time. It found nothing and told the AI "No translation memories loaded" / "No termbases loaded". Chat messages did not even include that: only AutoPrompt ever asked for it.
+
+Both now work, for chat messages and AutoPrompt alike:
+- **TM data:** the translation memories switched on for the project, with their sizes, plus the actual TM matches for the segment selected in the grid.
+- **Termbase data:** the terms from the project's termbases that actually occur in the document, up to 150, with forbidden and non-translatable terms marked as such. They are found by the same lookup TermLens uses.
+
 ### Fixed (Settings · "Save General Settings" wiped fourteen settings from other pages)
 
 Clicking **💾 Save General Settings** rewrote the stored general settings with only the options that page shows. Everything else kept in the same place was deleted, and quietly reverted to its default the next time it was read:
