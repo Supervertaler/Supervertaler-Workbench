@@ -11880,6 +11880,17 @@ class SupervertalerQt(QMainWindow):
         delete_seg_action.triggered.connect(self.delete_current_segments)
         edit_menu.addAction(delete_seg_action)
 
+        # ➕ Add Source Text (issue #173) – the counterpart of Delete Segment(s),
+        # available on the same projects: paste a few more sentences into an
+        # existing project instead of creating and importing a TXT file.
+        add_source_action = QAction(self.tr("➕ &Add Source Text..."), self)
+        add_source_action.setToolTip(self.tr(
+            "Paste or type more source text; it is split into sentences and added "
+            "as new segments at the end. Available for pasted / plain-text / "
+            "Start-Empty projects (not DOCX / Okapi / bilingual round-trip)."))
+        add_source_action.triggered.connect(self.add_source_text_to_project)
+        edit_menu.addAction(add_source_action)
+
         # Translate — first-class top-level menu (v1.10.292). Groups the single
         # "Translate Current Segment" command with all the Batch Translate
         # variants (and Proofread) in one obvious place; this stuff was
@@ -12694,6 +12705,86 @@ class SupervertalerQt(QMainWindow):
         if focus_id is not None:
             self._select_grid_row_by_id(focus_id)
         self.log(f"Deleted {removed} segment{'s' if removed != 1 else ''}.")
+
+    def add_source_text_to_project(self):
+        """Append pasted source text to the open project as new segments (issue #173).
+
+        Allowed on exactly the projects where segments may be deleted
+        (segment_split_merge.deletable): pasted / plain-text / Start-Empty ones,
+        whose export is rebuilt from the segments. A DOCX, Okapi or bilingual
+        project has no place in its source file for new text. Undoable via the
+        structural-undo stack, like split / merge / delete."""
+        from modules import segment_split_merge as ssm
+        proj = getattr(self, 'current_project', None)
+        if proj is None:
+            QMessageBox.information(self, self.tr("Add Source Text"),
+                                    self.tr("Open or create a project first."))
+            return
+        if not ssm.deletable(proj):
+            QMessageBox.information(
+                self, self.tr("Add Source Text"),
+                self.tr("Adding source text is only available for pasted / plain-text / "
+                        "Start-Empty projects. A DOCX, Okapi or bilingual-CAT project is "
+                        "exported back into its original file, which has no place for "
+                        "new text."))
+            return
+        if getattr(self, 'current_sort', None) is not None:
+            QMessageBox.information(self, self.tr("Add Source Text"),
+                self.tr("Switch to Document Order (Sort menu) to add source text."))
+            return
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle(self.tr("Add Source Text"))
+        dialog.setMinimumSize(560, 360)
+        v = QVBoxLayout(dialog)
+        info = QLabel(self.tr(
+            "Paste or type the source text to add. It is split into sentences, the "
+            "same way as when a project is created, and added as new segments at "
+            "the end of the project. Each line becomes its own paragraph."))
+        info.setWordWrap(True)
+        v.addWidget(info)
+        editor = QPlainTextEdit()
+        editor.setPlaceholderText(self.tr("Paste here (Ctrl+V)…"))
+        v.addWidget(editor, 1)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setText(self.tr("Add Segments"))
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        v.addWidget(buttons)
+        editor.setFocus()
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        from modules.simple_segmenter import MarkdownSegmenter, SimpleSegmenter
+        is_markdown = (getattr(proj, 'original_txt_path', None) or '').lower().endswith('.md')
+        segmenter = MarkdownSegmenter() if is_markdown else SimpleSegmenter()
+        pairs = ssm.split_source_text(editor.toPlainText(), segmenter.segment_text)
+        if not pairs:
+            return
+
+        import copy
+        segs = proj.segments
+        before = copy.deepcopy(segs)
+        next_id = (segs[-1].id + 1) if segs else 1
+        para_base = max((s.paragraph_id or 0 for s in segs), default=0)
+        pos_base = max((s.document_position or 0 for s in segs), default=0)
+        file_id = segs[-1].file_id if segs else None
+        first_row = len(segs)
+        for n, (paragraph, sentence) in enumerate(pairs):
+            segs.append(Segment(
+                id=next_id + n, source=sentence, target="", type="para",
+                paragraph_id=para_base + paragraph,
+                document_position=pos_base + paragraph,
+                file_id=file_id,
+            ))
+        focus_id = next_id
+        self._push_structural_undo(before, segs, focus_id, "add", first_row)
+        self._sync_after_structural()
+        self.load_segments_to_grid()
+        self._select_grid_row_by_id(focus_id)
+        self.log(f"➕ Added {len(pairs)} segment{'s' if len(pairs) != 1 else ''} "
+                 "from pasted source text.")
 
     def delete_current_segments(self):
         """Delete the currently selected grid rows (Edit menu entry). Acts on the

@@ -17,7 +17,7 @@ disabled — see ``structure_editable`` below.
 from __future__ import annotations
 
 import copy
-from typing import List, Tuple
+from typing import Callable, List, Tuple
 
 
 # Status used for the freshly-created right-hand part of a split.
@@ -84,6 +84,28 @@ def deletable(project) -> bool:
     if getattr(project, "original_docx_path", None):
         return False
     return True
+
+
+def split_source_text(text: str, segment_text: Callable[[str], List[str]]) -> List[Tuple[int, str]]:
+    """Break pasted source text into ``(paragraph, sentence)`` pairs (issue #173).
+
+    Each non-blank line is one paragraph, numbered from 1 in order; blank lines
+    only separate paragraphs. ``segment_text`` is the project's sentence
+    segmenter (``SimpleSegmenter().segment_text`` or the Markdown one), so
+    added text is split exactly as it would have been at project creation.
+    Paragraph numbers matter because plain-text export writes one line per
+    paragraph: without them, added text would be glued onto the last line.
+    """
+    pairs: List[Tuple[int, str]] = []
+    paragraph = 0
+    for line in (text or "").replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+        if not line.strip():
+            continue
+        paragraph += 1
+        for sentence in segment_text(line.strip()):
+            if sentence and sentence.strip():
+                pairs.append((paragraph, sentence.strip()))
+    return pairs
 
 
 def delete_segments(segments: List, indices) -> int:
