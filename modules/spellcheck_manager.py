@@ -44,6 +44,39 @@ except ImportError as e:
     SPELLCHECKER_IMPORT_ERROR = str(e)
 
 
+def parse_word_list(text: str) -> Tuple[List[str], int]:
+    """Parse a custom-dictionary word list (issue #109).
+
+    Accepts one word per line, as in ``custom_words.txt``, and also a Hunspell
+    ``.dic`` file: its leading entry-count line is skipped and ``/FLAGS``
+    suffixes are removed. Blank lines and ``#`` comments are ignored.
+
+    Returns ``(words, duplicates)``: the unique words, lower-cased (the custom
+    dictionary is case-insensitive) and sorted, plus how many duplicate lines
+    were dropped.
+    """
+    lines = (text or "").replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    seen: Set[str] = set()
+    duplicates = 0
+    first = True
+    for line in lines:
+        word = line.strip()
+        if not word or word.startswith('#'):
+            continue
+        if first:
+            first = False
+            if word.isdigit():
+                continue  # Hunspell .dic entry count
+        word = word.split('/', 1)[0].strip().lower()
+        if not word:
+            continue
+        if word in seen:
+            duplicates += 1
+        else:
+            seen.add(word)
+    return sorted(seen), duplicates
+
+
 class SpellcheckManager:
     """
     Manages spellchecking for Supervertaler.
@@ -552,6 +585,21 @@ class SpellcheckManager:
     def get_custom_words(self) -> List[str]:
         """Get all custom dictionary words"""
         return sorted(self._custom_words)
+
+    def set_custom_words(self, words) -> int:
+        """Replace the whole custom dictionary in one write (issue #109).
+        Returns the number of words stored."""
+        self._custom_words = {w.strip().lower() for w in words
+                              if w and w.strip() and not w.strip().startswith('#')}
+        self._word_cache.clear()
+        self._save_custom_words()
+        if self._hunspell:
+            for word in self._custom_words:
+                try:
+                    self._hunspell.add(word)
+                except Exception:
+                    pass
+        return len(self._custom_words)
     
     def check_text(self, text: str) -> List[Tuple[int, int, str]]:
         """

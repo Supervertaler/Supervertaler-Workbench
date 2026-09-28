@@ -44,6 +44,16 @@ Settings → AI Settings → **Local LLM (Ollama) Advanced Settings** has a new 
 
 The **📖 TMs** results in SuperLookup (where Ctrl+K concordance searches land) have a new **💾 Export Results…** button (issue #170). It saves every hit for the current search, with source, target and the TM it came from, as an Excel workbook or a CSV file. This is useful for documenting inconsistencies in a client TM, or for keeping a cross-TM view of a term. The rows are written in the order the table shows them, so sort by a column first if you want the file sorted. The workbook also has a small "Search" sheet recording the search term, hit count and export time. The CSV is UTF-8 with a byte-order mark, so Excel opens accented letters correctly, and TM text that starts with "=" stays text instead of turning into a formula.
 
+### Added (Spellcheck · import, export and tidy the custom dictionary)
+
+**📖 Manage Custom Dictionary…** (in the grid's spellcheck menu) has new buttons (issue #109):
+- **Import…** adds words from a text file with one word per line, or from a Hunspell `.dic` file. The entry-count line and `/FLAGS` are handled for you, and words already in the list are not duplicated.
+- **Export…** saves the list as a text file.
+- **Sort & remove duplicates** tidies the list.
+- **Open folder** shows where `custom_words.txt` lives.
+
+The word count now also says how many duplicates will be merged. The dialog no longer claims that changes are saved automatically; they are saved when you click **Save**. Saving a long list is also much faster: it used to rewrite the file once for every word removed and every word added.
+
 ### Added (Preview · make the document text larger or smaller)
 
 The document **Preview** has **A− / 100% / A+** buttons in its top bar, in both the docked tab and the pop-out window (issue #70). **Ctrl + mouse wheel** over the preview zooms as well, and clicking the percentage goes back to 100%. The size runs from 60% to 250%, scales headings and body text together, and is remembered, so it also serves as your default for next time.

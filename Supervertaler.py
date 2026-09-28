@@ -56762,76 +56762,121 @@ class SupervertalerQt(QMainWindow):
                 target_widget.highlighter.rehighlight()
 
     def _open_custom_dictionary_dialog(self):
-        """Open dialog to manage custom dictionary words"""
+        """Manage the spellchecker's custom dictionary (issue #109): edit the
+        word list directly, import (plain lists or Hunspell .dic), export,
+        and sort / de-duplicate."""
+        from modules.spellcheck_manager import parse_word_list
+
         dialog = QDialog(self)
         dialog.setWindowTitle(self.tr("Custom Dictionary"))
-        dialog.setMinimumSize(400, 500)
-        
+        dialog.setMinimumSize(460, 540)
         layout = QVBoxLayout(dialog)
-        
-        # Info label
-        info_label = QLabel(
-            "Words added to the custom dictionary will not be marked as spelling errors.\n"
-            "One word per line. Changes are saved automatically."
-        )
+
+        info_label = QLabel(self.tr(
+            "Words in the custom dictionary are never marked as spelling errors. "
+            "One word per line; case does not matter. Click Save to keep your changes."))
         info_label.setWordWrap(True)
         layout.addWidget(info_label)
-        
-        # Word list editor
-        self.custom_dict_editor = QPlainTextEdit()
-        self.custom_dict_editor.setPlaceholderText(self.tr("Enter custom words here, one per line..."))
-        
-        # Load current words
-        words = self.spellcheck_manager.get_custom_words()
-        self.custom_dict_editor.setPlainText('\n'.join(words))
-        
-        layout.addWidget(self.custom_dict_editor)
-        
-        # Word count label
-        self.word_count_label = QLabel(f"{len(words)} words in dictionary")
-        layout.addWidget(self.word_count_label)
-        
-        # Update count when text changes
-        def update_word_count():
-            text = self.custom_dict_editor.toPlainText()
-            count = len([w for w in text.split('\n') if w.strip()])
-            self.word_count_label.setText(f"{count} words in dictionary")
-        
-        self.custom_dict_editor.textChanged.connect(update_word_count)
-        
-        # Buttons
+
+        tools = QHBoxLayout()
+        import_btn = QPushButton(self.tr("📥 Import..."))
+        import_btn.setToolTip(self.tr(
+            "Add words from a text file (one per line) or a Hunspell .dic file"))
+        export_btn = QPushButton(self.tr("📤 Export..."))
+        export_btn.setToolTip(self.tr("Save the word list as a text file"))
+        tidy_btn = QPushButton(self.tr("🔤 Sort && remove duplicates"))
+        folder_btn = QPushButton(self.tr("📂 Open folder"))
+        folder_btn.setToolTip(str(self.spellcheck_manager.custom_words_file))
+        for b in (import_btn, export_btn, tidy_btn, folder_btn):
+            tools.addWidget(b)
+        tools.addStretch()
+        layout.addLayout(tools)
+
+        editor = QPlainTextEdit()
+        editor.setPlaceholderText(self.tr("Enter custom words here, one per line..."))
+        editor.setPlainText('\n'.join(self.spellcheck_manager.get_custom_words()))
+        layout.addWidget(editor)
+        self.custom_dict_editor = editor
+
+        count_label = QLabel()
+        layout.addWidget(count_label)
+
+        def update_count():
+            words, dupes = parse_word_list(editor.toPlainText())
+            text = f"{len(words)} word{'s' if len(words) != 1 else ''} in dictionary"
+            if dupes:
+                text += f" ({dupes} duplicate{'s' if dupes != 1 else ''} will be merged)"
+            count_label.setText(text)
+
+        editor.textChanged.connect(update_count)
+        update_count()
+
+        def tidy():
+            words, _ = parse_word_list(editor.toPlainText())
+            editor.setPlainText('\n'.join(words))
+
+        def import_words():
+            path, _ = QFileDialog.getOpenFileName(
+                dialog, self.tr("Import Words"), "",
+                "Word lists (*.txt *.dic);;All Files (*.*)")
+            if not path:
+                return
+            try:
+                with open(path, 'r', encoding='utf-8-sig', errors='replace') as f:
+                    incoming, _ = parse_word_list(f.read())
+            except Exception as e:
+                QMessageBox.warning(dialog, self.tr("Import Words"), f"Could not read the file:\n\n{e}")
+                return
+            current, _ = parse_word_list(editor.toPlainText())
+            added = sorted(set(incoming) - set(current))
+            editor.setPlainText('\n'.join(sorted(set(current) | set(incoming))))
+            QMessageBox.information(
+                dialog, self.tr("Import Words"),
+                f"{len(added)} new word(s) added from {os.path.basename(path)} "
+                f"({len(incoming) - len(added)} already present). Click Save to keep them.")
+
+        def export_words():
+            path, _ = QFileDialog.getSaveFileName(
+                dialog, self.tr("Export Words"), "custom_words.txt", "Text Files (*.txt)")
+            if not path:
+                return
+            words, _ = parse_word_list(editor.toPlainText())
+            try:
+                with open(path, 'w', encoding='utf-8') as f:
+                    f.write('\n'.join(words) + ('\n' if words else ''))
+            except Exception as e:
+                QMessageBox.warning(dialog, self.tr("Export Words"), f"Could not write the file:\n\n{e}")
+                return
+            self.log(f"✓ Exported {len(words)} custom dictionary words to {os.path.basename(path)}")
+
+        def open_folder():
+            QDesktopServices.openUrl(QUrl.fromLocalFile(
+                str(self.spellcheck_manager.dictionaries_path)))
+
+        tidy_btn.clicked.connect(tidy)
+        import_btn.clicked.connect(import_words)
+        export_btn.clicked.connect(export_words)
+        folder_btn.clicked.connect(open_folder)
+
         button_layout = QHBoxLayout()
-        
+        button_layout.addStretch()
         save_btn = QPushButton(self.tr("💾 Save"))
         save_btn.clicked.connect(lambda: self._save_custom_dictionary(dialog))
         button_layout.addWidget(save_btn)
-        
         cancel_btn = QPushButton(self.tr("Cancel"))
         cancel_btn.clicked.connect(dialog.reject)
         button_layout.addWidget(cancel_btn)
-        
         layout.addLayout(button_layout)
-        
+
         dialog.exec()
 
     def _save_custom_dictionary(self, dialog):
-        """Save custom dictionary from dialog"""
-        text = self.custom_dict_editor.toPlainText()
-        words = [w.strip().lower() for w in text.split('\n') if w.strip()]
-        
-        # Clear and re-add all words
-        current_words = self.spellcheck_manager.get_custom_words()
-        for word in current_words:
-            self.spellcheck_manager.remove_from_dictionary(word)
-        
-        for word in words:
-            self.spellcheck_manager.add_to_dictionary(word)
-        
-        self.log(f"✓ Custom dictionary saved with {len(words)} words")
-        
-        # Refresh highlighters
+        """Save custom dictionary from dialog (one file write, however many words)."""
+        from modules.spellcheck_manager import parse_word_list
+        words, _ = parse_word_list(self.custom_dict_editor.toPlainText())
+        count = self.spellcheck_manager.set_custom_words(words)
+        self.log(f"✓ Custom dictionary saved with {count} words")
         self._refresh_all_highlighters()
-        
         dialog.accept()
 
     def _show_spellcheck_info(self):
