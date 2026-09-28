@@ -35,6 +35,13 @@ class ShortcutManager:
             "action": "save_project"
         },
 
+        "file_update_from_pasted_text": {
+            "category": "File",
+            "description": "Update Project from Pasted Bilingual Text (AI-friendly)",
+            "default": "Ctrl+Shift+V",
+            "action": "import_bilingual_text_from_paste"
+        },
+
         "file_quit": {
             "category": "File",
             "description": "Quit Application",
