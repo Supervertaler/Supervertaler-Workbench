@@ -17571,12 +17571,8 @@ class SupervertalerQt(QMainWindow):
         tags (<b>, <cf …>, <x1/>, {1}, …) so the count is comparable
         between a target-cell string and the run text read back from a
         DOCX (where those tags are formatting, not text)."""
-        if not text:
-            return 0
-        import re as _re
-        text = _re.sub(r'<[^>]+>', ' ', text)   # strip angle-bracket tags
-        text = _re.sub(r'[{\[]\d+[}\]]', ' ', text)  # strip {1} / [1} placeholders
-        return len([t for t in text.split() if t])
+        from modules.export_word_count import count_words
+        return count_words(text)
 
     def _count_expected_target_words(self, segments) -> int:
         """Sum of word counts across all segments' export text (target if
@@ -17588,51 +17584,33 @@ class SupervertalerQt(QMainWindow):
             total += self._count_words(text)
         return total
 
-    def _count_exported_docx_words(self, path: str):
-        """Count visible run-text words in an exported DOCX. Returns an int,
-        or None if the file isn't a DOCX or can't be read (caller skips the
-        check). Counts document body, headers, footers, foot/endnotes —
-        i.e. everything that can correspond to a translatable segment — but
-        NOT comments (which aren't target segments)."""
-        if not path or not path.lower().endswith('.docx'):
-            return None
-        import zipfile
-        import re as _re
+    def _count_exported_words(self, path: str):
+        """Count the words in an exported file. Returns an int, or None when
+        the format has no counter or the file can't be read (the caller then
+        skips the check). DOCX, PPTX, XLSX, IDML, HTML, XLIFF and PO are
+        covered (issue #219) – see modules/export_word_count.py."""
+        from modules.export_word_count import count_exported_words
         try:
-            chunks = []
-            with zipfile.ZipFile(path) as z:
-                wanted = [
-                    n for n in z.namelist()
-                    if _re.match(r'word/(document|header\d*|footer\d*|footnotes|endnotes)\.xml$', n)
-                ]
-                for n in wanted:
-                    xml = z.read(n).decode('utf-8', 'replace')
-                    chunks.extend(_re.findall(r'<w:t\b[^>]*>(.*?)</w:t>', xml, flags=_re.DOTALL))
-            text = ' '.join(chunks)
-            # Unescape the handful of XML entities that appear in run text.
-            for ent, ch in (('&amp;', '&'), ('&lt;', '<'), ('&gt;', '>'),
-                            ('&quot;', '"'), ('&apos;', "'")):
-                text = text.replace(ent, ch)
-            return self._count_words(text)
+            return count_exported_words(path)
         except Exception as e:
             self.log(f"      ⚠️ Export word-count check: could not read "
                      f"{os.path.basename(path)} ({e})")
             return None
 
     def _verify_export_word_count(self, segments, output_path, context_label: str = ""):
-        """Compare expected vs. actual words in a freshly-exported DOCX.
+        """Compare expected vs. actual words in a freshly-exported file.
 
-        Returns a result dict (or None if the check was disabled, the file
-        isn't a DOCX, or it couldn't be read). Always logs the outcome;
-        never shows UI — callers decide how to surface a shortfall.
+        Returns a result dict (or None if the check was disabled, the format
+        has no word counter, or the file couldn't be read). Always logs the
+        outcome; never shows UI — callers decide how to surface a shortfall.
         """
         export_cfg = self._load_settings_section("export") or {}
         if not export_cfg.get("word_count_check_enabled", True):
             return None
 
-        actual = self._count_exported_docx_words(output_path)
+        actual = self._count_exported_words(output_path)
         if actual is None:
-            return None  # non-DOCX or unreadable — nothing to compare
+            return None  # no counter for this format, or unreadable
 
         expected = self._count_expected_target_words(segments)
         threshold = export_cfg.get("word_count_check_threshold",
