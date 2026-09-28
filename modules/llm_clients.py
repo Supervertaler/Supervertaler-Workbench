@@ -129,6 +129,48 @@ def load_api_keys() -> Dict[str, str]:
     return api_keys
 
 
+# User-chosen Ollama request timeout in seconds (issue #180), or None for the
+# automatic timeout scaled by model size and prompt length. Set from
+# Settings → AI Settings via set_ollama_timeout(); held at module level so it
+# reaches every LLMClient without threading a parameter through each caller.
+_ollama_timeout_override: Optional[int] = None
+
+
+def set_ollama_timeout(seconds: Optional[int]) -> None:
+    """Set the Ollama request timeout in seconds; 0 or None restores automatic."""
+    global _ollama_timeout_override
+    _ollama_timeout_override = int(seconds) if seconds and int(seconds) > 0 else None
+
+
+def _resolve_ollama_timeout(model: str, prompt_len: int) -> Tuple[int, float]:
+    """Return (timeout_seconds, param_billions) for an Ollama request.
+
+    A user-set timeout wins outright, so it can be shorter as well as longer
+    than the automatic one.
+    """
+    import re
+    size_match = re.search(r'(\d+\.?\d*)b', (model or '').lower())
+    param_billions = float(size_match.group(1)) if size_match else 0
+
+    if _ollama_timeout_override:
+        return _ollama_timeout_override, param_billions
+
+    if param_billions >= 13:
+        base_timeout = 600  # 10 minutes for large models (13B+)
+    elif param_billions >= 7:
+        base_timeout = 300  # 5 minutes for medium models (7B-12B)
+    elif param_billions > 0:
+        base_timeout = 180  # 3 minutes for small models (<7B)
+    else:
+        base_timeout = 300  # 5 minutes default if size unknown
+
+    # Boost timeout for large prompts (e.g. AI Assistant prompt generation)
+    # Large prompts need more processing time for both input and output
+    if prompt_len > 5000:
+        return max(base_timeout, 600), param_billions  # At least 10 minutes for large prompts
+    return base_timeout, param_billions
+
+
 def _sanitize_ollama_endpoint(endpoint: str) -> str:
     """Strip trailing slashes and common path suffixes that cause double-path issues."""
     endpoint = endpoint.rstrip('/')
@@ -1575,28 +1617,9 @@ class LLMClient:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
 
-        # Determine timeout based on model size (extract parameter count with regex)
-        import re
-        model_lower = self.model.lower()
-        size_match = re.search(r'(\d+\.?\d*)b', model_lower)
-        param_billions = float(size_match.group(1)) if size_match else 0
-
-        if param_billions >= 13:
-            base_timeout = 600  # 10 minutes for large models (13B+)
-        elif param_billions >= 7:
-            base_timeout = 300  # 5 minutes for medium models (7B-12B)
-        elif param_billions > 0:
-            base_timeout = 180  # 3 minutes for small models (<7B)
-        else:
-            base_timeout = 300  # 5 minutes default if size unknown
-
-        # Boost timeout for large prompts (e.g. AI Assistant prompt generation)
-        # Large prompts need more processing time for both input and output
+        # Timeout scales with model size and prompt length unless the user set one
         prompt_len = len(prompt) + (len(system_prompt) if system_prompt else 0)
-        if prompt_len > 5000:
-            timeout_seconds = max(base_timeout, 600)  # At least 10 minutes for large prompts
-        else:
-            timeout_seconds = base_timeout
+        timeout_seconds, param_billions = _resolve_ollama_timeout(self.model, prompt_len)
 
         # Use streaming for large requests to avoid timeout issues
         # Streaming reads tokens as they arrive – only the connection + first token
@@ -1722,7 +1745,9 @@ class LLMClient:
                 "Solutions:\n"
                 "  • Close other applications to free RAM\n"
                 "  • Use a smaller model: 'translategemma:4b' or 'qwen3:4b'\n"
-                "  • Try again (subsequent runs are faster)"
+                "  • Try again (subsequent runs are faster)\n"
+                "  • Allow more time: Settings → AI Settings → Local LLM (Ollama)\n"
+                "    Advanced Settings → Request timeout"
             )
         except requests.exceptions.RequestException as e:
             raise RuntimeError(f"Ollama API error: {str(e)}")

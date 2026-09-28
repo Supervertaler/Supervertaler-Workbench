@@ -11182,7 +11182,8 @@ class SupervertalerQt(QMainWindow):
         # Initialize Ollama keep-warm timer
         self.ollama_keepwarm_timer = None
         self._setup_ollama_keepwarm()
-    
+        self._apply_ollama_timeout_setting()
+
     def _resolve_provider_model(self, settings, provider, default='gpt-5.5'):
         """Resolve the model name for a provider.
 
@@ -11260,7 +11261,18 @@ class SupervertalerQt(QMainWindow):
         
         if keepwarm_enabled:
             self._start_ollama_keepwarm_timer()
-    
+
+    def _apply_ollama_timeout_setting(self, llm_settings=None):
+        """Push the user's Ollama request timeout (0 = automatic) to llm_clients."""
+        try:
+            from modules.llm_clients import set_ollama_timeout
+            if llm_settings is None:
+                llm_settings = self.load_llm_settings()
+            minutes = int(llm_settings.get('ollama_timeout_minutes', 0) or 0)
+            set_ollama_timeout(minutes * 60)
+        except Exception as e:
+            self.log(f"⚠ Could not apply Ollama timeout setting: {e}")
+
     def _start_ollama_keepwarm_timer(self):
         """Start the Ollama keep-warm timer (pings every 4 minutes)"""
         from PyQt6.QtCore import QTimer
@@ -24810,7 +24822,26 @@ class SupervertalerQt(QMainWindow):
             "Drawback: Model keeps using RAM even when not translating."
         )
         ollama_layout.addWidget(ollama_keepwarm_cb)
-        
+
+        # Request timeout (issue #180): slow CPU-only machines can need far
+        # longer than the automatic 3-10 minutes for a single batch request.
+        ollama_timeout_row = QHBoxLayout()
+        ollama_timeout_row.addWidget(QLabel(self.tr("Request timeout:")))
+        ollama_timeout_spin = QSpinBox()
+        ollama_timeout_spin.setRange(0, 1440)
+        ollama_timeout_spin.setSuffix(self.tr(" min"))
+        ollama_timeout_spin.setSpecialValueText(self.tr("Automatic"))
+        ollama_timeout_spin.setValue(int(settings.get('ollama_timeout_minutes', 0) or 0))
+        ollama_timeout_spin.setToolTip(
+            "How long to wait for Ollama to answer a single request.\n\n"
+            "Automatic: 3–10 minutes, depending on model size and prompt length.\n"
+            "Raise it if translations time out on a slow computer (for example\n"
+            "one without a dedicated GPU). Up to 1440 minutes (24 hours)."
+        )
+        ollama_timeout_row.addWidget(ollama_timeout_spin)
+        ollama_timeout_row.addStretch()
+        ollama_layout.addLayout(ollama_timeout_row)
+
         ollama_info = QLabel(
             "💡 <b>Tip:</b> Ollama normally unloads models after 5 minutes of inactivity.\n"
             "Enable 'Keep warm' for faster translations if you translate frequently."
@@ -25134,7 +25165,8 @@ class SupervertalerQt(QMainWindow):
             mistral_enable_cb=mistral_enable_cb,
             deepseek_radio=deepseek_radio, deepseek_combo=deepseek_combo,
             openrouter_radio=openrouter_radio, openrouter_combo=openrouter_combo,
-            openrouter_enable_cb=openrouter_enable_cb
+            openrouter_enable_cb=openrouter_enable_cb,
+            ollama_timeout_spin=ollama_timeout_spin
         ))
         layout.addWidget(save_btn)
         
@@ -29602,7 +29634,8 @@ class SupervertalerQt(QMainWindow):
                                    mistral_enable_cb=None,
                                    deepseek_radio=None, deepseek_combo=None,
                                    openrouter_radio=None, openrouter_combo=None,
-                                   openrouter_enable_cb=None):
+                                   openrouter_enable_cb=None,
+                                   ollama_timeout_spin=None):
         """Save all AI settings from the unified AI Settings tab"""
         # Determine selected provider
         if openai_radio.isChecked():
@@ -29649,7 +29682,11 @@ class SupervertalerQt(QMainWindow):
         active_endpoint = custom_endpoint_input.text().strip() if custom_endpoint_input else ''
         active_model = custom_model_input.text().strip() if custom_model_input else ''
 
-        new_settings = {
+        # Start from what is already saved: llm_settings also holds keys this
+        # tab does not own (the QuickTrans custom MT profiles), and replacing
+        # the whole dict used to delete them every time AI settings were saved.
+        new_settings = dict(existing_settings)
+        new_settings.update({
             'provider': provider,
             'openai_model': openai_combo.currentText().split()[0],
             'claude_model': claude_combo.currentText().split()[0],
@@ -29662,8 +29699,11 @@ class SupervertalerQt(QMainWindow):
             'custom_openai_endpoint': active_endpoint,
             'custom_openai_profiles': profiles,
             'custom_openai_active_profile': active_profile_name
-        }
+        })
+        if ollama_timeout_spin is not None:
+            new_settings['ollama_timeout_minutes'] = ollama_timeout_spin.value()
         self.save_llm_settings(new_settings)
+        self._apply_ollama_timeout_setting(new_settings)
 
         # Update current provider and model attributes for AI Assistant
         self.current_provider = new_settings['provider']

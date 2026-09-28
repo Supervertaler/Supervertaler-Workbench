@@ -11,6 +11,14 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 Reported by a user running a local model through KoboldCPP (issue #250): translation worked, but every message in the AI Assistant chat failed with "unsupported format string passed to NoneType.\_\_format\_\_". A model with no entry in the pricing table – which is every local model behind the custom OpenAI-compatible provider – deliberately has its cost reported as *unknown* rather than *free*, and the chat panel's log line tried to print that unknown cost as a number. The reply had already arrived and was thrown away. The log now says "cost unknown", which is what the chat bubble itself already showed.
 
+### Added (Ollama · you can set how long to wait for a local model)
+
+Settings → AI Settings → **Local LLM (Ollama) Advanced Settings** has a new **Request timeout** (issue #180). A local model on a computer without a dedicated GPU can need much longer than the automatic limit of 3–10 minutes for a single batch request, and there was no way to allow it. Set anything from 1 minute to 24 hours, or leave it on **Automatic** to keep the previous behaviour exactly, which is the default. The value takes effect as soon as you save, and applies to every Ollama request: batch and single-segment translation, the AI Assistant and QuickTrans. The timeout error message now points to the setting.
+
+### Fixed (AI Settings · saving them deleted your custom MT endpoints)
+
+Clicking **Save AI Settings** rewrote the stored AI settings from scratch, and the rewrite did not include the custom OpenAI-compatible **MT** endpoints configured on the QuickTrans page. Every save of the AI Settings page therefore silently deleted them. The save now keeps everything it does not itself manage.
+
 
 ## v1.10.371 - September 9, 2026
 
