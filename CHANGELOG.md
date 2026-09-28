@@ -36,6 +36,27 @@ Settings → AI Settings → **Local LLM (Ollama) Advanced Settings** has a new 
 
 The **📖 TMs** results in SuperLookup (where Ctrl+K concordance searches land) have a new **💾 Export Results…** button (issue #170). It saves every hit for the current search, with source, target and the TM it came from, as an Excel workbook or a CSV file. This is useful for documenting inconsistencies in a client TM, or for keeping a cross-TM view of a term. The rows are written in the order the table shows them, so sort by a column first if you want the file sorted. The workbook also has a small "Search" sheet recording the search term, hit count and export time. The CSV is UTF-8 with a byte-order mark, so Excel opens accented letters correctly, and TM text that starts with "=" stays text instead of turning into a formula.
 
+### Fixed (Settings · "Save General Settings" wiped fourteen settings from other pages)
+
+Clicking **💾 Save General Settings** rewrote the stored general settings with only the options that page shows. Everything else kept in the same place was deleted, and quietly reverted to its default the next time it was read:
+- the AI batch size, surrounding-segment count, full-context and context-window options;
+- whether and how the TM is checked before calling the AI, and the lookup delay;
+- the FuzzyFixer range;
+- the usage-log switch and monthly budget;
+- **all QuickTrans settings**;
+- the SuperLookup landing tab.
+
+That is one real source of "Supervertaler forgets my settings". The save now keeps everything it does not itself manage.
+
+### Fixed (AutoHotkey · the saved path and "Do not show this dialog again" were ignored)
+
+The AutoHotkey code read and wrote its two settings through a main-window attribute that does not exist, so none of it ever worked:
+- A custom AutoHotkey path was never used, and the Keyboard Shortcuts page always showed the path field empty.
+- Choosing a path from SuperLookup said "✓ Saved" and saved nothing.
+- On Windows without AutoHotkey installed, the setup dialog appeared at every start, and ticking "Do not show this dialog again" could not stop it.
+
+All four now go through the real settings store.
+
 ### Fixed (AI Settings · saving them deleted your custom MT endpoints)
 
 Clicking **Save AI Settings** rewrote the stored AI settings from scratch, and the rewrite did not include the custom OpenAI-compatible **MT** endpoints configured on the QuickTrans page. Every save of the AI Settings page therefore silently deleted them. The save now keeps everything it does not itself manage.
