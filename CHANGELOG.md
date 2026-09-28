@@ -44,6 +44,10 @@ Settings → AI Settings → **Local LLM (Ollama) Advanced Settings** has a new 
 
 The **📖 TMs** results in SuperLookup (where Ctrl+K concordance searches land) have a new **💾 Export Results…** button (issue #170). It saves every hit for the current search, with source, target and the TM it came from, as an Excel workbook or a CSV file. This is useful for documenting inconsistencies in a client TM, or for keeping a cross-TM view of a term. The rows are written in the order the table shows them, so sort by a column first if you want the file sorted. The workbook also has a small "Search" sheet recording the search term, hit count and export time. The CSV is UTF-8 with a byte-order mark, so Excel opens accented letters correctly, and TM text that starts with "=" stays text instead of turning into a formula.
 
+### Added (Preview · make the document text larger or smaller)
+
+The document **Preview** has **A− / 100% / A+** buttons in its top bar, in both the docked tab and the pop-out window (issue #70). **Ctrl + mouse wheel** over the preview zooms as well, and clicking the percentage goes back to 100%. The size runs from 60% to 250%, scales headings and body text together, and is remembered, so it also serves as your default for next time.
+
 ### Added (Export · the "dropped text" check now covers every Okapi format)
 
 Since v1.10.254, exporting a Word document ends with a quick check: Supervertaler counts the words in the file it has just written. If there are clearly fewer than the segments contain – the tell-tale sign of text silently lost on the way out – it warns you before you deliver. That check now also runs for **PowerPoint (PPTX), Excel (XLSX), InDesign (IDML), HTML, XLIFF and gettext PO** exports (issue #219). The original "dropped sub-segments" bug was first seen in an IDML file, which previously had no check at all.
