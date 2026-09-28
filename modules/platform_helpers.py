@@ -628,6 +628,126 @@ def physically_held_modifiers() -> list:
         return []
 
 
+_KEYEVENTF_UNICODE = 0x0004
+
+
+def send_unicode_text(text: str) -> bool:
+    """Type ``text`` into the foreground window as Unicode key events
+    (VK_PACKET), independent of the keyboard layout. One SendInput batch."""
+    if not IS_WINDOWS or not text:
+        return False
+    try:
+        raw = text.encode('utf-16-le')
+        units = [int.from_bytes(raw[i:i + 2], 'little') for i in range(0, len(raw), 2)]
+        arr = (_INPUT * (2 * len(units)))()
+        for i, unit in enumerate(units):
+            for j, key_up in enumerate((False, True)):
+                ev = arr[2 * i + j]
+                ev.type = _INPUT_KEYBOARD
+                ev.union.ki.wVk = 0
+                ev.union.ki.wScan = unit
+                ev.union.ki.dwFlags = _KEYEVENTF_UNICODE | (_KEYEVENTF_KEYUP if key_up else 0)
+        injected = _ct.windll.user32.SendInput(len(arr), arr, _ct.sizeof(_INPUT))
+        return injected == len(arr)
+    except Exception as e:
+        print(f"[platform_helpers] SendInput (unicode) failed: {e}")
+        return False
+
+
+# ---------------------------------------------------------------------------
+# AltGr and Ctrl+Alt global hotkeys (Windows) – issue #243
+# ---------------------------------------------------------------------------
+#
+# Windows reports the AltGr key as Ctrl+Alt, so a hotkey registered for
+# Ctrl+Alt+L with RegisterHotKey also fires on AltGr+L – and swallows the key.
+# On a Polish keyboard AltGr+L types "ł", AltGr+C "ć", AltGr+O "ó"; on a German
+# one AltGr+Q types "@". With Supervertaler running, those characters could not
+# be typed in ANY application. When such a hotkey fires while the right Alt key
+# is physically down and the foreground window's keyboard layout turns
+# AltGr+key into a character, that character is typed instead of running the
+# hotkey. Left Ctrl + left Alt still runs it, and so does AltGr on a layout
+# (such as US English) where AltGr+key types nothing.
+
+VK_RMENU, VK_LCONTROL, VK_CAPITAL = 0xA5, 0xA2, 0x14
+
+
+def is_altgr_chord(mods: int) -> bool:
+    """RegisterHotKey modifiers that AltGr also produces: exactly Ctrl+Alt."""
+    return (mods & (_MOD_CONTROL | _MOD_ALT)) == (_MOD_CONTROL | _MOD_ALT) and \
+        not mods & (_MOD_SHIFT | _MOD_WIN)
+
+
+class _WinKeyboard:
+    """The two questions altgr_character() asks Windows, on private function
+    prototypes (a separate user32 handle, so no shared argtypes change)."""
+
+    def __init__(self):
+        from ctypes import wintypes as wt
+        u = _ct.WinDLL('user32')
+        u.GetForegroundWindow.restype = wt.HWND
+        u.GetWindowThreadProcessId.argtypes = (wt.HWND, _ct.c_void_p)
+        u.GetWindowThreadProcessId.restype = wt.DWORD
+        u.GetKeyboardLayout.argtypes = (wt.DWORD,)
+        u.GetKeyboardLayout.restype = _ct.c_void_p
+        u.MapVirtualKeyExW.argtypes = (wt.UINT, wt.UINT, _ct.c_void_p)
+        u.MapVirtualKeyExW.restype = wt.UINT
+        u.ToUnicodeEx.argtypes = (wt.UINT, wt.UINT, _ct.POINTER(_ct.c_ubyte), wt.LPWSTR,
+                                  _ct.c_int, wt.UINT, _ct.c_void_p)
+        u.ToUnicodeEx.restype = _ct.c_int
+        u.GetAsyncKeyState.argtypes = (_ct.c_int,)
+        u.GetAsyncKeyState.restype = _ct.c_short
+        u.GetKeyState.argtypes = (_ct.c_int,)
+        u.GetKeyState.restype = _ct.c_short
+        self._u = u
+
+    def right_alt_down(self) -> bool:
+        return bool(self._u.GetAsyncKeyState(VK_RMENU) & 0x8000)
+
+    def altgr_text(self, vk: int) -> str:
+        """What AltGr+``vk`` types in the foreground window's layout ('' if nothing)."""
+        u = self._u
+        tid = u.GetWindowThreadProcessId(u.GetForegroundWindow(), None)
+        hkl = u.GetKeyboardLayout(tid)
+        state = (_ct.c_ubyte * 256)()
+        for key in (VK_CONTROL, VK_LCONTROL, VK_MENU, VK_RMENU):
+            state[key] = 0x80
+        if u.GetKeyState(VK_CAPITAL) & 1:
+            state[VK_CAPITAL] = 0x01
+        buf = _ct.create_unicode_buffer(8)
+        scan = u.MapVirtualKeyExW(vk, 0, hkl)  # MAPVK_VK_TO_VSC
+        # wFlags 0x4: leave the kernel keyboard state (dead keys) untouched.
+        n = u.ToUnicodeEx(vk, scan, state, buf, len(buf), 0x4, hkl)
+        return buf.value[:n] if n > 0 else ''
+
+
+_win_keyboard = None
+
+
+def altgr_character(mods: int, vk: int, keyboard=None):
+    """The character to type instead of running a Ctrl+Alt global hotkey that
+    was really AltGr+key (see above), or None to run the hotkey as usual.
+    ``keyboard`` is for tests; it defaults to the live Windows keyboard."""
+    global _win_keyboard
+    if vk is None or not is_altgr_chord(mods):
+        return None
+    try:
+        if keyboard is None:
+            if not IS_WINDOWS:
+                return None
+            if _win_keyboard is None:
+                _win_keyboard = _WinKeyboard()
+            keyboard = _win_keyboard
+        if not keyboard.right_alt_down():
+            return None
+        text = keyboard.altgr_text(vk)
+    except Exception as e:
+        print(f"[GlobalHotkeyManager] AltGr check failed: {e}")
+        return None
+    if len(text) == 1 and text.isprintable() and not text.isspace():
+        return text
+    return None
+
+
 def wait_for_modifier_release(timeout_ms: int = 1000) -> bool:
     """Block until no modifier key (Ctrl/Alt/Shift/Win) is physically held,
     or the timeout expires. Returns True when all are up.
@@ -911,6 +1031,7 @@ class GlobalHotkeyManager:
         self._win_thread = None
         self._win_thread_id = None
         self._win_hotkey_ids: Dict[int, Callable] = {}  # hotkey_id -> callback
+        self._win_hotkey_keys: Dict[int, tuple] = {}  # hotkey_id -> (mods, vk), for AltGr
         self._next_id = 1
         self.failed_hotkeys: list = []  # Shortcuts that failed to register
 
@@ -1013,6 +1134,7 @@ class GlobalHotkeyManager:
 
         # Parse shortcuts and assign IDs
         self._win_hotkey_ids.clear()
+        self._win_hotkey_keys.clear()
         registrations = []
         for shortcut, callback in self._hotkeys.items():
             mods, vk = self._parse_shortcut_winapi(shortcut)
@@ -1022,6 +1144,7 @@ class GlobalHotkeyManager:
             hk_id = self._next_id
             self._next_id += 1
             self._win_hotkey_ids[hk_id] = callback
+            self._win_hotkey_keys[hk_id] = (mods, vk)
             registrations.append((hk_id, mods, vk, shortcut))
 
         if not registrations:
@@ -1062,6 +1185,12 @@ class GlobalHotkeyManager:
                 if msg.message == _WM_HOTKEY:
                     hk_id = msg.wParam
                     cb = self._win_hotkey_ids.get(hk_id)
+                    # AltGr+key arrives as this Ctrl+Alt hotkey: type the
+                    # character the user meant instead (issue #243).
+                    char = altgr_character(*self._win_hotkey_keys.get(hk_id, (0, None)))
+                    if char:
+                        send_unicode_text(char)
+                        continue
                     if cb:
                         try:
                             cb()
