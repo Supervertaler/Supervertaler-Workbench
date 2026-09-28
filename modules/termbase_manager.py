@@ -1089,7 +1089,8 @@ class TermbaseManager:
 
             cursor.execute("""
                 SELECT id, source_term, target_term, domain, notes,
-                       project, client, forbidden, term_uuid
+                       project, client, forbidden, term_uuid,
+                       COALESCE(is_nontranslatable, 0)
                 FROM termbase_terms
                 WHERE termbase_id = CAST(? AS TEXT)
                 ORDER BY source_term ASC
@@ -1111,7 +1112,8 @@ class TermbaseManager:
                     'project': row[5],
                     'client': row[6],
                     'forbidden': row[7],
-                    'term_uuid': row[8]
+                    'term_uuid': row[8],
+                    'is_nontranslatable': bool(row[9]),
                 })
 
             if _close_cursor:
