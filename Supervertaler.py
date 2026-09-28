@@ -8278,9 +8278,13 @@ class PreTranslationWorker(QThread):
                 for _sid in translation_map:
                     translation_map[_sid] = re.sub(r'\n\s*$', '', translation_map[_sid])
 
-                # Extract translations in order
+                # Extract translations in order, repairing drifted numbered
+                # tags (< 1>, &lt;1&gt; …) against each segment's source (#226)
+                from modules.tag_repair import repair_drifted_tags
                 for row_index, seg in batch_segments:
                     translation = translation_map.get(seg.id, None)
+                    if translation:
+                        translation = repair_drifted_tags(seg.source, translation)
                     translations.append(translation)
             else:
                 # No result - all segments failed
@@ -8382,7 +8386,10 @@ class PreTranslationWorker(QThread):
                 target_lang=target_lang,
                 custom_prompt=custom_prompt,
             )
-            return result.strip() if result else None
+            if not result:
+                return None
+            from modules.tag_repair import repair_drifted_tags
+            return repair_drifted_tags(segment.source, result.strip())
         except Exception as e:
             print(f"❌ FuzzyFixer single LLM error: {e}")
             return None
@@ -63878,6 +63885,9 @@ class SupervertalerQt(QMainWindow):
                 )
 
             if translation:
+                # Drifted numbered tags (< 1>, &lt;1&gt; …) back to canonical (#226)
+                from modules.tag_repair import repair_drifted_tags
+                translation = repair_drifted_tags(segment.source, translation)
                 # Update segment
                 _undo_old_target = segment.target
                 _undo_old_status = segment.status
