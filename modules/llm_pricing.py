@@ -132,7 +132,7 @@ def estimate_cost(provider: str, model: str, input_tokens: int, output_tokens: i
     Estimate USD cost for a given API call.
 
     Returns:
-        - 0.0  when tokens are 0, or for genuinely free providers (ollama, custom_openai).
+        - 0.0  when tokens are 0, or for genuinely free providers (ollama).
         - float (> 0) computed cost for a model with a known pricing entry.
         - None when the model is not in the pricing table.
             Callers should render this as "unknown" (NOT "free") so users
