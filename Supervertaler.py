@@ -32243,6 +32243,9 @@ class SupervertalerQt(QMainWindow):
                 widget.returnPressed.connect(on_return)
             setattr(self, attr_name, widget)
         widget.setPlaceholderText(placeholder)
+        widget.setToolTip(
+            "Shows segments containing this text (not case-sensitive).\n"
+            "Put it between slashes for a regular expression, e.g. /pump\\s+hous(ing|e)/")
         return widget
 
     def _ensure_primary_filters_ready(self):
@@ -55707,8 +55710,11 @@ class SupervertalerQt(QMainWindow):
                 self.table.scrollToItem(self.table.item(row, 3))
                 break
     
-    def _highlight_text_in_widget(self, row: int, col: int, search_term: str):
+    def _highlight_text_in_widget(self, row: int, col: int, search_term):
         """Highlight search term within a QTextEdit cell widget.
+
+        ``search_term`` is plain text or a modules.grid_filter.GridFilter (whose
+        spans also cover /regex/ filters).
         
         Since source/target cells use setCellWidget() with QTextEdit editors,
         the delegate's paint() method is bypassed. We must highlight the text
@@ -55726,26 +55732,14 @@ class SupervertalerQt(QMainWindow):
         highlight_format.setBackground(QColor("#FFFF00"))  # Yellow background
         
         # Find and highlight all occurrences (case-insensitive)
+        from modules.grid_filter import GridFilter
+        spec = search_term if isinstance(search_term, GridFilter) else GridFilter(search_term)
         document = widget.document()
         cursor = QTextCursor(document)
-        
-        search_term_lower = search_term.lower()
-        text = document.toPlainText()
-        text_lower = text.lower()
-        
-        # Find all occurrences
-        pos = 0
-        while True:
-            pos = text_lower.find(search_term_lower, pos)
-            if pos == -1:
-                break
-            
-            # Select the match and apply highlight
-            cursor.setPosition(pos)
-            cursor.movePosition(QTextCursor.MoveOperation.Right, QTextCursor.MoveMode.KeepAnchor, len(search_term))
+        for start, end in spec.spans(document.toPlainText()):
+            cursor.setPosition(start)
+            cursor.setPosition(end, QTextCursor.MoveMode.KeepAnchor)
             cursor.mergeCharFormat(highlight_format)
-            
-            pos += len(search_term)
     
     def _clear_filter_highlights_in_widget(self, row: int, col: int):
         """Remove yellow filter highlights from a QTextEdit widget while preserving other formatting.
@@ -55827,9 +55821,10 @@ class SupervertalerQt(QMainWindow):
             segments = self.current_project.segments
             total_segments = len(segments)
             
-            # Pre-compute lowercase filter texts
-            source_filter_lower = source_filter_text.lower() if source_filter_text else None
-            target_filter_lower = target_filter_text.lower() if target_filter_text else None
+            # Plain text is a case-insensitive substring; /pattern/ is a regex
+            from modules.grid_filter import GridFilter
+            source_spec = GridFilter(source_filter_text)
+            target_spec = GridFilter(target_filter_text)
             
             # IMPORTANT: Always search through ALL segments, not just visible rows
             # Pagination state should not affect which segments we search
@@ -55838,11 +55833,8 @@ class SupervertalerQt(QMainWindow):
                     break
                     
                 segment = segments[row]
-                source_lower = segment.source.lower()
-                target_lower = segment.target.lower()
-                
-                source_match = not source_filter_lower or source_filter_lower in source_lower
-                target_match = not target_filter_lower or target_filter_lower in target_lower
+                source_match = source_spec.matches(segment.source)
+                target_match = target_spec.matches(segment.target)
                 
                 show_row = source_match and target_match
 
@@ -55857,11 +55849,10 @@ class SupervertalerQt(QMainWindow):
                     self._clear_filter_highlights_in_widget(row, 3)
                     
                     # Highlight matching terms in the QTextEdit widgets
-                    if source_filter_lower and source_filter_lower in source_lower:
-                        self._highlight_text_in_widget(row, 2, source_filter_text)
-                    
-                    if target_filter_lower and target_filter_lower in target_lower:
-                        self._highlight_text_in_widget(row, 3, target_filter_text)
+                    if source_spec:
+                        self._highlight_text_in_widget(row, 2, source_spec)
+                    if target_spec:
+                        self._highlight_text_in_widget(row, 3, target_spec)
                 else:
                     # Clear highlights from hidden rows too (for when they become visible again)
                     self._clear_filter_highlights_in_widget(row, 2)
@@ -55878,6 +55869,12 @@ class SupervertalerQt(QMainWindow):
         # Update status
         if source_filter_text or target_filter_text:
             self.log(f"Filter applied: showing {visible_count} of {len(self.current_project.segments)} segments")
+        # After the log line, which also writes to the status bar
+        for spec in (source_spec, target_spec):
+            if spec.error:
+                self.statusBar().showMessage(
+                    f"⚠ Invalid regular expression {spec.text}: {spec.error} "
+                    "– matching it as plain text", 8000)
 
     def clear_filters(self):
         """Clear all filter boxes, highlighting, and show all rows.
