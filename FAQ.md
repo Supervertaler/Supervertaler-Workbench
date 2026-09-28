@@ -641,6 +641,7 @@ ollama pull translategemma:4b
 - Subsequent translations are much faster
 - Use the **Setup...** button in Settings for guided installation
 - GPU acceleration is automatic if you have NVIDIA/AMD GPU
+- Translations timing out on a computer without a dedicated GPU? Raise **Request timeout** under **Settings → AI Settings → Local LLM (Ollama) Advanced Settings** (up to 24 hours; "Automatic" is 3–10 minutes depending on model size)
 
 ### What are the system requirements?
 
