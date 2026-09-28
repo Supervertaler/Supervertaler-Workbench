@@ -46271,17 +46271,31 @@ class SupervertalerQt(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # Small top bar with a "Pop out" button (omitted inside the pop-out window).
+        # Small top bar: text size (issue #70) and, in the docked tab, "Pop out".
+        bar = QHBoxLayout()
+        bar.setContentsMargins(6, 4, 6, 2)
+        zoom_out_btn = QPushButton("A−")
+        zoom_out_btn.setToolTip(self.tr("Smaller text (Ctrl+mouse wheel also zooms)"))
+        zoom_label = QPushButton(f"{round(self._get_preview_zoom() * 100)}%")
+        zoom_label.setFlat(True)
+        zoom_label.setToolTip(self.tr("Text size – click to reset to 100%"))
+        zoom_in_btn = QPushButton("A+")
+        zoom_in_btn.setToolTip(self.tr("Larger text (Ctrl+mouse wheel also zooms)"))
+        for btn, step in ((zoom_out_btn, -1), (zoom_label, 0), (zoom_in_btn, 1)):
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            btn.setMinimumWidth(34)
+            btn.clicked.connect(lambda _checked=False, st=step: self._step_preview_zoom(st))
+            bar.addWidget(btn)
+        widget.preview_zoom_label = zoom_label
+        bar.addStretch(1)
         if with_popout_button:
-            bar = QHBoxLayout()
-            bar.setContentsMargins(6, 4, 6, 2)
-            bar.addStretch(1)
             popout_btn = QPushButton(self.tr("⧉ Pop out"))
             popout_btn.setToolTip(self.tr("Open the preview in a separate, resizable window"))
             popout_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             popout_btn.clicked.connect(self._open_preview_window)
             bar.addWidget(popout_btn)
-            layout.addLayout(bar)
+        layout.addLayout(bar)
 
         # Create scroll area for the preview
         scroll_area = QScrollArea()
@@ -46293,8 +46307,20 @@ class SupervertalerQt(QMainWindow):
         # viewport — Qt char formats can't render a per-run border, so we paint it
         # ourselves. Position is shown as a frame, never a fill, so it never
         # competes with the status tint.
+        main_window = self
+
         class _PreviewTextEdit(QTextEdit):
             current_box_range = None  # (start_pos, end_pos) of the current segment
+
+            def wheelEvent(self, event):
+                # Ctrl+wheel zooms the preview text (issue #70)
+                if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+                    delta = event.angleDelta().y()
+                    if delta:
+                        main_window._step_preview_zoom(1 if delta > 0 else -1)
+                    event.accept()
+                    return
+                super().wheelEvent(event)
 
             def paintEvent(self, event):
                 super().paintEvent(event)
@@ -46657,6 +46683,53 @@ class SupervertalerQt(QMainWindow):
         except Exception:
             pass
 
+    # ── Preview text size (issue #70) ────────────────────────────────
+    PREVIEW_ZOOM_STEPS = (0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.25, 1.4, 1.6, 1.8, 2.0, 2.5)
+
+    def _get_preview_zoom(self) -> float:
+        """Current preview zoom factor, loaded once from settings (1.0 = 100%)."""
+        zoom = getattr(self, '_preview_zoom', None)
+        if zoom is None:
+            try:
+                zoom = float(self.load_general_settings().get('preview_zoom', 1.0) or 1.0)
+            except Exception:
+                zoom = 1.0
+            zoom = min(max(zoom, self.PREVIEW_ZOOM_STEPS[0]), self.PREVIEW_ZOOM_STEPS[-1])
+            self._preview_zoom = zoom
+        return zoom
+
+    def _step_preview_zoom(self, direction: int):
+        """Zoom the preview one step in (+1), out (-1), or back to 100% (0).
+        Applies to every open preview (tab and pop-out) and is remembered."""
+        current = self._get_preview_zoom()
+        steps = self.PREVIEW_ZOOM_STEPS
+        if direction == 0:
+            zoom = 1.0
+        elif direction > 0:
+            zoom = next((z for z in steps if z > current + 1e-6), steps[-1])
+        else:
+            zoom = next((z for z in reversed(steps) if z < current - 1e-6), steps[0])
+        if abs(zoom - current) < 1e-6:
+            return
+        self._preview_zoom = zoom
+        try:
+            settings = self.load_general_settings()
+            settings['preview_zoom'] = zoom
+            self.save_general_settings(settings)
+        except Exception as e:
+            self.log(f"⚠ Could not save preview zoom: {e}")
+        for widget in getattr(self, 'preview_widgets', []) or []:
+            label = getattr(widget, 'preview_zoom_label', None)
+            if label is not None:
+                label.setText(f"{round(zoom * 100)}%")
+        self.refresh_preview(force=True)
+        try:
+            seg = self._get_current_segment_id()
+            if seg is not None:
+                self._scroll_preview_to_segment(seg)
+        except Exception:
+            pass
+
     def refresh_preview(self, force: bool = False):
         """Refresh all preview tabs with current document content.
 
@@ -46722,6 +46795,7 @@ class SupervertalerQt(QMainWindow):
 
         preview_text = widget.preview_text
         preview_text.clear()
+        zoom = self._get_preview_zoom()  # issue #70: A-/A+ in the preview bar
         widget.segment_positions = {}
         # A fresh render repaints every segment with its status tint and clears the
         # highlight, so forget the previous current-segment (the O(1) highlight in
@@ -46878,28 +46952,28 @@ class SupervertalerQt(QMainWindow):
             # Check type field for heading detection as well
             if is_heading and seg_type_lower in ('sub', 'subtitle'):
                 # Subtitle style (like "TECHNISCH DOMEIN")
-                char_format.setFontPointSize(13)
+                char_format.setFontPointSize(13 * zoom)
                 char_format.setFontWeight(QFont.Weight.Bold)
                 char_format.setForeground(QColor('#1f4068'))
             elif 'Heading 1' in style or 'Heading1' in style or 'Title' in style or seg_type_lower == 'title':
-                char_format.setFontPointSize(18)
+                char_format.setFontPointSize(18 * zoom)
                 char_format.setFontWeight(QFont.Weight.Bold)
                 char_format.setForeground(QColor('#1a1a2e'))
             elif 'Heading 2' in style or 'Heading2' in style:
-                char_format.setFontPointSize(15)
+                char_format.setFontPointSize(15 * zoom)
                 char_format.setFontWeight(QFont.Weight.Bold)
                 char_format.setForeground(QColor('#16213e'))
             elif 'Heading 3' in style or 'Heading3' in style or seg_type_lower == 'heading':
-                char_format.setFontPointSize(13)
+                char_format.setFontPointSize(13 * zoom)
                 char_format.setFontWeight(QFont.Weight.Bold)
                 char_format.setForeground(QColor('#1f4068'))
             elif is_heading:
                 # Bold section headings detected from <b>TEXT</b> pattern
-                char_format.setFontPointSize(12)
+                char_format.setFontPointSize(12 * zoom)
                 char_format.setFontWeight(QFont.Weight.Bold)
                 char_format.setForeground(QColor('#1a365d'))
             else:
-                char_format.setFontPointSize(11)
+                char_format.setFontPointSize(11 * zoom)
                 char_format.setForeground(QColor('#2d2d2d'))
 
             # Determine what text to display
