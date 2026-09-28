@@ -116,6 +116,7 @@ class MemoQRTFHandler:
         self.file_path: Optional[str] = None
         self.source_lang: str = "nl"
         self.target_lang: str = "en"
+        self.languages_detected: bool = False  # False: the two above are placeholders
         self.file_header: str = ""  # First row metadata
         self.rtf_header: str = ""  # RTF header up to first row
         self.preserve_formatting: bool = True  # Extract formatting tags from source
@@ -200,6 +201,7 @@ class MemoQRTFHandler:
                 if lang_name in lang_headers[1]:
                     self.target_lang = lang_code
                     break
+            self.languages_detected = True
 
     def _decode_rtf_text(self, text: str) -> str:
         """Decode RTF escape sequences to plain text."""
