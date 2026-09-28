@@ -44,6 +44,10 @@ Settings → AI Settings → **Local LLM (Ollama) Advanced Settings** has a new 
 
 The **📖 TMs** results in SuperLookup (where Ctrl+K concordance searches land) have a new **💾 Export Results…** button (issue #170). It saves every hit for the current search, with source, target and the TM it came from, as an Excel workbook or a CSV file. This is useful for documenting inconsistencies in a client TM, or for keeping a cross-TM view of a term. The rows are written in the order the table shows them, so sort by a column first if you want the file sorted. The workbook also has a small "Search" sheet recording the search term, hit count and export time. The CSV is UTF-8 with a byte-order mark, so Excel opens accented letters correctly, and TM text that starts with "=" stays text instead of turning into a formula.
 
+### Fixed (AI translation · slightly garbled inline tags no longer reach the target as text)
+
+Some models return a numbered inline tag slightly wrong: `< 1>`, `</ 1 >`, `<1 />`, or HTML-escaped as `&lt;1&gt;`. Nothing downstream recognised those forms, so they ended up in the delivered target as literal text (issue #226). AI translations – batch, single-segment and FuzzyFixer – are now repaired as they arrive: each drifted tag is put back into its exact form. This happens only for tags the source segment really contains, so an ordinary `<` or `>` in the text, or a tag number the source doesn't have, is never touched. An empty pair (`<1></1>` with the words left outside it) is not guessed at; the tag check still reports it.
+
 ### Added (Export · back up every TM and termbase to open files in one go)
 
 **File → Export → 📦 Back Up All TMs & Termbases…** writes everything in your resource database to a folder you choose (issue #52):
