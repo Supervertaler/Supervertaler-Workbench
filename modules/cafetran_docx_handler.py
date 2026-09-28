@@ -104,6 +104,24 @@ class CafeTranDOCXHandler:
             traceback.print_exc()
             return False
     
+    def detect_language_pair(self):
+        """Best-effort ``(source, target)`` language codes (issue #200).
+
+        A header cell that is itself a language code or name wins; otherwise
+        the Word language tags on the text in the source and target columns
+        are used. Either side may be ``None``; must be called after :meth:`load`.
+        """
+        if self.table is None:
+            return (None, None)
+        from modules.bilingual_lang_detect import (
+            docx_column_languages, header_language, pair_or_partial)
+        header = self.header_row or []
+        from_header = pair_or_partial(
+            header_language(header[1]) if len(header) > 1 else None,
+            header_language(header[2]) if len(header) > 2 else None)
+        from_runs = docx_column_languages(self.table, 1, 2)
+        return pair_or_partial(from_header[0] or from_runs[0], from_header[1] or from_runs[1])
+
     def extract_source_segments(self):
         """
         Extract all source segments from the CafeTran bilingual DOCX.

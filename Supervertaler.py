@@ -39732,6 +39732,19 @@ class SupervertalerQt(QMainWindow):
                 'target': seg.target_text
             } for seg in handler.segments]
 
+            # The header row names the languages. If it could not be read, ask
+            # rather than import with the Dutch → English placeholders (#200).
+            if not getattr(handler, 'languages_detected', True):
+                self.log("⚠️ Could not read the language pair from the memoQ RTF header — asking the user.")
+                chosen = self._confirm_language_pair(
+                    None, None, context=self.tr("File: {}").format(Path(file_path).name))
+                if not chosen:
+                    self.log("✗ User cancelled memoQ RTF import at the language prompt")
+                    return
+                from modules import language_codes as _lc
+                handler.source_lang = _lc.base_code(chosen[0]) or chosen[0]
+                handler.target_lang = _lc.base_code(chosen[1]) or chosen[1]
+
             # SAFETY STEP: Save source segments to TXT file for user verification
             txt_file_path = Path(file_path).with_suffix('.txt')
             try:
@@ -40489,23 +40502,55 @@ class SupervertalerQt(QMainWindow):
                 return found
         return None
 
-    def _confirm_language_pair(self, source_lang, target_lang, context=""):
+    def _language_detection_message(self, source_lang, target_lang):
+        """Rich-text callout for an import language dialog: what was
+        auto-detected from the file, if anything (issue #200). Same wording as
+        the Phrase import."""
+        import html as _html
+        from modules import language_codes as _lc
+        src = _lc.english_name(source_lang) if source_lang else None
+        tgt = _lc.english_name(target_lang) if target_lang else None
+        src = _html.escape(src) if src else None
+        tgt = _html.escape(tgt) if tgt else None
+        if src and tgt:
+            return self.tr("Auto-detected from file: <b>{}</b> → <b>{}</b>.<br>"
+                           "Confirm or change below.").format(src, tgt)
+        if src or tgt:
+            found = []
+            if src:
+                found.append(self.tr("source = <b>{}</b>").format(src))
+            if tgt:
+                found.append(self.tr("target = <b>{}</b>").format(tgt))
+            return self.tr("Auto-detected from file: {}.<br>"
+                           "Please pick the remaining side and confirm.").format(", ".join(found))
+        return self.tr("Couldn't auto-detect the language pair – please pick "
+                       "the source and target language for this project:")
+
+    def _confirm_language_pair(self, source_lang, target_lang, context="", detected=False):
         """Let the user confirm/correct a document's language pair.
 
-        Shown when an importer could not read the pair off the file. Returns
+        Shown when an importer could not read the pair off the file, or – with
+        ``detected=True`` – to confirm a pair that was read heuristically, pre-
+        filled with whatever was found (issue #200; a side may be None). Returns
         (source_code, target_code), or None if the user cancelled.
         """
-        from PySide6.QtWidgets import (QDialog, QVBoxLayout, QFormLayout, QComboBox,
-                                       QDialogButtonBox, QLabel)
+        # PyQt6, like the rest of the app. This used to import PySide6, which
+        # isn't installed, so the prompt could never open (issue #200).
+        from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QFormLayout, QComboBox,
+                                     QDialogButtonBox, QLabel)
 
         dlg = QDialog(self)
         dlg.setWindowTitle(self.tr("Confirm language pair"))
         layout = QVBoxLayout(dlg)
-        msg = QLabel(self.tr(
-            "Supervertaler could not read the language pair from this file.\n\n"
-            "Please set it now. If this is wrong, the TM is searched for the "
-            "wrong languages and no matches are ever shown, even though the TM "
-            "itself looks fine in TM Edit/Maintain."))
+        if detected and (source_lang or target_lang):
+            msg = QLabel(self._language_detection_message(source_lang, target_lang))
+            msg.setTextFormat(Qt.TextFormat.RichText)
+        else:
+            msg = QLabel(self.tr(
+                "Supervertaler could not read the language pair from this file.\n\n"
+                "Please set it now. If this is wrong, the TM is searched for the "
+                "wrong languages and no matches are ever shown, even though the TM "
+                "itself looks fine in TM Edit/Maintain."))
         msg.setWordWrap(True)
         layout.addWidget(msg)
         if context:
@@ -41059,6 +41104,23 @@ class SupervertalerQt(QMainWindow):
             self.cafetran_handler = handler
             self.cafetran_source_file = file_path
             
+            # Language pair (issue #200): CafeTran doesn't name it, so read the
+            # Word language tags on the source and target columns and let the
+            # user confirm. This used to take the main window's language combos,
+            # which don't exist, so every CafeTran project became English → Dutch.
+            try:
+                detected_src, detected_tgt = handler.detect_language_pair()
+            except Exception as e:
+                print(f"[CafeTran import] language detection error: {e}")
+                detected_src = detected_tgt = None
+            chosen = self._confirm_language_pair(
+                detected_src, detected_tgt, detected=True,
+                context=self.tr("File: {}").format(Path(file_path).name))
+            if not chosen:
+                self.log("✗ User cancelled CafeTran import at the language prompt")
+                return
+            cafetran_source_lang, cafetran_target_lang = chosen
+
             # Enable CafeTran-specific highlighting (red pipe symbols)
             TagHighlighter._is_cafetran_project = True
             
@@ -41067,8 +41129,8 @@ class SupervertalerQt(QMainWindow):
             self.current_project = Project(
                 name=file_name,
                 segments=segments,
-                source_lang=self.source_lang_combo.currentText() if hasattr(self, 'source_lang_combo') else "en",
-                target_lang=self.target_lang_combo.currentText() if hasattr(self, 'target_lang_combo') else "nl"
+                source_lang=cafetran_source_lang,
+                target_lang=cafetran_target_lang
             )
 
             # Apply preserved settings if re-importing
@@ -41252,19 +41314,27 @@ class SupervertalerQt(QMainWindow):
             
             # Note: trados_source_path will be set on the project after it's created
             
-            # Show language selection dialog (Trados files don't specify languages)
+            # Show language selection dialog. The review DOCX has no language
+            # header, but Word language tags on the source and target columns
+            # usually give the pair away – pre-fill it (issue #200).
             from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QDialogButtonBox, QGroupBox
-            
+            from modules.language_codes import english_name
+            try:
+                detected_src_iso, detected_tgt_iso = handler.detect_language_pair()
+            except Exception as e:
+                print(f"[Trados import] language detection error: {e}")
+                detected_src_iso = detected_tgt_iso = None
+            detected_src_name = english_name(detected_src_iso) if detected_src_iso else None
+            detected_tgt_name = english_name(detected_tgt_iso) if detected_tgt_iso else None
+
             lang_dialog = QDialog(self)
             lang_dialog.setWindowTitle(self.tr("Select Languages"))
             lang_dialog.setMinimumWidth(350)
             lang_layout = QVBoxLayout(lang_dialog)
             
             # Info text
-            info_label = QLabel(
-                "Trados bilingual review files do not specify the source and target languages.\n"
-                "Please select the correct language pair for this project:"
-            )
+            info_label = QLabel(self._language_detection_message(detected_src_iso, detected_tgt_iso))
+            info_label.setTextFormat(Qt.TextFormat.RichText)
             info_label.setWordWrap(True)
             info_label.setStyleSheet("color: #666; margin-bottom: 10px;")
             lang_layout.addWidget(info_label)
@@ -41290,8 +41360,9 @@ class SupervertalerQt(QMainWindow):
                 "Swedish", "Thai", "Turkish", "Ukrainian", "Urdu", "Vietnamese", "Welsh"
             ]
             source_combo.addItems(available_languages)
-            # Try to match current UI selection
-            current_source = self.source_lang_combo.currentText() if hasattr(self, 'source_lang_combo') else "English"
+            # Prefer the detected language, else the current UI selection
+            current_source = detected_src_name or (
+                self.source_lang_combo.currentText() if hasattr(self, 'source_lang_combo') else "English")
             source_idx = source_combo.findText(current_source)
             if source_idx >= 0:
                 source_combo.setCurrentIndex(source_idx)
@@ -41303,8 +41374,9 @@ class SupervertalerQt(QMainWindow):
             target_row.addWidget(QLabel(self.tr("Target Language:")))
             target_combo = QComboBox()
             target_combo.addItems(available_languages)
-            # Try to match current UI selection
-            current_target = self.target_lang_combo.currentText() if hasattr(self, 'target_lang_combo') else "Dutch"
+            # Prefer the detected language, else the current UI selection
+            current_target = detected_tgt_name or (
+                self.target_lang_combo.currentText() if hasattr(self, 'target_lang_combo') else "Dutch")
             target_idx = target_combo.findText(current_target)
             if target_idx >= 0:
                 target_combo.setCurrentIndex(target_idx)
@@ -43307,9 +43379,29 @@ class SupervertalerQt(QMainWindow):
                 QMessageBox.warning(self, "Warning", "No segments found in the Déjà Vu RTF file.")
                 return
             
-            # Detect languages from handler
-            source_lang = handler.source_lang or "nl"
-            target_lang = handler.target_lang or "es"
+            # Language pair (issue #200): the handler guesses it from how often
+            # each RTF language code occurs, so let the user confirm it. When it
+            # found nothing it used to fall back to Dutch → Spanish silently.
+            try:
+                detected_src, detected_tgt = handler.detect_language_pair()
+            except Exception as e:
+                print(f"[Déjà Vu import] language detection error: {e}")
+                detected_src = detected_tgt = None
+            chosen = self._confirm_language_pair(
+                detected_src, detected_tgt, detected=True,
+                context=self.tr("File: {}").format(Path(file_path).name))
+            if not chosen:
+                self.log("✗ User cancelled Déjà Vu import at the language prompt")
+                return
+            source_lang, target_lang = chosen
+            # Export tags the translations with the handler's target language,
+            # so keep it in step with a correction (but keep a detected regional
+            # variant such as "Spanish (MX)" when the language is unchanged).
+            from modules import language_codes as _lc
+            if not _lc.same_language(handler.source_lang, source_lang):
+                handler.source_lang = _lc.english_name(source_lang) or source_lang
+            if not _lc.same_language(handler.target_lang, target_lang):
+                handler.target_lang = _lc.english_name(target_lang) or target_lang
             
             # Store the handler for later export
             self.dejavu_handler = handler

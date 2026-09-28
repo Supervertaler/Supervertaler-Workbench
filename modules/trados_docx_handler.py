@@ -131,6 +131,19 @@ class TradosDOCXHandler:
             traceback.print_exc()
             return False
     
+    def detect_language_pair(self) -> Tuple[Optional[str], Optional[str]]:
+        """Best-effort ``(source, target)`` language codes (issue #200).
+
+        The review DOCX has no language header (``Segment ID | Segment status |
+        Source segment | Target segment``), but its text runs carry Word
+        language tags, source column and target column separately. Either side
+        may be ``None``; must be called after :meth:`load`.
+        """
+        if self.table is None:
+            return (None, None)
+        from modules.bilingual_lang_detect import docx_column_languages
+        return docx_column_languages(self.table, 2, 3)
+
     def _capture_tag_style(self):
         """Find and capture the Tag style XML from the document."""
         try:

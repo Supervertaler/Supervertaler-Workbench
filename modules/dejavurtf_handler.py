@@ -196,6 +196,7 @@ class DejaVuRTFHandler:
         self.file_path: Optional[str] = None
         self.source_lang: str = "Dutch"
         self.target_lang: str = "Spanish"
+        self.languages_detected: bool = False  # False: the two above are placeholders
         self._cell_positions: List[Tuple[int, int, int, int]] = []  # (row_idx, seg_id_start, source_start, source_end, target_start, target_end)
     
     def load(self, file_path: str) -> bool:
@@ -268,11 +269,30 @@ class DejaVuRTFHandler:
                 else:
                     self.source_lang = lang1
                     self.target_lang = lang2
+                self.languages_detected = True
                     
             elif len(main_codes) == 1:
                 code = main_codes[0]
                 self.source_lang = RTF_LANG_CODES.get(code, f"Unknown ({code})")
     
+    def detect_language_pair(self) -> Tuple[Optional[str], Optional[str]]:
+        """``(source, target)`` as language codes, or ``None`` for a side that
+        was not found (issue #200). Unlike ``source_lang`` / ``target_lang``,
+        this never returns the Dutch → Spanish placeholders. The pair comes from
+        a frequency heuristic, so callers should let the user confirm it."""
+        if not self.languages_detected:
+            return (None, None)
+        from modules.bilingual_lang_detect import pair_or_partial
+        from modules import language_codes as _lc
+
+        def code(name):
+            if not name or name.startswith("Unknown"):
+                return None
+            base = _lc.base_code(name)
+            return base if base and _lc.iso_to_english_name(base) else None
+
+        return pair_or_partial(code(self.source_lang), code(self.target_lang))
+
     def _decode_rtf_text(self, text: str) -> str:
         """Decode RTF escape sequences to plain text."""
         result = text
@@ -693,6 +713,14 @@ class DejaVuRTFHandler:
         for code, name in RTF_LANG_CODES.items():
             if name.lower() == lang_name.lower():
                 return code
+        # No exact name ("Portuguese", or a code such as "pt"): take the first
+        # variant of the same language rather than falling back to Spanish.
+        from modules import language_codes as _lc
+        base = _lc.base_code(lang_name)
+        if base:
+            for code, name in RTF_LANG_CODES.items():
+                if _lc.base_code(name) == base:
+                    return code
         return None
     
     def get_segment_by_id(self, segment_id: str) -> Optional[DejaVuSegment]:

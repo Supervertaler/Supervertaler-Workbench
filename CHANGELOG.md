@@ -16,6 +16,19 @@ Supervertaler has logged the tokens and cost of every AI call since v1.9.461, an
 - **Costs can be shown in euros.** Token Usage & Costs has a **Show costs in: USD / EUR** switch, with the exchange rate next to it. There is no online lookup, so set it to your bank's or card's rate. The choice is remembered and applies to Project Information and the Batch Translate estimate too. Prices and the exported ledger stay in US dollars, as in Supervertaler for Trados.
 - **Calls outside a batch now count towards the open project.** Previously only batch translation recorded which project a call belonged to, so Ctrl+T, the AI Assistant and AutoTagger went under "(none)" in the per-project report. They are now filed under the project that is open.
 
+### Added (Import · the language pair is read from Trados review DOCX, CafeTran and Déjà Vu files)
+
+The Phrase bilingual import has opened with its languages already filled in since v1.10.33. The other bilingual formats now do the same, or ask instead of guessing (issue #200):
+
+- **Trados bilingual review DOCX.** The file has no language header, but Word stores a language on the source text and on the target text. The **Select Languages** dialog now opens pre-filled from those, with the same "Auto-detected from file: German → French. Confirm or change below." note as the Phrase import. When the two columns carry the same language, which usually means a file that simply has one proofing language everywhere, nothing is assumed.
+- **CafeTran bilingual DOCX** now asks for the language pair, pre-filled the same way (or from the column headers, if they are language codes). Before, it took the languages from settings that do not exist, so **every CafeTran project was created as English → Dutch** whatever its real languages. A project with the wrong pair finds no TM matches at all.
+- **Déjà Vu X3 bilingual RTF** now shows the pair it found for you to confirm, because it is worked out from how often each language code occurs in the file. When it found nothing it used to fall back to **Dutch → Spanish** without a word; now it asks. A correction also reaches the export, so the translations are tagged with the right language in the RTF.
+- **memoQ bilingual RTF** reads the pair from the header row, as before. If the header cannot be read it now asks, instead of importing as Dutch → English.
+
+### Fixed (Import · the "Confirm language pair" prompt could not open)
+
+When a memoQ bilingual DOCX or memoQ XLIFF import could not read the language pair from the file, it was meant to ask. Instead the import failed with an error ("No module named 'PySide6'"), because the prompt was written for a different Qt library than the one Supervertaler uses. The prompt now opens.
+
 ### Fixed (AI Assistant · chat failed on every message to a local model with no price entry)
 
 Reported by a user running a local model through KoboldCPP (issue #250): translation worked, but every message in the AI Assistant chat failed with "unsupported format string passed to NoneType.\_\_format\_\_". A model with no entry in the pricing table – which is every local model behind the custom OpenAI-compatible provider – deliberately has its cost reported as *unknown* rather than *free*, and the chat panel's log line tried to print that unknown cost as a number. The reply had already arrived and was thrown away. The log now says "cost unknown", which is what the chat bubble itself already showed.
