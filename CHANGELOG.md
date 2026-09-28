@@ -20,6 +20,10 @@ If you work on the AI-friendly bilingual text in an AI chat, you no longer need 
 - **Pasted segments are matched by their source text, not their number.** An export filtered by status numbers its blocks from 1 regardless of where they sit in the project, and an AI may reorder or drop blocks, so the number alone cannot be trusted. The source line can, because it is read-only. A block whose source matches no segment is listed in the preview as not found and is never written anywhere. When a source occurs more than once, the blocks are paired with those segments in document order. If you exported or copied the same project earlier in the session, that export's exact mapping is used first.
 - **A text file re-imported without its `.svexport.json` sidecar is now matched the same way.** Previously it was matched by position after a warning, which put edits into the wrong segments whenever the export had been filtered.
 
+### Added (Project Information · shows the AI model in use)
+
+**File → Project Information** now lists the AI model the project is being translated with, and its provider, at the top of the **AI & Prompts** section (issue #93). For a custom OpenAI-compatible endpoint it also names the active profile. The model is read the same way as the status-bar indicator, so the two always agree.
+
 ### Added (Ollama · you can set how long to wait for a local model)
 
 Settings → AI Settings → **Local LLM (Ollama) Advanced Settings** has a new **Request timeout** (issue #180). A local model on a computer without a dedicated GPU can need much longer than the automatic limit of 3–10 minutes for a single batch request, and there was no way to allow it. Set anything from 1 minute to 24 hours, or leave it on **Automatic** to keep the previous behaviour exactly, which is the default. The value takes effect as soon as you save, and applies to every Ollama request: batch and single-segment translation, the AI Assistant and QuickTrans. The timeout error message now points to the setting.
