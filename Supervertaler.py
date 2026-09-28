@@ -67813,7 +67813,20 @@ class SuperlookupTab(QWidget):
         self.tm_view_vertical_radio = CheckmarkRadioButton(self.tr("Vertical (List)"))
         self.tm_view_vertical_radio.setToolTip(self.tr("Source above Target, like traditional concordance"))
         view_toggle_layout.addWidget(self.tm_view_vertical_radio)
-        
+
+        # Text size for the TM results, right here rather than in Settings
+        # (issue #69). Applies to both views and is remembered.
+        view_toggle_layout.addSpacing(16)
+        view_toggle_layout.addWidget(QLabel(self.tr("Text size:")))
+        self.tm_font_size_spin = QSpinBox()
+        self.tm_font_size_spin.setRange(7, 24)
+        self.tm_font_size_spin.setSuffix(" pt")
+        self.tm_font_size_spin.setToolTip(self.tr("Font size of the TM results (both views)"))
+        self._tm_font_size = self._load_tm_font_size()
+        self.tm_font_size_spin.setValue(self._tm_font_size or 10)
+        self.tm_font_size_spin.valueChanged.connect(self._on_tm_font_size_changed)
+        view_toggle_layout.addWidget(self.tm_font_size_spin)
+
         view_toggle_layout.addStretch()
         layout.addLayout(view_toggle_layout)
         
@@ -67862,7 +67875,7 @@ class SuperlookupTab(QWidget):
         
         self.tm_results_vertical = QTextEdit()
         self.tm_results_vertical.setReadOnly(True)
-        self.tm_results_vertical.setFont(QFont("Segoe UI", 10))
+        self.tm_results_vertical.setFont(QFont("Segoe UI", self._tm_font_size or 10))
         self.tm_results_vertical.setStyleSheet("border: 1px solid #ddd; border-radius: 4px;")
         vertical_layout.addWidget(self.tm_results_vertical)
         
@@ -70433,6 +70446,7 @@ class SuperlookupTab(QWidget):
             source_editor = _ReadOnlyHtmlCell(
                 result.source, search_term=search_text,
                 parent=self.tm_results_table, bold=False)
+            self._apply_tm_cell_font(source_editor)
             self.tm_results_table.setCellWidget(row, 0, source_editor)
 
             # Target – same pattern (see note above re: #221 transparent sort key)
@@ -70443,6 +70457,7 @@ class SuperlookupTab(QWidget):
             target_editor = _ReadOnlyHtmlCell(
                 result.target, search_term=search_text,
                 parent=self.tm_results_table, bold=False)
+            self._apply_tm_cell_font(target_editor)
             self.tm_results_table.setCellWidget(row, 1, target_editor)
 
             # TM name
@@ -70459,9 +70474,7 @@ class SuperlookupTab(QWidget):
             self.tm_results_table.setItem(row, 2, tm_item)
 
         # Resize rows to fit the actual rendered QTextEdit content
-        self._resize_html_cell_rows(self.tm_results_table,
-                                    cols_with_html=(0, 1),
-                                    min_height=24, max_height=120)
+        self._resize_tm_result_rows()
         
         # === Update Vertical View (List) ===
         # Use theme colors for HTML content (with fallback for missing theme_manager)
@@ -70516,6 +70529,52 @@ class SuperlookupTab(QWidget):
 
         # v1.10.173: restore sortability now that the rebuild is done.
         self.tm_results_table.setSortingEnabled(_prev_tm_results_sorting)
+
+    # ── TM results text size (issue #69) ─────────────────────────────
+    _TM_FONT_SIZE_KEY = 'superlookup_tm_font_size'
+
+    def _load_tm_font_size(self):
+        """Saved TM-results point size, or None to keep the default look."""
+        try:
+            mw = self.main_window
+            if mw and hasattr(mw, 'load_general_settings'):
+                value = (mw.load_general_settings() or {}).get(self._TM_FONT_SIZE_KEY)
+                if value:
+                    return max(7, min(24, int(value)))
+        except Exception as e:
+            print(f"[Superlookup] Could not load TM text size: {e}")
+        return None
+
+    def _on_tm_font_size_changed(self, size: int):
+        self._tm_font_size = size
+        self.tm_results_vertical.setFont(QFont("Segoe UI", size))
+        for row in range(self.tm_results_table.rowCount()):
+            for col in (0, 1):
+                widget = self.tm_results_table.cellWidget(row, col)
+                if widget is not None:
+                    self._apply_tm_cell_font(widget)
+        self._resize_tm_result_rows()
+        try:
+            mw = self.main_window
+            if mw and hasattr(mw, 'load_general_settings') and hasattr(mw, 'save_general_settings'):
+                settings = mw.load_general_settings() or {}
+                settings[self._TM_FONT_SIZE_KEY] = size
+                mw.save_general_settings(settings)
+        except Exception as e:
+            print(f"[Superlookup] Could not save TM text size: {e}")
+
+    def _apply_tm_cell_font(self, widget):
+        """Give a TM result cell the chosen size (no-op until one is chosen)."""
+        if getattr(self, '_tm_font_size', None):
+            font = widget.font()
+            font.setPointSize(self._tm_font_size)
+            widget.setFont(font)
+
+    def _resize_tm_result_rows(self):
+        # The row-height cap grows with the text so larger sizes aren't clipped.
+        size = getattr(self, '_tm_font_size', None) or 10
+        self._resize_html_cell_rows(self.tm_results_table, cols_with_html=(0, 1),
+                                    min_height=24, max_height=max(120, 12 * size))
 
     def _lang_base_name(self, lang):
         """Return the base-language display name for a code or display string.
