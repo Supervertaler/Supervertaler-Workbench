@@ -23110,7 +23110,14 @@ class SupervertalerQt(QMainWindow):
             if not tm_id:
                 QMessageBox.warning(self, "Error", "Please enter a TM ID")
                 return
-            
+
+            if tm_metadata_mgr.tm_name_exists(name):
+                QMessageBox.warning(
+                    self, "Name already in use",
+                    f"A translation memory called “{name}” already exists. "
+                    f"Please choose a different name.")
+                return
+
             # Create TM
             result = tm_metadata_mgr.create_tm(
                 name=name,
@@ -23130,6 +23137,27 @@ class SupervertalerQt(QMainWindow):
             else:
                 QMessageBox.critical(self, "Error", "Failed to create TM. The TM name or ID may already exist.")
     
+    @staticmethod
+    def _preselect_tmx_pair(src_combo, tgt_combo, tmx_langs, header_src):
+        """Default a TMX language dialog to the source language the TMX header
+        declares, and the other language as target (#105). The detected list
+        is alphabetical, so "first = source" reversed every pair whose source
+        sorts after its target (en-GB/de-DE)."""
+        if not header_src:
+            return
+        from modules import language_codes as _lc
+        src_i = next((i for i, lang in enumerate(tmx_langs)
+                      if lang.lower() == header_src.lower()), None)
+        if src_i is None:
+            src_i = next((i for i, lang in enumerate(tmx_langs)
+                          if _lc.same_language(lang, header_src)), None)
+        if src_i is None:
+            return
+        src_combo.setCurrentIndex(src_i)
+        tgt_i = next((i for i in range(len(tmx_langs)) if i != src_i), None)
+        if tgt_i is not None:
+            tgt_combo.setCurrentIndex(tgt_i)
+
     def _import_tmx_as_tm(self, tm_metadata_mgr, tm_table, refresh_callback):
         """Import TMX file as a new TM or add to existing TM"""
         from PyQt6.QtWidgets import QFileDialog, QRadioButton, QButtonGroup
@@ -23197,16 +23225,32 @@ class SupervertalerQt(QMainWindow):
             # Create new TM - ask for name
             from pathlib import Path
             default_name = Path(filepath).stem  # Use filename without extension
-            
-            name, ok = QInputDialog.getText(
-                self,
-                "New TM Name",
-                "Enter name for the new Translation Memory:",
-                text=default_name
-            )
-            
-            if not ok or not name:
-                return
+            # TM names are unique. Offer a free one up front ("Client TM (2)")
+            # and say so plainly if the user types a taken one – this used to
+            # end in a bare "Failed to create TM metadata" (#105).
+            n = 2
+            while tm_metadata_mgr.tm_name_exists(default_name):
+                default_name = f"{Path(filepath).stem} ({n})"
+                n += 1
+
+            while True:
+                name, ok = QInputDialog.getText(
+                    self,
+                    "New TM Name",
+                    "Enter name for the new Translation Memory:",
+                    text=default_name
+                )
+
+                if not ok or not name:
+                    return
+                if not tm_metadata_mgr.tm_name_exists(name):
+                    break
+                QMessageBox.warning(
+                    self, "Name already in use",
+                    f"A translation memory called \u201c{name}\u201d already exists.\n\n"
+                    f"Choose a different name, or choose \u201cAdd to existing TM\u201d "
+                    f"to add these entries to it."
+                )
             
             # Generate tm_id from name
             tm_id = name.lower().replace(' ', '_').replace('-', '_')
@@ -23235,7 +23279,10 @@ class SupervertalerQt(QMainWindow):
             lang_dialog.setMinimumWidth(400)
             
             lang_layout = QVBoxLayout(lang_dialog)
-            lang_layout.addWidget(QLabel(f"TMX file contains {len(tmx_langs)} languages:\n{', '.join(tmx_langs)}\n"))
+            tmx_header_src = self.tm_database.detect_tmx_source_language(filepath)
+            lang_layout.addWidget(QLabel(
+                f"TMX file contains {len(tmx_langs)} languages:\n{', '.join(tmx_langs)}\n"
+                + (f"The file says its source language is {tmx_header_src}.\n" if tmx_header_src else "")))
             lang_layout.addWidget(QLabel(self.tr("Select source and target languages:")))
             
             # Source language combo
@@ -23271,6 +23318,8 @@ class SupervertalerQt(QMainWindow):
             # Default to second language if available
             if len(tmx_langs) > 1:
                 tgt_combo.setCurrentIndex(1)
+            # ...but the TMX header's srclang wins over alphabetical order (#105)
+            self._preselect_tmx_pair(src_combo, tgt_combo, tmx_langs, tmx_header_src)
             tgt_layout.addWidget(tgt_combo)
             lang_layout.addLayout(tgt_layout)
             
@@ -23315,8 +23364,12 @@ class SupervertalerQt(QMainWindow):
             if not db_id:
                 QMessageBox.critical(self, "Error", "Failed to create TM metadata")
                 return
-            
-            target_tm_id = tm_id
+
+            # create_tm() makes the id unique when a TM already uses it (same
+            # TMX imported twice → "name_2"). Import into the TM just created,
+            # not the older one that owns the id we asked for.
+            created = tm_metadata_mgr.get_tm(db_id) or {}
+            target_tm_id = created.get('tm_id') or tm_id
         else:
             # Use existing TM
             target_tm_id = tm_combo.currentData()
@@ -23357,7 +23410,10 @@ class SupervertalerQt(QMainWindow):
                     lang_dialog.setMinimumWidth(400)
                     
                     lang_layout = QVBoxLayout(lang_dialog)
-                    lang_layout.addWidget(QLabel(f"TMX file contains {len(tmx_langs)} languages:\n{', '.join(tmx_langs)}\n"))
+                    tmx_header_src = self.tm_database.detect_tmx_source_language(filepath)
+                    lang_layout.addWidget(QLabel(
+                        f"TMX file contains {len(tmx_langs)} languages:\n{', '.join(tmx_langs)}\n"
+                        + (f"The file says its source language is {tmx_header_src}.\n" if tmx_header_src else "")))
                     lang_layout.addWidget(QLabel(self.tr("Select source and target languages:")))
                     
                     # Source language combo
@@ -23393,6 +23449,8 @@ class SupervertalerQt(QMainWindow):
                     # Default to second language if available
                     if len(tmx_langs) > 1:
                         tgt_combo.setCurrentIndex(1)
+                    # ...but the TMX header's srclang wins over alphabetical order (#105)
+                    self._preselect_tmx_pair(src_combo, tgt_combo, tmx_langs, tmx_header_src)
                     tgt_layout.addWidget(tgt_combo)
                     lang_layout.addLayout(tgt_layout)
                     

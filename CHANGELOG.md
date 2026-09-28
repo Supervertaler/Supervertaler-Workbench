@@ -34,6 +34,14 @@ Now, when one of these hotkeys fires while the right Alt key is held and your ke
 - **AltGr** still runs it on a layout, such as English (US), where AltGr+key types nothing.
 - Keys that type nothing with AltGr on your layout still run the hotkey either way.
 
+### Fixed (TMX import · wrong language direction by default, and "Failed to create TM metadata")
+
+Three problems with **Import TMX** in the Translation Memories tab, all from the same report (issue #105):
+
+- **The language pair was offered the wrong way round.** The Select Language Pair dialog listed the TMX's languages alphabetically and took the first as the source. An English (en-GB) → German (de-DE) TMX was therefore offered as German → English, and imported that way unless you noticed and swapped. The dialog now pre-selects the source language the TMX file itself declares in its header, and says which one that is. You can still change it.
+- **Re-using a TM name failed with an unhelpful error.** TM names must be unique. Importing a TMX under a name that was already taken, for example the same file a second time, stopped with "Failed to create TM metadata". The dialog now offers a free name to begin with, such as "client (2)". If you type a name that is taken, it tells you so and lets you pick another. Creating a TM by hand with a taken name now says so too, instead of "The TM name or ID may already exist".
+- **The entries could end up in the wrong TM.** When a TM's internal ID was already in use, the new TM was given a fresh ID, but the TMX entries were written to the older TM that owned the original ID. They now go into the TM you just created.
+
 ### Fixed (Import · the "Confirm language pair" prompt could not open)
 
 When a memoQ bilingual DOCX or memoQ XLIFF import could not read the language pair from the file, it was meant to ask. Instead the import failed with an error ("No module named 'PySide6'"), because the prompt was written for a different Qt library than the one Supervertaler uses. The prompt now opens.

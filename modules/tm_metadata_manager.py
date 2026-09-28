@@ -39,6 +39,15 @@ class TMMetadataManager:
         except Exception:
             return False
     
+    def tm_name_exists(self, name: str) -> bool:
+        """Check if a TM display name is taken (names are UNIQUE, like tm_ids)."""
+        try:
+            cursor = self.db_manager.cursor
+            cursor.execute("SELECT 1 FROM translation_memories WHERE name = ?", (name,))
+            return cursor.fetchone() is not None
+        except Exception:
+            return False
+
     def get_unique_tm_id(self, base_tm_id: str) -> str:
         """
         Get a unique tm_id by appending a number suffix if needed.

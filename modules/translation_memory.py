@@ -687,6 +687,23 @@ class TMDatabase:
         except:
             return []
     
+    @staticmethod
+    def detect_tmx_source_language(filepath: str) -> Optional[str]:
+        """The source language the TMX header declares (``srclang``), or None
+        when it is missing or ``*all*``. detect_tmx_languages() returns the
+        languages sorted alphabetically, which says nothing about direction –
+        the reason an en-GB → de-DE TMX was offered as de-DE → en-GB (#105)."""
+        try:
+            for _event, elem in ET.iterparse(filepath, events=('start',)):
+                if elem.tag == 'header':
+                    src = (elem.get('srclang') or '').strip()
+                    return src if src and src.lower() != '*all*' else None
+                if elem.tag == 'body':
+                    return None
+        except Exception:
+            pass
+        return None
+
     def check_language_compatibility(self, tmx_langs: List[str], target_src: str, target_tgt: str) -> dict:
         """
         Analyze if TMX languages match target TM languages, handling variants.
