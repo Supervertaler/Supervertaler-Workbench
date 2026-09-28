@@ -30010,8 +30010,14 @@ class SupervertalerQt(QMainWindow):
 
         # Load existing settings to preserve AI-related ones
         existing_settings = self.load_general_settings()
-        
-        general_settings = {
+
+        # Start from what is saved: the "general" section also holds settings
+        # other pages own (AI batch/context options, QuickTrans, FuzzyFixer
+        # range, usage log and budget, SuperLookup landing tab, import
+        # options, ...). Replacing the section with only the keys below
+        # deleted all of those on every Save General Settings.
+        general_settings = dict(existing_settings)
+        general_settings.update({
             'restore_last_project': restore_cb.isChecked(),
             'auto_open_log': auto_open_log_cb.isChecked() if auto_open_log_cb is not None else False,
             # Consolidated auto-fill setting (new canonical key).
@@ -30056,7 +30062,7 @@ class SupervertalerQt(QMainWindow):
             # AutoCorrect change the user made elsewhere.
             'autocorrect_enabled': existing_settings.get('autocorrect_enabled', True),
             'autocorrect_rule_overrides': existing_settings.get('autocorrect_rule_overrides', {}) or {},
-        }
+        })
 
         # Keep a fast-access instance value
         self.enable_sound_effects = general_settings.get('enable_sound_effects', False)
@@ -71543,9 +71549,11 @@ class SuperlookupTab(QWidget):
         
         Returns tuple: (exe_path, source) where source is 'saved', 'detected', or None
         """
-        # First, check if user has a saved custom path
-        if self.main_window and hasattr(self.main_window, 'general_settings'):
-            saved_path = self.main_window.general_settings.get('autohotkey_path', '')
+        # First, check if user has a saved custom path. (Read through
+        # load_general_settings: the main window has no general_settings
+        # attribute, so the old attribute lookup never found a saved path.)
+        if self.main_window and hasattr(self.main_window, 'load_general_settings'):
+            saved_path = (self.main_window.load_general_settings() or {}).get('autohotkey_path', '')
             if saved_path and os.path.exists(saved_path):
                 print(f"[Superlookup] Using saved AutoHotkey path: {saved_path}")
                 return saved_path, 'saved'
@@ -71646,9 +71654,10 @@ class SuperlookupTab(QWidget):
         def on_close():
             # Save preference if checkbox is checked
             if dont_show_cb.isChecked():
-                if self.main_window and hasattr(self.main_window, 'general_settings'):
-                    self.main_window.general_settings['hide_autohotkey_dialog'] = True
-                    self.main_window.save_general_settings()
+                if self.main_window and hasattr(self.main_window, 'load_general_settings'):
+                    settings = self.main_window.load_general_settings() or {}
+                    settings['hide_autohotkey_dialog'] = True
+                    self.main_window.save_general_settings(settings)
             dialog.accept()
         close_btn.clicked.connect(on_close)
         layout.addWidget(close_btn)
@@ -71689,9 +71698,10 @@ class SuperlookupTab(QWidget):
                     return
             
             # Save the path
-            if self.main_window and hasattr(self.main_window, 'general_settings'):
-                self.main_window.general_settings['autohotkey_path'] = file_path
-                self.main_window.save_general_settings()
+            if self.main_window and hasattr(self.main_window, 'load_general_settings'):
+                settings = self.main_window.load_general_settings() or {}
+                settings['autohotkey_path'] = file_path
+                self.main_window.save_general_settings(settings)
                 print(f"[Superlookup] Saved AutoHotkey path: {file_path}")
             
             self._ahk_setup_status.setText(f"✓ Saved: {file_path}\n\nRestart Supervertaler to use this path.")
@@ -72340,8 +72350,8 @@ class SuperlookupTab(QWidget):
                 print("[Hotkeys] Global hotkeys (Ctrl+Alt+L, Shift+Shift) will not be available.")
                 self.hotkey_registered = False
                 # Show setup dialog (deferred to avoid blocking startup) - unless user opted out
-                if self.main_window and hasattr(self.main_window, 'general_settings'):
-                    if not self.main_window.general_settings.get('hide_autohotkey_dialog', False):
+                if self.main_window and hasattr(self.main_window, 'load_general_settings'):
+                    if not (self.main_window.load_general_settings() or {}).get('hide_autohotkey_dialog', False):
                         QTimer.singleShot(2000, self._show_autohotkey_setup_dialog)
                 else:
                     QTimer.singleShot(2000, self._show_autohotkey_setup_dialog)

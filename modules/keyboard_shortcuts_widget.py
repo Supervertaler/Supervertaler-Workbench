@@ -489,8 +489,8 @@ class KeyboardShortcutsWidget(QWidget):
 
             ahk_path_edit = QLineEdit()
             ahk_path_edit.setPlaceholderText("Auto-detect, or specify custom path...")
-            # Read saved path from main window's general_settings
-            general_settings = getattr(mw, 'general_settings', {}) if mw else {}
+            # Read the saved path from the main window's general settings
+            general_settings = (mw.load_general_settings() or {}) if mw and hasattr(mw, 'load_general_settings') else {}
             saved_ahk_path = general_settings.get('autohotkey_path', '')
             ahk_path_edit.setText(saved_ahk_path)
             ahk_path_edit.setToolTip(
