@@ -24200,25 +24200,33 @@ class SupervertalerQt(QMainWindow):
         model_layout.addWidget(claude_model_label)
         
         claude_combo = QComboBox()
+        # The newest Sonnet, Opus and Fable (Michael, 2026-09-28), as in the Trados
+        # and memoQ plugins.
         claude_combo.addItems([
-            "claude-sonnet-5 (Recommended)",
-            "claude-haiku-4-5-20251001 (Fast & Affordable)",
-            "claude-opus-5 (Premium - Highest Quality)",
-            "claude-fable-5 (Maximum - Deepest Reasoning, 2x Opus Price)"
+            "claude-sonnet-5-5 (Recommended)",
+            "claude-opus-5-5 (Premium - Highest Quality)",
+            "claude-fable-5-1 (Maximum - Deepest Reasoning, 2.5x Opus Price)"
         ])
         claude_combo.setToolTip(
-            "Claude Sonnet 5: Recommended - near-Opus quality at Sonnet cost.\n"
-            "Claude Haiku 4.5: Fast and affordable for batch jobs.\n"
-            "Claude Opus 5: Anthropic's flagship Opus - highest quality for hard\n"
-            "  legal/technical work ($5/$25, 1M context).\n"
-            "Claude Fable 5: Anthropic's most capable model overall - always-on reasoning,\n"
-            "  double Opus pricing; rarely worth it now that Opus 5 exists."
+            "Claude Sonnet 5.5: Recommended - near-Opus quality at Sonnet cost ($2/$10, 1M context).\n"
+            "Claude Opus 5.5: Anthropic's newest Opus - highest quality for hard\n"
+            "  legal/technical work ($4/$20, 1M context).\n"
+            "Claude Fable 5.1: Anthropic's most capable model overall - always-on reasoning,\n"
+            "  2.5x Opus pricing; for the hardest work when cost is secondary."
         )
-        current_claude_model = settings.get('claude_model', 'claude-sonnet-5')
+        current_claude_model = settings.get('claude_model', 'claude-sonnet-5-5')
+        # Exact match on the model ID. A substring test found "claude-sonnet-5"
+        # inside "claude-sonnet-5-5"; and a saved model that is no longer listed
+        # (Sonnet 5, Haiku 4.5, Opus 5...) fell back to the first entry, which
+        # saving Settings then wrote over the user's choice. It is shown instead.
         for i in range(claude_combo.count()):
-            if current_claude_model in claude_combo.itemText(i):
+            if claude_combo.itemText(i).split()[0] == current_claude_model:
                 claude_combo.setCurrentIndex(i)
                 break
+        else:
+            if current_claude_model:
+                claude_combo.addItem(f"{current_claude_model} (your current model)")
+                claude_combo.setCurrentIndex(claude_combo.count() - 1)
         claude_combo.setEnabled(claude_radio.isChecked())
         model_layout.addWidget(claude_combo)
         
@@ -24535,6 +24543,7 @@ class SupervertalerQt(QMainWindow):
             model_id = combo_text.split()[0] if combo_text else ""
             friendly = {
                 "gpt-5.5": "GPT-5.5", "gpt-5.4-mini": "GPT-5.4 Mini",
+                "claude-sonnet-5-5": "Claude Sonnet 5.5", "claude-opus-5-5": "Claude Opus 5.5", "claude-fable-5-1": "Claude Fable 5.1",
                 "claude-sonnet-5": "Claude Sonnet 5", "claude-opus-5": "Claude Opus 5", "claude-fable-5": "Claude Fable 5",
                 "claude-haiku-4-5-20251001": "Claude Haiku 4.5",
                 "gemini-3.1-flash-lite": "Gemini 3.1 Flash-Lite", "gemini-3.5-flash": "Gemini 3.5 Flash",
@@ -25495,10 +25504,9 @@ class SupervertalerQt(QMainWindow):
 
         llm_providers = [
             ("claude", "Claude", "claude", [
-                ("claude-sonnet-5", "Claude Sonnet 5 (Recommended)"),
-                ("claude-haiku-4-5-20251001", "Claude Haiku 4.5 (Fast)"),
-                ("claude-opus-5", "Claude Opus 5 (Premium)"),
-                ("claude-fable-5", "Claude Fable 5 (Maximum)"),
+                ("claude-sonnet-5-5", "Claude Sonnet 5.5 (Recommended)"),
+                ("claude-opus-5-5", "Claude Opus 5.5 (Premium)"),
+                ("claude-fable-5-1", "Claude Fable 5.1 (Maximum)"),
             ]),
             ("openai", "OpenAI", "openai", [
                 ("gpt-5.5", "GPT-5.5 (Recommended)"),
@@ -25561,11 +25569,15 @@ class SupervertalerQt(QMainWindow):
                 model_combo.addItem(model_name, model_id)
 
             # Restore saved model selection
+            # A saved model that has left the list is shown rather than replaced:
+            # falling back to the first entry meant the next save overwrote it.
             saved_model = mt_quick_settings.get(f"mtql_{code}_model")
             if saved_model:
                 idx = model_combo.findData(saved_model)
-                if idx >= 0:
-                    model_combo.setCurrentIndex(idx)
+                if idx < 0:
+                    model_combo.addItem(f"{saved_model} (your current model)", saved_model)
+                    idx = model_combo.count() - 1
+                model_combo.setCurrentIndex(idx)
 
             model_combo.setEnabled(has_key)
             self._mtql_llm_combos[f"mtql_{code}_model"] = model_combo
@@ -61472,7 +61484,7 @@ class SupervertalerQt(QMainWindow):
         defaults = {
             'provider': 'openai',
             'openai_model': 'gpt-5.5',
-            'claude_model': 'claude-sonnet-5',
+            'claude_model': 'claude-sonnet-5-5',
             'gemini_model': 'gemini-3.1-flash-lite',
             'ollama_model': 'translategemma:12b',
             'custom_openai_model': '',
@@ -66870,7 +66882,7 @@ class SupervertalerQt(QMainWindow):
                     try:
                         from modules.llm_clients import LLMClient
                         
-                        claude_model = settings.get('claude_model', 'claude-sonnet-5')
+                        claude_model = settings.get('claude_model', 'claude-sonnet-5-5')
                         client = LLMClient(
                             api_key=api_keys['claude'],
                             provider='claude',

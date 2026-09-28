@@ -112,7 +112,7 @@ I'll be able to provide AI-powered suggestions for your style guides."""
             elif hasattr(self.llm, 'messages'):
                 # Anthropic-style interface
                 response = self.llm.messages.create(
-                    model="claude-sonnet-5",
+                    model="claude-sonnet-5-5",
                     max_tokens=1024,
                     system=system_prompt,
                     messages=[{"role": "user", "content": user_message}]

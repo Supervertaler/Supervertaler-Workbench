@@ -201,7 +201,7 @@ class PDFRescueQt:
         self.model_combo.addItem("--- OpenAI ---")
         self.model_combo.addItems(["gpt-5.5", "gpt-5.4-mini"])
         self.model_combo.addItem("--- Claude (Anthropic) ---")
-        self.model_combo.addItems(["claude-sonnet-5", "claude-sonnet-4-6", "claude-haiku-4-5-20251001", "claude-opus-4-8"])
+        self.model_combo.addItems(["claude-sonnet-5-5", "claude-opus-5-5", "claude-fable-5-1"])
         self.model_combo.addItem("--- Gemini (Google) ---")
         self.model_combo.addItems(["gemini-3.1-flash-lite", "gemini-2.5-pro", "gemini-3.1-pro-preview"])
 
@@ -245,9 +245,9 @@ class PDFRescueQt:
         # Size naturally to content - no fixed max height to eliminate wasted space below
         model_descriptions = """• gpt-5.5 (Recommended): OpenAI flagship; advanced reasoning, excellent for most documents including complex tables
 • gpt-5.4-mini: Fast and economical; good for simple documents; may struggle with complex layouts
-• claude-sonnet-5: Newest Sonnet; strong reasoning, reliable on structured layouts and tables
-• claude-sonnet-4-6: Previous-generation all-rounder (fallback)
-• claude-opus-4-8: Anthropic's most capable; best for dense, complex or technical documents
+• claude-sonnet-5-5: Newest Sonnet; strong reasoning, reliable on structured layouts and tables
+• claude-opus-5-5: Anthropic's newest Opus; best for dense, complex or technical documents
+• claude-fable-5-1: Anthropic's most capable model; for the hardest pages when cost is secondary
 • gemini-3.1-flash-lite: Fast and economical Google option; good for high-volume, straightforward pages
 • gemini-2.5-pro: Premium Google option; strong on complex layouts and dense documents"""
         self.model_descriptions_text.setPlainText(model_descriptions)

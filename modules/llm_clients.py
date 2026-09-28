@@ -7,7 +7,7 @@ Can be used standalone or imported by other applications.
 
 Supported Providers:
 - OpenAI (GPT-5.5, GPT-5.4 Mini)
-- Anthropic (Claude Sonnet 5, Haiku 4.5, Opus 5, Fable 5)
+- Anthropic (Claude Sonnet 5.5, Opus 5.5, Fable 5.1)
 - Google (Gemini 3.1 Flash-Lite, 2.5 Pro, 3.1 Pro Preview, Gemma 4 26B MoE)
 - Mistral AI (Mistral Large, Mistral Small)
 - DeepSeek (V4 Pro, V4 Flash)
@@ -154,7 +154,7 @@ class LLMClient:
     # Default models for each provider
     DEFAULT_MODELS = {
         "openai": "gpt-5.5",  # GPT-5.5 (flagship)
-        "claude": "claude-sonnet-5",  # Claude Sonnet 5 (4.6 kept selectable)
+        "claude": "claude-sonnet-5-5",  # Claude Sonnet 5.5 (older IDs still selectable)
         "gemini": "gemini-3.1-flash-lite",  # Gemini 3.1 Flash-Lite
         "mistral": "mistral-large-latest",  # Mistral Large (flagship)
         "deepseek": "deepseek-v4-pro",  # DeepSeek V4 Pro (flagship)
@@ -334,7 +334,11 @@ class LLMClient:
             "gpt-5.5",
             "gpt-5.4-mini"
         ],
+        # Superseded models stay here: a saved choice keeps its image support.
         "claude": [
+            "claude-sonnet-5-5",
+            "claude-opus-5-5",
+            "claude-fable-5-1",
             "claude-sonnet-5",
             "claude-haiku-4-5-20251001",
             "claude-opus-5",
@@ -348,39 +352,34 @@ class LLMClient:
         ]
     }
 
-    # Available Claude models with descriptions
+    # Available Claude models with descriptions - the chat's model menu. The newest
+    # Sonnet, Opus and Fable (Michael, 2026-09-28), as in the Trados and memoQ
+    # plugins; prices checked on Anthropic's pricing page the same day. A saved
+    # older model still runs and is still costed (pricing.json keeps it).
     CLAUDE_MODELS = {
-        "claude-fable-5": {
-            "name": "Claude Fable 5",
-            "description": "Anthropic's most capable model - deepest reasoning, always-on thinking, double Opus pricing",
-            "released": "2026-06-09",
+        "claude-sonnet-5-5": {
+            "name": "Claude Sonnet 5.5",
+            "description": "Newest Sonnet - near-Opus quality at Sonnet cost ($2/$10), 1M context",
+            "released": "2026-09-28",
+            "strengths": ["General translation", "Reasoning", "Tool use", "Knowledge work", "Cost-effective"],
+            "pricing": {"input": 2, "output": 10},  # USD per million tokens
+            "use_case": "Recommended for most translation tasks"
+        },
+        "claude-opus-5-5": {
+            "name": "Claude Opus 5.5",
+            "description": "Anthropic's newest Opus - highest quality at $4/$20, 1M context",
+            "released": "2026-09-22",
+            "strengths": ["Legal translation", "Technical documents", "Complex reasoning", "Highest accuracy", "1M context"],
+            "pricing": {"input": 4, "output": 20},  # USD per million tokens
+            "use_case": "Top choice for hard legal/technical translation and long-context jobs"
+        },
+        "claude-fable-5-1": {
+            "name": "Claude Fable 5.1",
+            "description": "Anthropic's most capable model - deepest reasoning, always-on thinking, 2.5x Opus pricing",
+            "released": "2026-09-01",
             "strengths": ["Hardest translation problems", "Whole-document review", "Deepest reasoning", "1M context"],
             "pricing": {"input": 10, "output": 50},  # USD per million tokens
             "use_case": "For the hardest jobs only - always-on thinking adds billed reasoning tokens per call, so overkill for routine segment translation"
-        },
-        "claude-opus-5": {
-            "name": "Claude Opus 5",
-            "description": "Anthropic's flagship Opus - near-Fable-5 intelligence at half the price ($5/$25), 1M context",
-            "released": "2026-07-24",
-            "strengths": ["Legal translation", "Technical documents", "Complex reasoning", "Highest accuracy", "1M context"],
-            "pricing": {"input": 5, "output": 25},  # USD per million tokens
-            "use_case": "Top choice for hard legal/technical translation and long-context jobs - near-Fable quality without Fable's price or always-on-thinking cost"
-        },
-        "claude-sonnet-5": {
-            "name": "Claude Sonnet 5",
-            "description": "Newest Sonnet - near-Opus quality at Sonnet cost",
-            "released": "2026-06-30",
-            "strengths": ["General translation", "Reasoning", "Tool use", "Knowledge work", "Cost-effective"],
-            "pricing": {"input": 3, "output": 15},  # USD per million tokens (intro $2/$10 until 2026-08-31)
-            "use_case": "Recommended for most translation tasks"
-        },
-        "claude-haiku-4-5-20251001": {
-            "name": "Claude Haiku 4.5",
-            "description": "Fast & affordable - 2x speed, 1/5 cost of Sonnet",
-            "released": "2025-10-01",
-            "strengths": ["High-volume translation", "Speed", "Budget-friendly", "Batch processing"],
-            "pricing": {"input": 1, "output": 5},
-            "use_case": "Best for large translation projects where speed and cost matter"
         }
     }
 
@@ -405,7 +404,7 @@ class LLMClient:
                 print(f"{info['name']}: {info['description']}")
 
             # Get specific model
-            info = LLMClient.get_claude_model_info("claude-sonnet-5")
+            info = LLMClient.get_claude_model_info("claude-sonnet-5-5")
             print(info['use_case'])
         """
         if model_id:
