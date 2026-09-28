@@ -44,6 +44,16 @@ Settings → AI Settings → **Local LLM (Ollama) Advanced Settings** has a new 
 
 The **📖 TMs** results in SuperLookup (where Ctrl+K concordance searches land) have a new **💾 Export Results…** button (issue #170). It saves every hit for the current search, with source, target and the TM it came from, as an Excel workbook or a CSV file. This is useful for documenting inconsistencies in a client TM, or for keeping a cross-TM view of a term. The rows are written in the order the table shows them, so sort by a column first if you want the file sorted. The workbook also has a small "Search" sheet recording the search term, hit count and export time. The CSV is UTF-8 with a byte-order mark, so Excel opens accented letters correctly, and TM text that starts with "=" stays text instead of turning into a formula.
 
+### Added (Export · the "dropped text" check now covers every Okapi format)
+
+Since v1.10.254, exporting a Word document ends with a quick check: Supervertaler counts the words in the file it has just written. If there are clearly fewer than the segments contain – the tell-tale sign of text silently lost on the way out – it warns you before you deliver. That check now also runs for **PowerPoint (PPTX), Excel (XLSX), InDesign (IDML), HTML, XLIFF and gettext PO** exports (issue #219). The original "dropped sub-segments" bug was first seen in an IDML file, which previously had no check at all.
+
+The same on/off switch and tolerance apply (`export.word_count_check_enabled`, `export.word_count_check_threshold`, default 95%). Each format is counted generously, so a clean export is never flagged:
+- In HTML, text in `alt` and `title` attributes counts.
+- An untranslated XLIFF or PO unit counts its source text.
+
+Formats without a counter are still skipped rather than guessed at.
+
 ### Fixed (AI Assistant · "include TM data" and "include termbase data" sent the AI nothing)
 
 Switching on **💾 Translation Memories** or **📚 Termbases** under **Available Context** in the AI Assistant, or the TM and Termbase chips in the chat, changed the look of the box and nothing else (issue #111). The code that gathers the data looked for places in the program where TMs and termbases have not been kept for a long time. It found nothing and told the AI "No translation memories loaded" / "No termbases loaded". Chat messages did not even include that: only AutoPrompt ever asked for it.
