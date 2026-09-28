@@ -11801,6 +11801,14 @@ class SupervertalerQt(QMainWindow):
         export_tm_action.triggered.connect(self.export_tmx_from_tm_database)
         export_menu.addAction(export_tm_action)
 
+        # Issue #52: every TM and termbase in the database, as open files.
+        export_backup_action = QAction(self.tr("📦 &Back Up All TMs && Termbases..."), self)
+        export_backup_action.setToolTip(self.tr(
+            "Write every translation memory (TMX) and termbase (TSV, including "
+            "non-translatables) in the database to a folder of your choice"))
+        export_backup_action.triggered.connect(self.backup_all_resources)
+        export_menu.addAction(export_backup_action)
+
         # Help link at the foot of the Export submenu (mirrors Import).
         export_menu.addSeparator()
         export_help_action = QAction(self.tr("❓ Supported file formats (online help)..."), self)
@@ -18610,6 +18618,59 @@ class SupervertalerQt(QMainWindow):
             self.log(traceback.format_exc())
             QMessageBox.critical(self, "Export Error", f"Failed to export:\n\n{str(e)}")
     
+    def backup_all_resources(self):
+        """Back up every TM (TMX) and termbase (TSV) in the database (issue #52)."""
+        if not getattr(self, 'db_manager', None) or not getattr(self, 'tm_metadata_mgr', None) \
+                or not getattr(self, 'termbase_mgr', None):
+            QMessageBox.warning(self, self.tr("Back Up Resources"),
+                                self.tr("The resource database is not available."))
+            return
+        folder = QFileDialog.getExistingDirectory(
+            self, self.tr("Choose a folder for the backup"), str(Path.home()))
+        if not folder:
+            return
+
+        from PyQt6.QtWidgets import QProgressDialog
+        from modules.resource_backup import backup_all_resources
+        progress = QProgressDialog(self.tr("Backing up resources…"), None, 0, 0, self)
+        progress.setWindowTitle(self.tr("Back Up Resources"))
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setMinimumDuration(0)
+        progress.show()
+
+        def step(message):
+            progress.setLabelText(f"Backing up {message}…")
+            QApplication.processEvents()
+
+        try:
+            summary = backup_all_resources(self.db_manager, self.tm_metadata_mgr,
+                                           self.termbase_mgr, folder,
+                                           tool_version=__version__, progress=step)
+        except Exception as e:
+            progress.close()
+            self.log(f"✗ Resource backup failed: {e}")
+            QMessageBox.critical(self, self.tr("Back Up Resources"),
+                                 f"The backup failed:\n\n{e}")
+            return
+        progress.close()
+
+        tus = sum(n for _name, _file, n in summary['tms'])
+        terms = sum(t[2] for t in summary['termbases'])
+        self.log(f"✓ Backed up {len(summary['tms'])} TMs ({tus:,} entries) and "
+                 f"{len(summary['termbases'])} termbases ({terms:,} terms) to {summary['folder']}")
+        text = (f"Backed up {len(summary['tms'])} TM(s) with {tus:,} entries and "
+                f"{len(summary['termbases'])} termbase(s) with {terms:,} terms to:\n\n"
+                f"{summary['folder']}")
+        if summary['errors']:
+            text += "\n\nProblems:\n" + "\n".join(summary['errors'][:10])
+        box = QMessageBox(QMessageBox.Icon.Warning if summary['errors'] else QMessageBox.Icon.Information,
+                          self.tr("Back Up Resources"), text, parent=self)
+        open_btn = box.addButton(self.tr("Open Folder"), QMessageBox.ButtonRole.ActionRole)
+        box.addButton(QMessageBox.StandardButton.Close)
+        box.exec()
+        if box.clickedButton() is open_btn:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(summary['folder']))
+
     def export_tm_as_tmx(self):
         """Legacy function - exports grid segments (for backward compatibility)"""
         self.export_tmx_from_grid()

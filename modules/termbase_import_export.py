@@ -50,6 +50,8 @@ class TermbaseImporter:
         'project': ['project', 'proj'],
         'client': ['client', 'customer'],
         'forbidden': ['forbidden', 'do not use', 'prohibited', 'banned'],
+        'nontranslatable': ['non-translatable', 'nontranslatable', 'non translatable',
+                            'do not translate', 'nt'],
         'term_uuid': ['term uuid', 'uuid', 'term id', 'id', 'term_uuid', 'termid']
     }
     
@@ -208,6 +210,9 @@ class TermbaseImporter:
                         forbidden = self._parse_boolean(
                             self._get_field(row, column_map.get('forbidden', ''))
                         )
+                        nontranslatable = self._parse_boolean(
+                            self._get_field(row, column_map.get('nontranslatable', ''))
+                        )
                         
                         # Add term to termbase (pass UUID if present, otherwise one will be generated)
                         term_id = self.termbase_manager.add_term(
@@ -219,7 +224,8 @@ class TermbaseImporter:
                             project=project,
                             client=client,
                             forbidden=forbidden,
-                            term_uuid=term_uuid if term_uuid else None
+                            term_uuid=term_uuid if term_uuid else None,
+                            is_nontranslatable=nontranslatable,
                         )
                         
                         if term_id:
@@ -374,6 +380,9 @@ class TermbaseImporter:
             updates['forbidden'] = self._parse_boolean(self._get_field(row, column_map['forbidden']))
         
         self.termbase_manager.update_term(term_id, **updates)
+        if column_map.get('nontranslatable'):
+            self.termbase_manager.set_nontranslatable(
+                term_id, self._parse_boolean(self._get_field(row, column_map['nontranslatable'])))
 
 
 class TermbaseExporter:
@@ -413,7 +422,7 @@ class TermbaseExporter:
             # Define columns - always include UUID for tracking
             if include_metadata:
                 columns = ['Term UUID', 'Source', 'Target', 'Domain',
-                          'Notes', 'Project', 'Client', 'Forbidden']
+                          'Notes', 'Project', 'Client', 'Forbidden', 'Non-translatable']
             else:
                 columns = ['Term UUID', 'Source', 'Target', 'Domain', 'Notes']
             
@@ -458,7 +467,8 @@ class TermbaseExporter:
                         row.extend([
                             term.get('project', ''),
                             term.get('client', ''),
-                            'TRUE' if term.get('forbidden', False) else 'FALSE'
+                            'TRUE' if term.get('forbidden', False) else 'FALSE',
+                            'TRUE' if term.get('is_nontranslatable', False) else 'FALSE',
                         ])
                     
                     writer.writerow(row)

@@ -44,6 +44,17 @@ Settings → AI Settings → **Local LLM (Ollama) Advanced Settings** has a new 
 
 The **📖 TMs** results in SuperLookup (where Ctrl+K concordance searches land) have a new **💾 Export Results…** button (issue #170). It saves every hit for the current search, with source, target and the TM it came from, as an Excel workbook or a CSV file. This is useful for documenting inconsistencies in a client TM, or for keeping a cross-TM view of a term. The rows are written in the order the table shows them, so sort by a column first if you want the file sorted. The workbook also has a small "Search" sheet recording the search term, hit count and export time. The CSV is UTF-8 with a byte-order mark, so Excel opens accented letters correctly, and TM text that starts with "=" stays text instead of turning into a formula.
 
+### Added (Export · back up every TM and termbase to open files in one go)
+
+**File → Export → 📦 Back Up All TMs & Termbases…** writes everything in your resource database to a folder you choose (issue #52):
+- one **TMX** file per translation memory, in a `TMs` folder;
+- one tab-separated **TSV** file per termbase, in a `Termbases` folder;
+- a `README.txt` listing what was written and how many entries each file holds.
+
+Unlike the database file itself, these open in any CAT tool, and they can be re-imported into Supervertaler if you ever need to rebuild. Each TMX entry keeps its own language pair (a TM can hold entries in both directions), its dates, author and note, and large TMs are written in a stream rather than loaded into memory. Characters that XML forbids, which a single stray control character in a TM would otherwise bring in, are dropped, so the file always opens.
+
+Non-translatables, which are termbase entries, survive the trip. Termbase TSV exports now have a **Non-translatable** column, and the TSV import reads it back, so an exported and re-imported termbase keeps its non-translatables instead of turning them into ordinary terms.
+
 ### Added (Spellcheck · import, export and tidy the custom dictionary)
 
 **📖 Manage Custom Dictionary…** (in the grid's spellcheck menu) has new buttons (issue #109):
