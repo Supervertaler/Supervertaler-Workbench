@@ -25,6 +25,15 @@ The Phrase bilingual import has opened with its languages already filled in sinc
 - **Déjà Vu X3 bilingual RTF** now shows the pair it found for you to confirm, because it is worked out from how often each language code occurs in the file. When it found nothing it used to fall back to **Dutch → Spanish** without a word; now it asks. A correction also reaches the export, so the translations are tagged with the right language in the RTF.
 - **memoQ bilingual RTF** reads the pair from the header row, as before. If the header cannot be read it now asks, instead of importing as Dutch → English.
 
+### Fixed (Windows · Polish letters and other AltGr characters could not be typed while Supervertaler was running)
+
+Windows passes the **AltGr** key on as Ctrl+Alt. Supervertaler's system-wide hotkeys (SuperLookup Ctrl+Alt+L, the clipboard Ctrl+Alt+C, Always-On Ctrl+Alt+O, QuickTrans Ctrl+Alt+Q, voice Ctrl+Alt+V) therefore also fired on AltGr+L, AltGr+C and so on, and swallowed the key. This happened in every application, not just Supervertaler. On a Polish keyboard that meant no **ł**, **ć** or **ó** (issue #243). On a German keyboard it meant no **@** (AltGr+Q), and on a Hungarian one no **@** (AltGr+V).
+
+Now, when one of these hotkeys fires while the right Alt key is held and your keyboard layout turns that key into a character, the character is typed and the hotkey is not run. Nothing else changes:
+- **Left Ctrl + left Alt** still runs the hotkey.
+- **AltGr** still runs it on a layout, such as English (US), where AltGr+key types nothing.
+- Keys that type nothing with AltGr on your layout still run the hotkey either way.
+
 ### Fixed (Import · the "Confirm language pair" prompt could not open)
 
 When a memoQ bilingual DOCX or memoQ XLIFF import could not read the language pair from the file, it was meant to ask. Instead the import failed with an error ("No module named 'PySide6'"), because the prompt was written for a different Qt library than the one Supervertaler uses. The prompt now opens.
