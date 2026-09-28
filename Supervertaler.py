@@ -55248,6 +55248,29 @@ class SupervertalerQt(QMainWindow):
         ai_group = QGroupBox(self.tr("AI && Prompts"))
         ai_layout = QVBoxLayout(ai_group)
 
+        # The AI provider and model currently in use (issue #93) – resolved the
+        # same way as the status-bar indicator, so the two always agree.
+        try:
+            import html as _html
+            llm_settings = self.load_llm_settings()
+            provider = llm_settings.get('provider', 'openai')
+            model = self._resolve_provider_model(llm_settings, provider, 'gpt-5.5')
+            provider_names = {
+                'openai': "OpenAI", 'claude': "Anthropic Claude", 'gemini': "Google Gemini",
+                'mistral': "Mistral AI", 'deepseek': "DeepSeek", 'openrouter': "OpenRouter",
+                'ollama': "Local LLM (Ollama)", 'custom_openai': "Custom (OpenAI-compatible)",
+            }
+            provider_text = provider_names.get(provider, provider)
+            if provider == 'custom_openai':
+                profile = self._get_active_custom_profile(llm_settings)
+                if profile and profile.get('name'):
+                    provider_text += f" – {profile['name']}"
+            ai_layout.addWidget(QLabel(
+                f"<b>AI Model:</b> {_html.escape(model or 'not set')} "
+                f"<span style='color: #999;'>({_html.escape(provider_text)})</span>"))
+        except Exception as e:
+            self.log(f"Error getting AI model info: {e}")
+
         primary_prompt_text = "None"
         attached_count = 0
         if hasattr(self, 'prompt_manager_qt') and self.prompt_manager_qt:
