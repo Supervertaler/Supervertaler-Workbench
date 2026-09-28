@@ -100,6 +100,27 @@ def clear_context() -> None:
         setattr(_ctx, k, None)
 
 
+# Fallback attribution for calls made outside an explicit context (Ctrl+T,
+# chat, AutoTagger …): a callable returning e.g. {"project": ..., "src_lang":
+# ..., "tgt_lang": ...} for whatever is open right now, so those calls count
+# towards the open project in the per-project report too (issue #8).
+_default_ctx = {"fn": None}
+
+
+def set_default_context(fn) -> None:
+    _default_ctx["fn"] = fn
+
+
+def _default_context() -> Dict:
+    fn = _default_ctx["fn"]
+    if fn is None or _ctx_get("project"):
+        return {}
+    try:
+        return fn() or {}
+    except Exception:
+        return {}
+
+
 def _project_key(project: Optional[str]) -> str:
     if not project:
         return ""
@@ -142,7 +163,12 @@ def record(provider: str, model: str, usage: Optional[Dict],
         cost = compute_actual_cost(provider, model, in_regular, cache_read, cache_write, out_tokens)
         cost_known = cost is not None
 
-        project = _ctx_get("project")
+        fallback = _default_context()
+
+        def ctx(name):
+            return _ctx_get(name) or fallback.get(name)
+
+        project = ctx("project")
         ts = datetime.datetime.now(datetime.timezone.utc)
         rec = {
             "id": uuid.uuid4().hex,
@@ -154,10 +180,10 @@ def record(provider: str, model: str, usage: Optional[Dict],
             "model": model or "",
             "project": project or "",
             "project_key": _project_key(project),
-            "file": _ctx_get("file") or "",
-            "client": _ctx_get("client") or "",
-            "src_lang": _ctx_get("src_lang") or "",
-            "tgt_lang": _ctx_get("tgt_lang") or "",
+            "file": ctx("file") or "",
+            "client": ctx("client") or "",
+            "src_lang": ctx("src_lang") or "",
+            "tgt_lang": ctx("tgt_lang") or "",
             "in_regular": in_regular,
             "in_cache_read": cache_read,
             "in_cache_write": cache_write,
@@ -272,6 +298,17 @@ def totals(records: List[Dict]) -> Dict:
             t["actual"] += 1
     t["total"] = t["input"] + t["output"]
     t["actual_pct"] = (100 * t["actual"] // t["calls"]) if t["calls"] else 0
+    return t
+
+
+def project_totals(project: str) -> Dict:
+    """All-time totals for one project (the per-job cost, issue #8)."""
+    everything = load(datetime.datetime(2000, 1, 1, tzinfo=datetime.timezone.utc),
+                      datetime.datetime(2999, 1, 1, tzinfo=datetime.timezone.utc))
+    t = totals([r for r in everything if project and (r.get("project") or "") == project])
+    t["unpriced"] = sum(1 for r in everything
+                        if project and (r.get("project") or "") == project
+                        and r.get("cost_known") is False)
     return t
 
 

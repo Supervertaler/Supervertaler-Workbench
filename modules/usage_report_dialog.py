@@ -4,27 +4,33 @@ Token Usage & Costs report dialog for Supervertaler Workbench.
 Reads the JSONL usage ledger (modules.usage_log), totals it grouped by
 project/client/model/etc. over a date range, and exports the detailed ledger
 to CSV or Excel. Mirrors the Trados plugin's Usage & Costs report.
+
+Costs are stored in USD; the dialog can show them in EUR at a user-set rate
+(issue #8). The exported ledger stays in USD so it matches the Trados plugin's.
 """
 
 import datetime
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
-    QComboBox, QDialog, QFileDialog, QHBoxLayout, QHeaderView, QLabel,
-    QMessageBox, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout,
+    QComboBox, QDialog, QDoubleSpinBox, QFileDialog, QHBoxLayout, QHeaderView,
+    QLabel, QMessageBox, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout,
 )
 
 from modules import usage_log
+from modules.cost_estimate import CURRENCIES, DEFAULT_USD_TO_EUR, format_cost
 
 
 class UsageReportDialog(QDialog):
-    def __init__(self, parent=None, budget: float = 0.0):
+    def __init__(self, parent=None, budget: float = 0.0, currency: str = "USD",
+                 rate: float = DEFAULT_USD_TO_EUR, on_currency_changed=None):
         super().__init__(parent)
         self.setWindowTitle("Token Usage & Costs")
         self.resize(860, 540)
         self._records = []
         self._mtd = 0.0
         self._budget = float(budget or 0.0)
+        self._on_currency_changed = on_currency_changed
 
         top = QHBoxLayout()
         top.addWidget(QLabel("Range:"))
@@ -52,6 +58,28 @@ class UsageReportDialog(QDialog):
         top.addWidget(btn_xlsx)
         top.addStretch(1)
 
+        cur_row = QHBoxLayout()
+        cur_row.addWidget(QLabel("Show costs in:"))
+        self.cmb_currency = QComboBox()
+        self.cmb_currency.addItems(list(CURRENCIES))
+        self.cmb_currency.setCurrentText(currency if currency in CURRENCIES else "USD")
+        cur_row.addWidget(self.cmb_currency)
+        self.lbl_rate = QLabel("1 USD =")
+        cur_row.addWidget(self.lbl_rate)
+        self.spin_rate = QDoubleSpinBox()
+        self.spin_rate.setDecimals(4)
+        self.spin_rate.setRange(0.0001, 1000.0)
+        self.spin_rate.setSingleStep(0.01)
+        self.spin_rate.setSuffix(" EUR")
+        self.spin_rate.setValue(float(rate or DEFAULT_USD_TO_EUR))
+        self.spin_rate.setToolTip(
+            "Exchange rate used to show costs in euros. Set it to your bank's or\n"
+            "card's rate – it is not looked up online. Prices are USD in the price list.")
+        cur_row.addWidget(self.spin_rate)
+        cur_row.addStretch(1)
+        self.cmb_currency.currentIndexChanged.connect(self._currency_changed)
+        self.spin_rate.valueChanged.connect(self._currency_changed)
+
         self.table = QTableWidget(0, 6)
         self.table.setHorizontalHeaderLabels(
             ["Group", "Calls", "Input", "Output", "Cost (USD)", "% actual"])
@@ -67,10 +95,36 @@ class UsageReportDialog(QDialog):
 
         layout = QVBoxLayout(self)
         layout.addLayout(top)
+        layout.addLayout(cur_row)
         layout.addWidget(self.table)
         layout.addWidget(self.lbl_totals)
 
+        self._sync_currency_widgets()
         self.reload()
+
+    # ── Currency ─────────────────────────────────────────────────────────────
+    def _currency(self):
+        return self.cmb_currency.currentText() or "USD", float(self.spin_rate.value())
+
+    def _money(self, usd: float, decimals: int = 2) -> str:
+        currency, rate = self._currency()
+        return format_cost(usd, currency, rate, decimals)
+
+    def _sync_currency_widgets(self):
+        is_eur = self.cmb_currency.currentText() == "EUR"
+        self.lbl_rate.setVisible(is_eur)
+        self.spin_rate.setVisible(is_eur)
+        self.table.setHorizontalHeaderItem(
+            4, QTableWidgetItem("Cost (EUR)" if is_eur else "Cost (USD)"))
+
+    def _currency_changed(self, *_):
+        self._sync_currency_widgets()
+        self.rebind()
+        if self._on_currency_changed:
+            try:
+                self._on_currency_changed(*self._currency())
+            except Exception:
+                pass
 
     def _range(self):
         now = datetime.datetime.now(datetime.timezone.utc)
@@ -111,7 +165,7 @@ class UsageReportDialog(QDialog):
                 f"{row['calls']:,}",
                 f"{row['input']:,}",
                 f"{row['output']:,}",
-                f"{row['cost_usd']:.4f}",
+                self._money(row['cost_usd'], 4),
                 f"{row['actual_pct']}%",
             ]
             for c, val in enumerate(cells):
@@ -123,12 +177,13 @@ class UsageReportDialog(QDialog):
         t = usage_log.totals(self._records)
         if self._budget and self._budget > 0:
             pct = (self._mtd / self._budget * 100.0) if self._budget else 0.0
-            month = f"     |     This month: ${self._mtd:.2f} of ${self._budget:.2f} budget ({pct:.0f}%)"
+            month = (f"     |     This month: {self._money(self._mtd)} of "
+                     f"{self._money(self._budget)} budget ({pct:.0f}%)")
         else:
-            month = f"     |     This month: ${self._mtd:.2f}"
+            month = f"     |     This month: {self._money(self._mtd)}"
         self.lbl_totals.setText(
             f"Range total: {t['calls']:,} calls · {t['input']:,} in / {t['output']:,} out · "
-            f"${t['cost_usd']:.2f} · {t['actual_pct']}% from provider" + month)
+            f"{self._money(t['cost_usd'])} · {t['actual_pct']}% from provider" + month)
 
     def export(self, xlsx: bool):
         try:
