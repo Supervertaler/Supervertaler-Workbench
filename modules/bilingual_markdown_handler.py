@@ -75,7 +75,7 @@ import hashlib
 import json
 import re
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Callable
+from typing import Dict, List, Optional, Callable, Tuple
 
 
 EXPORT_VERSION = "1.0"
@@ -564,6 +564,90 @@ def _normalise_for_compare(text: str) -> str:
     return t.strip()
 
 
+def _source_key(text: str) -> str:
+    """Whitespace-insensitive comparison key for a source line.
+
+    ``[newline]`` tokens and real line breaks count as whitespace, so a source
+    matches whether it was written with tokens (current exports), flattened to
+    spaces (pre-token exports) or re-wrapped by an AI chat."""
+    t = _normalise_newlines(text or "").replace(NEWLINE_TOKEN, " ")
+    return re.sub(r"\s+", " ", t).strip()
+
+
+RowMatch = Tuple[Optional[int], Optional[str]]  # (live segment id, export-time status key)
+
+
+def match_rows_by_source(
+    parsed: List[ParsedMdSegment],
+    current_segments: List[CurrentSeg],
+    hint_sidecar: Optional[dict] = None,
+) -> List[RowMatch]:
+    """Find the live segment for each parsed row from its *source text*.
+
+    Used when there is no sidecar file – text pasted back from an AI chat
+    (issue #248). The ``[SEGMENT N]`` number alone can't be trusted then: an
+    export filtered by status numbers its blocks 1..n regardless of where they
+    sit in the project, and the AI may reorder or drop blocks. The source line
+    can: it is read-only by contract, so a row whose source matches no live
+    segment is simply reported as missing rather than written somewhere wrong.
+
+    For each row, in order of preference:
+      1. the ``hint_sidecar`` entry for its number (the last export or copy of
+         this project in this session), if that segment's source still matches;
+      2. the live segment at position ``number``, if its source matches;
+      3. the next unused segment with a matching source after the previous
+         match, else the first unused one anywhere – so repeated sources are
+         paired up in document order.
+
+    Returns one ``(segment_id, export_status_key)`` per row (same order as
+    ``parsed``); ``segment_id`` is ``None`` when nothing matches. The status is
+    only known when the hint sidecar supplied the match.
+    """
+    keys = [_source_key(c.source) for c in current_segments]
+    index_by_id = {c.id: i for i, c in enumerate(current_segments)}
+    positions: Dict[str, List[int]] = {}
+    for i, k in enumerate(keys):
+        if k:
+            positions.setdefault(k, []).append(i)
+
+    hint_by_number: Dict[int, dict] = {}
+    if hint_sidecar and isinstance(hint_sidecar.get("segments"), list):
+        for entry in hint_sidecar["segments"]:
+            n = _as_int(entry.get("number")) if isinstance(entry, dict) else None
+            if n is not None:
+                hint_by_number[n] = entry
+
+    used = set()
+    last = -1
+    matches: List[RowMatch] = []
+    for row in parsed:
+        key = _source_key(row.source)
+        idx = None
+        status = None
+        if key:
+            entry = hint_by_number.get(row.number)
+            if entry is not None:
+                i = index_by_id.get(_as_int(entry.get("segment_id")))
+                if i is not None and i not in used and keys[i] == key:
+                    idx = i
+                    status = str(entry.get("status") or "") or None
+            if idx is None:
+                i = row.number - 1
+                if 0 <= i < len(keys) and i not in used and keys[i] == key:
+                    idx = i
+            if idx is None:
+                free = [i for i in positions.get(key, ()) if i not in used]
+                after = [i for i in free if i > last]
+                idx = (after or free or [None])[0]
+        if idx is None:
+            matches.append((None, None))
+            continue
+        used.add(idx)
+        last = idx
+        matches.append((current_segments[idx].id, status))
+    return matches
+
+
 def build_import_diffs(
     parsed: List[ParsedMdSegment],
     sidecar: Optional[dict],
@@ -572,6 +656,7 @@ def build_import_diffs(
     status_label_to_key: Dict[str, str],
     strict_tags: bool = True,
     check_source: bool = True,
+    row_matches: Optional[List[RowMatch]] = None,
 ) -> List[ImportDiff]:
     """Match parsed Markdown segments to live segments and classify each.
 
@@ -587,6 +672,9 @@ def build_import_diffs(
         strict_tags: if True, a structural tag-count mismatch is flagged and not
             applied; if False it is applied with a warning note.
         check_source: if True, a source-hash mismatch is flagged (tamper guard).
+        row_matches: explicit matches from :func:`match_rows_by_source`, one per
+            parsed row. When given, ``sidecar`` is ignored and there is no
+            position fallback: an unmatched row is reported as missing.
     """
     by_id = {c.id: c for c in current_segments}
     by_number = {c.number: c for c in current_segments}
@@ -600,13 +688,26 @@ def build_import_diffs(
                 continue
 
     diffs: List[ImportDiff] = []
-    for row in parsed:
-        side = sidecar_by_number.get(row.number)
+    for row_index, row in enumerate(parsed):
         cur: Optional[CurrentSeg] = None
-        if side is not None and side.get("segment_id") is not None:
-            cur = by_id.get(_as_int(side.get("segment_id")))
-        if cur is None:
-            cur = by_number.get(row.number)
+        if row_matches is not None:
+            seg_id, export_status = row_matches[row_index]
+            # Source was the match key, so there is no hash to check; only the
+            # export-time status (known when a session sidecar supplied it).
+            side = {"status": export_status} if export_status else None
+            if seg_id is not None:
+                cur = by_id.get(seg_id)
+            if cur is None:
+                diffs.append(ImportDiff(
+                    row.number, None, KIND_MISSING,
+                    note="Source text not found in the open project."))
+                continue
+        else:
+            side = sidecar_by_number.get(row.number)
+            if side is not None and side.get("segment_id") is not None:
+                cur = by_id.get(_as_int(side.get("segment_id")))
+            if cur is None:
+                cur = by_number.get(row.number)
 
         if cur is None:
             diffs.append(ImportDiff(row.number, None, KIND_MISSING,
