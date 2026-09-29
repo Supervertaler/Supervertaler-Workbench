@@ -12135,6 +12135,15 @@ class SupervertalerQt(QMainWindow):
         # (tags, numbers, terminology, consistency) and spelling/grammar
         # (LanguageTool). (issue #234)
         self.qa_menu = menubar.addMenu(self.tr("&QA"))
+
+        # Saved find-only checks – a regex linter for translations (#209)
+        qa_checks_action = QAction(self.tr("🔎 Run QA &Checks..."), self)
+        qa_checks_action.setToolTip(self.tr(
+            "Run saved find-only checks (double spaces, doubled words, your own "
+            "patterns) over the project and list what they find"))
+        qa_checks_action.triggered.connect(self.show_qa_checks_dialog)
+        self.qa_menu.addAction(qa_checks_action)
+
         proofreading_submenu = self.qa_menu.addMenu(self.tr("✅ &Proofreading"))
 
         proofread_action = QAction(self.tr("✅ &Proofread Translation..."), self)
@@ -54398,9 +54407,37 @@ class SupervertalerQt(QMainWindow):
         except Exception as e:
             self.log(f"⚠ Could not save F&R demote preference: {e}")
 
+    def show_qa_checks_dialog(self):
+        """QA → Run QA Checks (issue #209). Non-modal, so findings can be fixed
+        in the grid while the list stays open."""
+        from modules.qa_checks_dialog import QAChecksDialog
+        dlg = getattr(self, '_qa_checks_dialog', None)
+        if dlg is None:
+            def _reload_fr_sets():
+                mgr = getattr(self, 'fr_sets_manager', None)
+                if mgr is not None:
+                    try:
+                        mgr.reload_sets()
+                    except RuntimeError:
+                        pass  # its dialog has been closed and deleted
+            dlg = QAChecksDialog(
+                self, Path(self.user_data_path) / "find_replace_sets",
+                get_segments=lambda: self.current_project.segments if self.current_project else [],
+                navigate=self._navigate_to_segment_by_id,
+                on_sets_changed=_reload_fr_sets)
+            self._qa_checks_dialog = dlg
+        else:
+            dlg.refresh_sets()
+        dlg.show()
+        dlg.raise_()
+        dlg.activateWindow()
+
     def _fr_run_set_batch(self, fr_set: FindReplaceSet):
         """Run all enabled operations in a F&R Set as a batch (optimized for speed)."""
-        enabled_ops = [op for op in fr_set.operations if op.enabled and op.find_text]
+        # QA checks are find-only (#209) – never run them as replacements, or
+        # their empty "Replace with" would delete every match.
+        enabled_ops = [op for op in fr_set.operations if op.enabled and op.find_text
+                       and not getattr(op, 'check_only', False)]
         
         if not enabled_ops:
             QMessageBox.information(self.find_replace_dialog, "Run All", "No enabled operations with find text.")

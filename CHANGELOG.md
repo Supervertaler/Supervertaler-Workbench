@@ -7,6 +7,21 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ## Unreleased
 
+### Added (QA · saved checks that only find, never replace)
+
+The new **QA → 🔎 Run QA Checks…** runs a set of saved checks over the whole project and lists everything they find (issue #209). Typical checks are double spaces, doubled words, a space before a full stop, or any pattern of your own, such as a deprecated term or the wrong decimal separator. Nothing in the project is changed.
+
+- **A check is an ordinary Find & Replace operation with the new QA box ticked** in **Find & Replace → F&R Sets**. Checks are saved in F&R Sets and shared the same way, through Export and Import of `.svfr` files, so you can keep, say, a "patent QA" and a "marketing QA" set. They can be plain text, whole words, entire segments or regular expressions, in the source, the target or both.
+- **▶ Run All never runs a QA check as a replacement.** Checks usually have an empty "Replace with", which would otherwise delete every match.
+- **The results list** shows each finding with its segment number, the check, the side and the matched text, plus the surrounding text with the match in [brackets] and spaces shown as ·. Double-click a finding to go to its segment. The window stays open while you fix things; click **Run** again to refresh it. Findings can be exported to CSV.
+- **Add basic checks** creates a starter set, "QA - basic checks", with:
+  - double spaces;
+  - a space before a full stop or comma;
+  - doubled words;
+  - a space inside brackets.
+
+  Three more checks are included but switched off: a space at the start or end, repeated punctuation, and straight quotes.
+
 ### Added (Find & Replace · change the project's TMs at the same time)
 
 Find & Replace has a new option, **Also in writable TMs** (issue #68). When it is ticked, **Replace all** makes the same change in the translation memories this project writes to, meaning the TMs with **Write** ticked. The old wording then stops coming back as TM matches after you have changed a term throughout the project. Nothing is changed blindly: the confirmation says how many TM entries will change, which TMs they are in, and shows a few examples. It also reminds you that TM changes cannot be undone with Ctrl+Z, which is why the option is off each time the dialog opens. Read-only TMs are never touched. If a change makes an entry identical to one already in the TM, the two are merged. The option uses the same settings as the project replace: Match (anything, whole words or entire segment), Case sensitive, Auto-adjust case and Regex.

@@ -108,6 +108,8 @@ class FindReplaceOperation:
     enabled: bool = True
     auto_case: bool = False  # Auto-adjust replacement to match case pattern of matched text
     use_regex: bool = False  # Treat find_text as a regular expression (replace supports backreferences)
+    check_only: bool = False  # QA check: find-only, never replaced; ▶ Run All skips it (issue #209)
+    note: str = ""  # What the check is for, shown in the QA report
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -171,6 +173,11 @@ class HistoryComboBox(QComboBox):
     def setText(self, text: str):
         """Set current text (convenience method)."""
         self.setCurrentText(text)
+
+
+_QA_TOOLTIP = ("QA check – tick to make this operation find-only. It never replaces "
+               "anything (▶ Run All skips it); QA → Run QA Checks lists every match "
+               "as a finding instead.")
 
 
 class FindReplaceSetsManager(QWidget):
@@ -253,8 +260,11 @@ class FindReplaceSetsManager(QWidget):
         right_layout.addWidget(self.ops_label)
         
         self.ops_table = QTableWidget()
-        self.ops_table.setColumnCount(5)
-        self.ops_table.setHorizontalHeaderLabels(["✓", "Find", "Replace", "Search in", "Match"])
+        self.ops_table.setColumnCount(6)
+        self.ops_table.setHorizontalHeaderLabels(["✓", "Find", "Replace", "Search in", "Match", "QA"])
+        _qa_hdr = self.ops_table.horizontalHeaderItem(5)
+        if _qa_hdr:
+            _qa_hdr.setToolTip(_QA_TOOLTIP)
         _enabled_hdr = self.ops_table.horizontalHeaderItem(0)
         if _enabled_hdr:
             _enabled_hdr.setToolTip(
@@ -264,6 +274,7 @@ class FindReplaceSetsManager(QWidget):
         self.ops_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         self.ops_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
         self.ops_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        self.ops_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
         self.ops_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.ops_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.ops_table.cellDoubleClicked.connect(self._on_op_double_clicked)
@@ -296,6 +307,25 @@ class FindReplaceSetsManager(QWidget):
         
         layout.addWidget(splitter)
     
+    def reload_sets(self):
+        """Re-read the sets folder (e.g. after QA created a set), keeping the
+        selected set selected."""
+        current = self.current_set.name if self.current_set else None
+        # Clear first: re-selecting an already selected row emits no signal,
+        # which would leave current_set unset.
+        self.sets_table.blockSignals(True)
+        self.sets_table.clearSelection()
+        self.sets_table.blockSignals(False)
+        self.current_set = None
+        self._load_sets()
+        self._refresh_sets_table()
+        names = [s.name for s in self.sets]
+        if names:
+            index = names.index(current) if current in names else 0
+            self.sets_table.selectRow(index)
+            self.current_set = self.sets[index]
+            self._refresh_ops_table()
+
     def _load_sets(self):
         """Load all F&R sets from the sets directory."""
         self.sets = []
@@ -382,6 +412,17 @@ class FindReplaceSetsManager(QWidget):
             match_label = "Regex" if getattr(op, 'use_regex', False) else match_map.get(op.match_mode, "Anything")
             match_item = QTableWidgetItem(match_label)
             self.ops_table.setItem(i, 4, match_item)
+
+            # QA check: find-only, reported by QA → Run QA Checks (#209)
+            qa_item = QTableWidgetItem()
+            qa_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            qa_item.setFlags(qa_item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            qa_item.setCheckState(Qt.CheckState.Checked if getattr(op, 'check_only', False)
+                                  else Qt.CheckState.Unchecked)
+            qa_item.setToolTip(_QA_TOOLTIP)
+            self.ops_table.setItem(i, 5, qa_item)
+            if getattr(op, 'note', ''):
+                find_item.setToolTip(op.note)
         
         self.ops_table.blockSignals(False)
     
@@ -414,6 +455,8 @@ class FindReplaceSetsManager(QWidget):
             op.find_text = item.text()
         elif col == 2:  # Replace text
             op.replace_text = item.text()
+        elif col == 5:  # QA check (find-only)
+            op.check_only = item.checkState() == Qt.CheckState.Checked
         
         self._save_set(self.current_set)
     
@@ -536,6 +579,12 @@ class FindReplaceSetsManager(QWidget):
         enabled_ops = [op for op in self.current_set.operations if op.enabled and op.find_text]
         if not enabled_ops:
             QMessageBox.information(self, "Run All", "No enabled operations with find text.")
+            return
+        if all(getattr(op, 'check_only', False) for op in enabled_ops):
+            QMessageBox.information(
+                self, "Run All",
+                "All enabled operations in this set are QA checks, which never replace "
+                "anything.\n\nRun them from QA → Run QA Checks.")
             return
         
         self.set_selected.emit(self.current_set)
