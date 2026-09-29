@@ -74,3 +74,64 @@ def word_diff(current: str, tm_source: str) -> List[Tuple[str, str]]:
         elif tag == "delete":      # only in the current source
             emit("add", cur[i1:i2])
     return out
+
+
+def char_diff(new: str, old: str) -> List[Tuple[str, str]]:
+    """Character-level ``[(kind, text)]`` for comparing two translations, e.g.
+    an MT suggestion (``new``) with the TM target (``old``) – the "at a glance"
+    comparison asked for in issue #208. Kinds as in :func:`word_diff`:
+    ``normal`` / ``add`` (only in ``new``) / ``delete`` (only in ``old``).
+
+    A raw character diff of two sentences is confetti, so tiny common runs
+    (one or two characters, or plain whitespace) sandwiched between changes are
+    folded into the change: "pompen" vs "pompje" reads as one changed ending,
+    not three separate letters."""
+    new, old = new or "", old or ""
+    matcher = difflib.SequenceMatcher(None, new, old, autojunk=False)
+    ops = [(tag, new[i1:i2], old[j1:j2]) for tag, i1, i2, j1, j2 in matcher.get_opcodes()]
+
+    # Fold short equal runs between two changes into the change
+    folded: List[List[str]] = []          # [tag, new_text, old_text]
+    for idx, (tag, a, b) in enumerate(ops):
+        between = 0 < idx < len(ops) - 1
+        if (tag == "equal" and between and (len(a) <= 2 or not a.strip())
+                and ops[idx - 1][0] != "equal" and ops[idx + 1][0] != "equal"):
+            tag = "replace"
+        if folded and tag != "equal" and folded[-1][0] != "equal":
+            folded[-1][1] += a
+            folded[-1][2] += b
+        else:
+            folded.append([tag, a, b])
+
+    out: List[Tuple[str, str]] = []
+
+    def emit(kind, text):
+        if not text:
+            return
+        if out and out[-1][0] == kind:
+            out[-1] = (kind, out[-1][1] + text)
+        else:
+            out.append((kind, text))
+
+    for tag, a, b in folded:
+        if tag == "equal":
+            emit("normal", a)
+        else:
+            emit("delete", b)
+            emit("add", a)
+    return out
+
+
+def diff_spans(parts: List[Tuple[str, str]], side: str) -> List[Tuple[int, int]]:
+    """``(start, end)`` of the changed characters on one side of a diff:
+    ``side="new"`` gives the ``add`` runs as offsets into the new text,
+    ``side="old"`` the ``delete`` runs as offsets into the old text."""
+    changed = "add" if side == "new" else "delete"
+    spans, pos = [], 0
+    for kind, text in parts:
+        if kind == "normal":
+            pos += len(text)
+        elif kind == changed:
+            spans.append((pos, pos + len(text)))
+            pos += len(text)
+    return spans

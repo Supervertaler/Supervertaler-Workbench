@@ -7,6 +7,12 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ## Unreleased
 
+### Added (QuickTrans · see where the MT engines disagree)
+
+QuickTrans lists the suggestions of several MT engines for the current segment. It now marks, character by character, where each one differs from the top result (issue #208). "Open de k**raan** langzaam." under "Open de klep langzaam." shows at a glance that only the noun differs. A small inflection or a punctuation change is just as easy to spot.
+
+This works in the docked QuickTrans panel and in the Ctrl+Alt+Q popup. The **Δ** button beside ⚙️ switches it on and off, and the choice is remembered. Only the display is marked: clicking a row, or Ctrl+1…9, still inserts that engine's exact translation.
+
 ### Added (Interface · Polish)
 
 The interface can now be used in Polish (issue #190): choose **Settings → General → Language → Polski — Polish** and restart. All 1,286 strings that can currently be translated are done. That covers every menu and menu item, the toolbar, the Settings pages, and most dialog titles, buttons and options. They follow one glossary of CAT terms (pamięć tłumaczeń, baza terminologiczna, dopasowanie rozmyte, znacznik, …).

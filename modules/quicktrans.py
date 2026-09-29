@@ -231,7 +231,9 @@ class MTSuggestionItem(QFrame):
         # Translation text
         text_label = QLabel(suggestion.translation)
         text_label.setWordWrap(True)
+        text_label.setTextFormat(Qt.TextFormat.PlainText)
         text_label.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
+        self.text_label = text_label
 
         if suggestion.is_error:
             text_label.setStyleSheet("color: #ff6b6b; font-size: 11px;")
@@ -241,6 +243,33 @@ class MTSuggestionItem(QFrame):
         layout.addWidget(text_label, 1, Qt.AlignmentFlag.AlignTop)
 
         self._update_style()
+
+    def set_reference(self, reference: Optional['MTSuggestion']):
+        """Mark the characters where this result differs from ``reference``
+        (the top result), or show it plain when ``reference`` is None
+        (issue #208). Only the label changes – a click still inserts the
+        translation itself."""
+        import html
+        from modules.tm_diff import char_diff
+        text = self.suggestion.translation or ''
+        if reference is None or self.suggestion.is_error or reference.is_error:
+            self.text_label.setTextFormat(Qt.TextFormat.PlainText)
+            self.text_label.setText(text)
+            self.text_label.setToolTip('')
+            return
+        parts = char_diff(text, reference.translation or '')
+        out = []
+        for kind, chunk in parts:
+            if kind == 'delete':
+                continue
+            chunk = html.escape(chunk).replace('\n', '<br>')
+            if kind == 'add':
+                chunk = (f"<span style='background-color: rgba(255, 179, 0, 0.45); "
+                         f"text-decoration: underline;'>{chunk}</span>")
+            out.append(chunk)
+        self.text_label.setTextFormat(Qt.TextFormat.RichText)
+        self.text_label.setText(''.join(out) or html.escape(text))
+        self.text_label.setToolTip(f"Highlighted: where this differs from {reference.provider_name}")
 
     def _update_style(self):
         """Update visual style based on selection state"""
@@ -289,6 +318,52 @@ class MTSuggestionItem(QFrame):
 
 
 class QuickTransProviderMixin:
+    # ── Differences between results (issue #208) ─────────────────────────
+    SHOW_DIFFERENCES_KEY = "quicktrans_show_differences"
+
+    def _show_differences(self) -> bool:
+        app = getattr(self, 'parent_app', None)
+        try:
+            return bool(app.load_general_settings().get(self.SHOW_DIFFERENCES_KEY, True))
+        except Exception:
+            return True
+
+    def _set_show_differences(self, on: bool):
+        app = getattr(self, 'parent_app', None)
+        try:
+            settings = app.load_general_settings()
+            settings[self.SHOW_DIFFERENCES_KEY] = bool(on)
+            app.save_general_settings(settings)
+        except Exception:
+            pass
+        self._refresh_differences()
+
+    def _make_differences_button(self, style: str, size: int) -> 'QPushButton':
+        btn = QPushButton("Δ")
+        btn.setFixedSize(size, size)
+        btn.setCheckable(True)
+        btn.setChecked(self._show_differences())
+        btn.setToolTip("Highlight where each result differs from the top one, character by character")
+        btn.setStyleSheet(style + " QPushButton:checked { background-color: rgba(255, 179, 0, 110); }")
+        btn.toggled.connect(self._set_show_differences)
+        self._differences_btn = btn
+        return btn
+
+    def _refresh_differences(self):
+        """Mark, in every result, the characters that differ from the first
+        usable result, so the engines can be compared at a glance."""
+        layout = getattr(self, 'results_layout', None) or getattr(self, 'suggestions_layout', None)
+        if layout is None:
+            return
+        items = [layout.itemAt(i).widget() for i in range(layout.count())]
+        items = [w for w in items if isinstance(w, MTSuggestionItem)]
+        btn = getattr(self, '_differences_btn', None)
+        on = btn.isChecked() if btn is not None else self._show_differences()
+        reference = next((w for w in items if not w.suggestion.is_error
+                          and (w.suggestion.translation or '').strip()), None)
+        for w in items:
+            w.set_reference(reference.suggestion if (on and reference is not None and w is not reference) else None)
+
     """Shared provider enumeration + LLM calling logic.
 
     Used by both the QuickTrans popup (``MTQuickPopup``) and the docked
@@ -733,6 +808,8 @@ class MTQuickPopup(QuickTransProviderMixin, QDialog):
         source_header_row.addStretch()
         source_header_row.addWidget(retranslate_btn, 0, Qt.AlignmentFlag.AlignVCenter)
         source_header_row.addWidget(superlookup_btn, 0, Qt.AlignmentFlag.AlignVCenter)
+        source_header_row.addWidget(self._make_differences_button(_icon_btn_style, 24), 0,
+                                    Qt.AlignmentFlag.AlignVCenter)
         source_header_row.addWidget(settings_btn, 0, Qt.AlignmentFlag.AlignVCenter)
         source_layout.addLayout(source_header_row)
 
@@ -1116,6 +1193,7 @@ class MTQuickPopup(QuickTransProviderMixin, QDialog):
                 row.setParent(None)
                 row.deleteLater()
                 self._renumber_grouped()
+                self._refresh_differences()
 
             def on_done(_w=worker):
                 if _w in self._fetch_workers:
@@ -1219,6 +1297,7 @@ class MTQuickPopup(QuickTransProviderMixin, QDialog):
         else:
             idx = self.suggestions_layout.count() - 1
         self.suggestions_layout.insertWidget(idx, item)
+        self._refresh_differences()
 
         # Auto-select first non-error result (corrected after regrouping).
         if self.selected_index == -1 and not is_error:
@@ -1390,6 +1469,8 @@ class QuickTransPanel(QuickTransProviderMixin, QWidget):
         self._refresh_btn.setStyleSheet(_PANEL_ICON_BTN_STYLE)
         self._refresh_btn.clicked.connect(self._force_refresh)
         header.addWidget(self._refresh_btn)
+
+        header.addWidget(self._make_differences_button(_PANEL_ICON_BTN_STYLE, 22))
 
         settings_btn = QPushButton("⚙️")
         settings_btn.setFixedSize(22, 22)
@@ -1572,6 +1653,7 @@ class QuickTransPanel(QuickTransProviderMixin, QWidget):
         else:
             idx = self.results_layout.count() - 1
         self.results_layout.insertWidget(idx, item)
+        self._refresh_differences()
         return item
 
     def _add_llm_button(self, name, code, call_func, source_text, src, tgt):
@@ -1624,6 +1706,7 @@ class QuickTransPanel(QuickTransProviderMixin, QWidget):
                 self.results_layout.insertWidget(idx, item)
                 row.setParent(None)
                 row.deleteLater()
+                self._refresh_differences()
 
             def on_done(_w=worker):
                 if _w in self._workers:
