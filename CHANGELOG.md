@@ -7,6 +7,20 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ## Unreleased
 
+### Added (Find & Replace · change the project's TMs at the same time)
+
+Find & Replace has a new option, **Also in writable TMs** (issue #68). When it is ticked, **Replace all** makes the same change in the translation memories this project writes to, meaning the TMs with **Write** ticked. The old wording then stops coming back as TM matches after you have changed a term throughout the project. Nothing is changed blindly: the confirmation says how many TM entries will change, which TMs they are in, and shows a few examples. It also reminds you that TM changes cannot be undone with Ctrl+Z, which is why the option is off each time the dialog opens. Read-only TMs are never touched. If a change makes an entry identical to one already in the TM, the two are merged. The option uses the same settings as the project replace: Match (anything, whole words or entire segment), Case sensitive, Auto-adjust case and Regex.
+
+(The other half of that issue, a replace that follows the case of the text it replaces, was already there as **Auto-adjust case**.)
+
+### Fixed (Find & Replace · "Whole words" replaced inside longer words)
+
+With **Match: Whole words**, Find found only whole words, but **Replace this** and **Replace all** then replaced every occurrence in the segment, including those inside longer words. Replacing "pomp" with "klep" turned a segment's "Pomphuis" into "Klephuis" as well. Both now replace whole words only, as F&R Sets already did. A backslash in the replacement text is also now inserted as typed, unless Regex is on.
+
+### Fixed (TM · an edited entry stopped being found as an exact match)
+
+Editing a TM entry, from the TM editor or the match panel, saved it with a different lookup key from the one used everywhere else. From then on the entry was no longer found as a 100% match whenever its source text contained a capital letter, which almost every sentence does. Edits now keep the entry findable. Entries edited before this fix are found again once they are edited once more.
+
 ### Added (SuperLookup · add your own web resources)
 
 The **Web Resources** sidebar in SuperLookup has a new **⚙ Custom Resources…** button, so you can add lookup sites of your own below the built-in ones (IATE, Linguee, ProZ and so on). This was one of the requests collected in issue #208.

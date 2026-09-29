@@ -2232,7 +2232,11 @@ class DatabaseManager:
         entry_id = row['id']
         new_source_stripped = new_source.strip()
         new_target_stripped = new_target.strip()
-        new_hash = hashlib.md5(new_source_stripped.lower().encode('utf-8')).hexdigest()
+        # Same hash as add_translation_unit() writes and get_exact_match() looks
+        # up. This used to be md5 of the *lower-cased* source, so an edited entry
+        # whose source had any capital letter stopped being an exact match.
+        new_hash = hashlib.md5(
+            _normalize_for_matching(new_source_stripped).encode('utf-8')).hexdigest()
         # Keep target_hash in step with the edited target so reverse exact
         # matching stays correct after an edit.
         new_target_hash = hashlib.md5(
