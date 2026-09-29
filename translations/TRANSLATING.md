@@ -50,7 +50,7 @@ translations/
 ├── supervertaler_template.xlf   <- regenerated from source; never edited by hand
 ├── supervertaler_zh_CN.xlf      <- Simplified Chinese
 ├── supervertaler_zh_TW.xlf      <- Traditional Chinese
-└── supervertaler_pl.xlf         <- Polish
+└── supervertaler_pl.xlf         <- Polish (complete; machine-translated, native review welcome)
 ```
 
 At startup, Supervertaler reads the `.xlf` matching the user's selected language (Settings → General → 🌐 Language) and applies it. Targets marked `needs-translation` (the default for untranslated entries) fall through to English – partial coverage is fine.

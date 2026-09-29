@@ -7,6 +7,14 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ## Unreleased
 
+### Added (Interface · Polish)
+
+The interface can now be used in Polish (issue #190): choose **Settings → General → Language → Polski — Polish** and restart. All 1,286 strings that can currently be translated are done. That covers every menu and menu item, the toolbar, the Settings pages, and most dialog titles, buttons and options. They follow one glossary of CAT terms (pamięć tłumaczeń, baza terminologiczna, dopasowanie rozmyte, znacznik, …).
+
+The translation was produced by Claude Code and checked mechanically: every menu accelerator, placeholder, HTML tag, keyboard shortcut, emoji and product name survived. It has not yet been reviewed by a native speaker, so corrections are welcome. The file is `translations/supervertaler_pl.xlf` and opens in any CAT tool.
+
+Message boxes and some labels are still English everywhere; they are not yet wrapped for translation in any language. The list of translatable strings was also refreshed (1,102 → 1,286). The Dutch and Chinese files were updated to it, keeping all their existing translations.
+
 ### Fixed (Projects · a failed save could destroy the project file)
 
 Saving wrote the project straight over the existing `.svproj`. If anything went wrong halfway (a full disk, a crash, a value that could not be saved), the file was left cut off and could no longer be opened. Now (issue #228):
