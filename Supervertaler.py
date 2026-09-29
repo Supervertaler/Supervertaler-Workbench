@@ -24079,6 +24079,16 @@ class SupervertalerQt(QMainWindow):
 
         layout.addWidget(settings_tabs)
 
+        # Issue #214: pages with a "💾 Save …" button now save themselves a
+        # moment after each change – the button makes way for a note.
+        try:
+            from modules import settings_autosave
+            self._settings_autosavers = settings_autosave.install(
+                [settings_tabs.widget(i) for i in range(settings_tabs.count())],
+                notify=lambda message: self.statusBar().showMessage(message, 2500))
+        except Exception as e:
+            self.log(f"⚠ Settings auto-save not available: {e}")
+
         # Apply saved UI font scale on startup
         saved_scale = self._get_global_ui_font_scale()
         if saved_scale != 100:
@@ -24279,9 +24289,10 @@ class SupervertalerQt(QMainWindow):
         lang_group.setLayout(lang_layout)
         layout.addWidget(lang_group)
 
-        # Save button – kept for users who want an explicit confirmation
-        # dialog. Auto-save above means it's no longer strictly required.
+        # Save button – hidden by the Settings auto-saver (issue #214), which
+        # clicks it for the user; the combos also save themselves above.
         save_btn = QPushButton(self.tr("💾 Save Language Settings"))
+        save_btn.setProperty("settings_save_button", True)  # clicked for the user by the auto-saver (issue #214)
         save_btn.setStyleSheet("font-weight: bold; padding: 8px;")
         save_btn.clicked.connect(lambda: self._save_language_settings_from_ui(source_combo, target_combo))
         layout.addWidget(save_btn)
@@ -25338,6 +25349,7 @@ class SupervertalerQt(QMainWindow):
 
         # ========== SAVE BUTTON ==========
         save_btn = QPushButton(self.tr("💾 Save AI Settings"))
+        save_btn.setProperty("settings_save_button", True)  # clicked for the user by the auto-saver (issue #214)
         save_btn.setStyleSheet("font-weight: bold; padding: 8px; outline: none;")
         save_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         save_btn.clicked.connect(lambda: self._save_ai_settings_from_ui(
@@ -25467,6 +25479,7 @@ class SupervertalerQt(QMainWindow):
         
         # Save button
         save_btn = QPushButton(self.tr("💾 Save MT Settings"))
+        save_btn.setProperty("settings_save_button", True)  # clicked for the user by the auto-saver (issue #214)
         save_btn.setStyleSheet("font-weight: bold; padding: 8px;")
         save_btn.clicked.connect(lambda: self._save_mt_settings_from_ui(
             google_translate_enable_cb, deepl_enable_cb, microsoft_enable_cb,
@@ -25861,6 +25874,7 @@ class SupervertalerQt(QMainWindow):
 
         # Save button
         save_btn = QPushButton(self.tr("💾 Save QuickTrans Settings"))
+        save_btn.setProperty("settings_save_button", True)  # clicked for the user by the auto-saver (issue #214)
         save_btn.setStyleSheet("font-weight: bold; padding: 8px;")
         save_btn.clicked.connect(self._save_mt_quick_lookup_settings)
         layout.addWidget(save_btn)
@@ -26920,6 +26934,7 @@ class SupervertalerQt(QMainWindow):
         
         # Save button
         save_btn = QPushButton(self.tr("💾 Save General Settings"))
+        save_btn.setProperty("settings_save_button", True)  # clicked for the user by the auto-saver (issue #214)
         save_btn.setStyleSheet("font-weight: bold; padding: 8px;")
         save_btn.clicked.connect(lambda: self._save_general_settings_from_ui(
             restore_last_project_cb, allow_replace_cb, auto_propagate_cb,
@@ -28156,6 +28171,7 @@ class SupervertalerQt(QMainWindow):
         
         # Save button
         save_btn = QPushButton(self.tr("💾 Save View Settings"))
+        save_btn.setProperty("settings_save_button", True)  # clicked for the user by the auto-saver (issue #214)
         save_btn.setStyleSheet("font-weight: bold; padding: 8px;")
         
         def save_view_settings_with_scale():
@@ -28817,6 +28833,7 @@ class SupervertalerQt(QMainWindow):
         buttons_layout.addStretch()
 
         save_btn = QPushButton(self.tr("💾 Save System Prompt"))
+        save_btn.setProperty("settings_save_button", True)  # clicked for the user by the auto-saver (issue #214)
         save_btn.setStyleSheet("font-weight: bold; padding: 8px;")
         save_btn.clicked.connect(lambda: self._save_system_prompt_from_ui(mode_combo, system_prompt_editor))
         buttons_layout.addWidget(save_btn)
@@ -29000,6 +29017,7 @@ class SupervertalerQt(QMainWindow):
 
         # Save button
         save_btn = QPushButton(self.tr("💾 Save User Identity"))
+        save_btn.setProperty("settings_save_button", True)  # clicked for the user by the auto-saver (issue #214)
         save_btn.setStyleSheet("font-weight: bold; padding: 8px;")
         save_btn.clicked.connect(lambda: self._save_user_identity_from_ui(name_edit))
         layout.addWidget(save_btn)
@@ -29668,6 +29686,7 @@ class SupervertalerQt(QMainWindow):
         
         # Save button
         save_btn = QPushButton(self.tr("💾 Save Debug Settings"))
+        save_btn.setProperty("settings_save_button", True)  # clicked for the user by the auto-saver (issue #214)
         save_btn.setStyleSheet("font-weight: bold; padding: 8px;")
         save_btn.clicked.connect(lambda: self._save_debug_settings_from_ui(
             debug_mode_cb, debug_export_cb, debounce_spin

@@ -7,6 +7,24 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ## Unreleased
 
+### Improved (Settings · every page saves itself)
+
+The Settings pages no longer have a **💾 Save** button (issue #214). A change is written a moment after you make it, and a short "✓ Settings saved" appears in the status bar. Before, a change was lost if you left the page without clicking Save. The newer pages (AutoCorrect, Backup, Clipboard, Segmentation Rules) already saved on every change. The rest now do too:
+- General
+- User Identity
+- AI Settings
+- Language Pair
+- MT Settings
+- QuickTrans
+- View Settings
+- System Prompts
+- Debug
+
+Each page still uses its own save routine, so what gets saved and applied is exactly what the button did, without the "Settings saved" pop-up. Some details:
+- **Typing.** Saving waits for a short pause while you type, and whatever is pending is saved the moment you leave the field. A system prompt you are editing is therefore saved before you switch to another prompt.
+- **Only real changes are saved.** A save happens only when the page's values actually changed. Buttons that just *do* something (Open folder, Export debug log, Change data folder…) never write the page's settings as a side effect.
+- **Loading doesn't save.** Loading a project or filling in a page from code never saves; only your own clicks and edits do.
+
 ### Added (Settings · your own segmentation rules)
 
 **Settings → 📏 Segmentation Rules** used to be a placeholder. It now controls where Supervertaler splits text into segments whenever it does the splitting itself (issue #191). That covers:
