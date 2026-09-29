@@ -9372,6 +9372,19 @@ class SupervertalerQt(QMainWindow):
         saved_font_scale = self._get_global_ui_font_scale()
         self.theme_manager.font_scale = saved_font_scale
         self.theme_manager.apply_theme(QApplication.instance())
+
+        # Dark themes: rewrite the fixed light colours in widgets' own
+        # stylesheets – now, and for dialogs and lazily built tabs as they
+        # appear (issue #78). No effect in light themes.
+        try:
+            from modules.dark_style_adapter import DarkStyleAdapter
+            self._dark_style_adapter = DarkStyleAdapter(
+                lambda: self.theme_manager.current_theme if getattr(self, 'theme_manager', None) else None,
+                self)
+            QApplication.instance().installEventFilter(self._dark_style_adapter)
+            self._dark_style_adapter.refresh_all()
+        except Exception as e:
+            print(f"[Theme] dark style adapter unavailable: {e}")
         
         # Update widgets that were created before theme_manager existed
         if hasattr(self, 'termlens_widget') and self.termlens_widget:
@@ -66804,6 +66817,10 @@ class SupervertalerQt(QMainWindow):
         self._update_settings_sidebar_theme()
         self._update_tools_sidebar_theme()
         self._update_resources_sidebar_theme()
+
+        # Inline light stylesheets: adapt for a dark theme, restore for a light one (#78)
+        if getattr(self, '_dark_style_adapter', None) is not None:
+            self._dark_style_adapter.refresh_all()
 
     def show_file_progress_dialog(self):
         """Show file progress - redirects to Project Info dialog, File Progress tab."""

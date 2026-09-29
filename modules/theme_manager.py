@@ -555,10 +555,41 @@ class ThemeManager:
             }}
         """
         
+        # Dark themes (issue #78): trees and lists (the prompt library, the
+        # clipboard columns…) had no rules, so their selected row was drawn
+        # white; and natively painted areas followed the light default palette.
+        dark = QColor(theme.window_bg).lightnessF() < 0.3
+        if dark:
+            stylesheet += f"""
+            QTreeView, QListView {{
+                background-color: {theme.base};
+                alternate-background-color: {theme.alternate_bg};
+                color: {theme.text};
+                selection-background-color: {theme.highlight};
+                selection-color: {theme.highlight_text};
+            }}
+            """
+
         app.setStyleSheet(stylesheet)
 
+        # Palette: derived from the theme for dark themes, the style's standard
+        # one otherwise (so light themes look exactly as before).
+        palette = QPalette(app.style().standardPalette()) if not dark else QPalette(app.palette())
+        if dark:
+            for role, value in (
+                (QPalette.ColorRole.Window, theme.window_bg),
+                (QPalette.ColorRole.WindowText, theme.text),
+                (QPalette.ColorRole.Base, theme.base),
+                (QPalette.ColorRole.AlternateBase, theme.alternate_bg),
+                (QPalette.ColorRole.Text, theme.text),
+                (QPalette.ColorRole.Button, theme.button),
+                (QPalette.ColorRole.ButtonText, theme.text),
+                (QPalette.ColorRole.Highlight, theme.highlight),
+                (QPalette.ColorRole.HighlightedText, theme.highlight_text),
+                (QPalette.ColorRole.PlaceholderText, theme.text_placeholder),
+            ):
+                palette.setColor(role, QColor(value))
         # Set tooltip colors via palette (some Qt versions ignore stylesheet for tooltips)
-        palette = app.palette()
         palette.setColor(QPalette.ColorRole.ToolTipBase, QColor("#f5f5f5"))
         palette.setColor(QPalette.ColorRole.ToolTipText, QColor("#333333"))
         app.setPalette(palette)

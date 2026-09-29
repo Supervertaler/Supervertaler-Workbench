@@ -7,6 +7,22 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ## Unreleased
 
+### Fixed (Dark theme · no more white panels or unreadable light-on-light text)
+
+The Dark theme left bright areas in many places, and some had light text on a light background (issue #78). The theme colours the application as a whole, but many panels carry colours of their own that were chosen for a light background. Examples:
+- the Clipboard Manager's three columns were plain white;
+- the SuperLookup Web Resources list was light grey text on light grey;
+- the info boxes in the TMs, Termbases, SuperLookup and Voice tabs were glaring pale blue or yellow;
+- the amber **Replace this / Replace all** buttons had light text on light amber;
+- the selected row in the AI prompt library was drawn white.
+
+In a dark theme these colours are now adjusted automatically, everywhere at once, including dialogs and tabs opened later:
+- white and pale backgrounds become dark;
+- pale tinted ones become a dark shade of the same colour, so an info box stays recognisably blue or yellow;
+- dark text becomes light, so blue headings become light blue.
+
+Strong colours, such as the orange, blue and green buttons, are left as they are. The light themes are not affected; screenshots of every tab are identical before and after. Switching from Dark back to a light theme restores the original colours.
+
 ### Added (QA · check the translation with LanguageTool)
 
 **QA → 📝 Check with LanguageTool…** checks the target text of every segment for grammar, spelling and style mistakes with LanguageTool (issue #233). LanguageTool is particularly good at German and Dutch grammar.
