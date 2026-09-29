@@ -2,10 +2,10 @@
 
 All notable changes to Supervertaler Workbench are documented in this file.
 
-**Current Version:** v1.10.371 (September 9, 2026)
+**Current Version:** v1.10.372 (September 29, 2026)
 
 
-## Unreleased
+## v1.10.372 - September 29, 2026
 
 ### Added (Settings · inline codes and placeholders treated like tags)
 
