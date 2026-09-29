@@ -1362,6 +1362,29 @@ class TermbaseManager:
             self.log(f"✗ Error adding synonym: {e}")
             return False
     
+    def synonyms_for_terms(self, term_ids) -> Dict[int, Dict[str, List[str]]]:
+        """``{term_id: {'source': [...], 'target': [...]}}`` for many terms in
+        one query (the Glossaries tab's Synonyms column, issue #114)."""
+        term_ids = [int(t) for t in term_ids if t is not None]
+        result: Dict[int, Dict[str, List[str]]] = {}
+        if not term_ids:
+            return result
+        try:
+            cursor = self.db_manager.cursor
+            for i in range(0, len(term_ids), 500):
+                chunk = term_ids[i:i + 500]
+                cursor.execute(f"""
+                    SELECT term_id, language, synonym_text FROM termbase_synonyms
+                    WHERE term_id IN ({','.join('?' * len(chunk))})
+                    ORDER BY term_id, display_order ASC, created_date ASC
+                """, chunk)
+                for term_id, language, text in cursor.fetchall():
+                    entry = result.setdefault(int(term_id), {'source': [], 'target': []})
+                    entry['source' if language == 'source' else 'target'].append(text)
+        except Exception as e:
+            self.log(f"✗ Error getting synonyms: {e}")
+        return result
+
     def get_synonyms(self, term_id: int, language: Optional[str] = None) -> List[Dict]:
         """
         Get synonyms for a term, ordered by display_order (position)
@@ -1497,3 +1520,16 @@ class TermbaseManager:
         except Exception as e:
             self.log(f"✗ Error deleting synonym: {e}")
             return False
+
+
+def synonym_chip_translation(synonym: str, target_term: str, target_synonyms: List[str]):
+    """What a TermLens chip for a matched *source synonym* offers (issue #114):
+    ``(translation, alternatives)``. When the target synonyms hold the same
+    form – an abbreviation or product name kept as is, ``MEKO`` → ``MEKO`` –
+    that is the translation; otherwise the main target term is. Everything
+    else (main term included) stays available as an alternative."""
+    target_synonyms = [t for t in (target_synonyms or []) if t]
+    same = next((t for t in target_synonyms if t.strip().lower() == (synonym or '').strip().lower()), None)
+    if same is None:
+        return target_term, target_synonyms
+    return same, [target_term] + [t for t in target_synonyms if t is not same]

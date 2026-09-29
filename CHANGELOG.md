@@ -7,6 +7,12 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ## Unreleased
 
+### Improved (Glossaries · synonyms are first-class citizens)
+
+Two improvements for glossary synonyms (issue #114):
+- **TermLens shows a synonym where it occurs, even next to the main term.** Take an entry *methyl-ethylketoxime* → *methyl ethyl ketoxime* with the synonym *MEKO* on both sides. In "…op basis van methyl-ethylketoxime (MEKO) en…", TermLens used to show only the main term. It now also shows **MEKO** under "(MEKO)". A synonym's chip suggests the matching target synonym when there is one (MEKO → MEKO), otherwise the main target term, and offers the other forms as alternatives. The grid highlights the synonym too.
+- **Resources → Glossaries has a Synonyms column**, listing each term's source and target synonyms, for example `MEKO → MEKO`.
+
 ### Added (Editor · tags are protected in the target, as in memoQ and Trados)
 
 Inline tags in the target cell now behave as single units, so a stray keystroke can no longer leave half a tag behind (issue #113). This covers `<b>`, `</1>`, `[2}`, `{3}`, Déjà Vu `{00108}` and your own codes from Settings → Inline Codes:

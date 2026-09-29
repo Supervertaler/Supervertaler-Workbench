@@ -20879,8 +20879,9 @@ class SupervertalerQt(QMainWindow):
         # and triage — terms they just added but realised were wrong.
         # The Delete button moved from col 7 → col 8.
         terms_table = QTableWidget()
-        terms_table.setColumnCount(9)
-        terms_table.setHorizontalHeaderLabels(["Source Term", "Target Term", "Domain", "Notes", "Project", "Client", "Forbidden", "Created", ""])
+        # Issue #114: read-only Synonyms column at 8; Delete moved to 9.
+        terms_table.setColumnCount(10)
+        terms_table.setHorizontalHeaderLabels(["Source Term", "Target Term", "Domain", "Notes", "Project", "Client", "Forbidden", "Created", "Synonyms", ""])
         terms_table.horizontalHeader().setStretchLastSection(False)
         terms_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)      # Source – fills remaining space
         terms_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)      # Target – fills remaining space
@@ -20890,14 +20891,16 @@ class SupervertalerQt(QMainWindow):
         terms_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.Interactive)  # Client
         terms_table.horizontalHeader().setSectionResizeMode(6, QHeaderView.ResizeMode.Interactive)  # Forbidden
         terms_table.horizontalHeader().setSectionResizeMode(7, QHeaderView.ResizeMode.Interactive)  # Created
-        terms_table.horizontalHeader().setSectionResizeMode(8, QHeaderView.ResizeMode.Fixed)        # Delete button
+        terms_table.horizontalHeader().setSectionResizeMode(8, QHeaderView.ResizeMode.Interactive)  # Synonyms
+        terms_table.horizontalHeader().setSectionResizeMode(9, QHeaderView.ResizeMode.Fixed)        # Delete button
         terms_table.setColumnWidth(2, 100)  # Domain
         terms_table.setColumnWidth(3, 120)  # Notes
         terms_table.setColumnWidth(4, 100)  # Project
         terms_table.setColumnWidth(5, 100)  # Client
         terms_table.setColumnWidth(6, 70)   # Forbidden
         terms_table.setColumnWidth(7, 130)  # Created (fits "2026-05-17 14:32" with a little slack)
-        terms_table.setColumnWidth(8, 30)   # Delete button
+        terms_table.setColumnWidth(8, 160)  # Synonyms
+        terms_table.setColumnWidth(9, 30)   # Delete button
         terms_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         # v1.10.66: click-to-sort on every data column. We do NOT call
         # setSortingEnabled(True) — that would tell Qt to sort the
@@ -21092,7 +21095,9 @@ class SupervertalerQt(QMainWindow):
                 
                 terms = self.db_manager.cursor.fetchall()
                 terms_table.setRowCount(len(terms))
-                
+                # Synonyms for the whole page in one query (issue #114)
+                page_synonyms = termbase_mgr.synonyms_for_terms([t[0] for t in terms])
+
                 for row, term in enumerate(terms):
                     term_id, source, target, domain, notes, project, client, forbidden, created_raw = term
 
@@ -21143,13 +21148,27 @@ class SupervertalerQt(QMainWindow):
                     created_item.setFlags(created_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                     terms_table.setItem(row, 7, created_item)
 
-                    # Delete button (moved from col 7 → col 8 in v1.10.65)
+                    # Synonyms (read-only; issue #114): "source → target"
+                    syns = page_synonyms.get(int(term_id), {})
+                    src_syns, tgt_syns = syns.get('source', []), syns.get('target', [])
+                    syn_text = ""
+                    if src_syns or tgt_syns:
+                        syn_text = f"{', '.join(src_syns) or '–'}  →  {', '.join(tgt_syns) or '–'}"
+                    syn_item = QTableWidgetItem(syn_text)
+                    syn_item.setFlags(syn_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                    if syn_text:
+                        syn_item.setToolTip(
+                            f"Source synonyms: {', '.join(src_syns) or '(none)'}\n"
+                            f"Target synonyms: {', '.join(tgt_syns) or '(none)'}")
+                    terms_table.setItem(row, 8, syn_item)
+
+                    # Delete button (col 7 → 8 in v1.10.65, → 9 with the Synonyms column)
                     delete_btn = QPushButton("🗑")
                     delete_btn.setFixedSize(24, 24)
                     delete_btn.setToolTip(self.tr("Delete this term"))
                     delete_btn.setStyleSheet("QPushButton { border: none; } QPushButton:hover { background-color: #ffcccc; }")
                     delete_btn.clicked.connect(lambda checked, tid=term_id: delete_term(tid))
-                    terms_table.setCellWidget(row, 8, delete_btn)
+                    terms_table.setCellWidget(row, 9, delete_btn)
                 
                 update_pagination_ui()
                 
@@ -21179,7 +21198,7 @@ class SupervertalerQt(QMainWindow):
                     tgt_header = self._normalize_language_code(tgt_code) if tgt_code else "Target Term"
                     terms_table.setHorizontalHeaderLabels([
                         src_header, tgt_header, "Domain", "Notes",
-                        "Project", "Client", "Forbidden", "Created", ""
+                        "Project", "Client", "Forbidden", "Created", "Synonyms", ""
                     ])
             except Exception:
                 pass
@@ -21281,9 +21300,9 @@ class SupervertalerQt(QMainWindow):
 
             # Skip columns that have widgets or are read-only
             # (Forbidden=6 checkbox, Created=7 read-only timestamp,
-            # Delete=8 button). v1.10.65: Created column inserted at 7;
-            # Delete pushed to 8.
-            if column in (6, 7, 8):
+            # Synonyms=8 read-only, Delete=9 button). v1.10.65: Created
+            # column inserted at 7; issue #114: Synonyms at 8, Delete at 9.
+            if column in (6, 7, 8, 9):
                 return
 
             source_item = terms_table.item(row, 0)
@@ -34927,20 +34946,23 @@ class SupervertalerQt(QMainWindow):
                     'translation': term['target_term'],
                     'matched_via_abbreviation': False,
                 })
-            elif syn_hits:
-                # v1.10.199: main term didn't substring-hit but a
-                # source synonym did. Register the term with the
-                # matched synonym as the displayed surface form. The
-                # translation is still the main term's target. This
-                # mirrors what TermLens already does when displaying
-                # an entry whose main form matched — synonyms appear
-                # in the tooltip; here we just promote one to the
-                # primary "source" field because the segment used
-                # that surface form rather than the main term.
-                first_syn_text, _first_syn_lower = syn_hits[0]
-                matches[term_id] = dict(base, **{
-                    'source': first_syn_text,
-                    'translation': term['target_term'],
+            # Issue #114: every source synonym the segment uses gets a chip
+            # of its own at its own position – also when the main term is
+            # in the same segment ("methyl-ethylketoxime (MEKO)"), which
+            # before only showed the main term. A synonym chip offers the
+            # identical target synonym when there is one (MEKO → MEKO),
+            # otherwise the main target term; the rest stay alternatives.
+            # v1.10.199: with no main-term hit, the first synonym takes the
+            # term's own key.
+            from modules.termbase_manager import synonym_chip_translation
+            for i, (syn_text, _syn_lower) in enumerate(syn_hits):
+                translation, alternatives = synonym_chip_translation(
+                    syn_text, term['target_term'], term.get('target_synonyms', []))
+                key = term_id if (i == 0 and not main_matched) else f"syn_{term_id}_{i}"
+                matches[key] = dict(base, **{
+                    'source': syn_text,
+                    'translation': translation,
+                    'target_synonyms': alternatives,
                     'matched_via_abbreviation': False,
                     'matched_via_synonym': True,
                 })
