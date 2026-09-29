@@ -9,7 +9,7 @@ import html
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
-    QAbstractItemView, QComboBox, QDialog, QFileDialog, QHBoxLayout, QHeaderView, QLabel,
+    QAbstractItemView, QCheckBox, QComboBox, QDialog, QFileDialog, QHBoxLayout, QHeaderView, QLabel,
     QMessageBox, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout,
 )
 
@@ -19,10 +19,13 @@ from modules import qa_checks
 class QAChecksDialog(QDialog):
     COLUMNS = ["Segment", "Check", "In", "Found", "Context"]
 
-    def __init__(self, parent, sets_dir, get_segments, navigate, on_sets_changed=None):
+    def __init__(self, parent, sets_dir, get_segments, navigate, on_sets_changed=None,
+                 extract_tags=None):
         """``get_segments()`` returns the project's segments; ``navigate(id)``
         selects a segment in the grid; ``on_sets_changed()`` is called after the
-        dialog writes a set (so an open F&R Sets list can reload)."""
+        dialog writes a set (so an open F&R Sets list can reload);
+        ``extract_tags(text)`` lists a text's inline tags and codes, for the
+        built-in tag check (issue #194)."""
         super().__init__(parent)
         self.setWindowTitle("QA Checks")
         self.resize(900, 520)
@@ -30,6 +33,7 @@ class QAChecksDialog(QDialog):
         self._get_segments = get_segments
         self._navigate = navigate
         self._on_sets_changed = on_sets_changed
+        self._extract_tags = extract_tags
         self._findings = []
 
         intro = QLabel(
@@ -47,6 +51,14 @@ class QAChecksDialog(QDialog):
         self.run_btn.setDefault(True)
         self.run_btn.clicked.connect(self.run)
         top.addWidget(self.run_btn)
+        self.tags_cb = QCheckBox("Tags && codes match the source")
+        self.tags_cb.setToolTip(
+            "Also list inline tags and your own inline codes (Settings → Inline Codes)\n"
+            "that a translated segment is missing, or has but its source doesn't.")
+        self.tags_cb.setChecked(extract_tags is not None)
+        self.tags_cb.setVisible(extract_tags is not None)
+        self.tags_cb.toggled.connect(self._update_run_enabled)
+        top.addWidget(self.tags_cb)
         self.basic_btn = QPushButton("➕ Add basic checks")
         self.basic_btn.setToolTip(
             f"Create the set “{qa_checks.BASIC_SET_NAME}” with common checks (double spaces, "
@@ -100,7 +112,7 @@ class QAChecksDialog(QDialog):
             self.set_combo.addItem(f"{s.name} ({n} check{'s' if n != 1 else ''})")
         has = bool(self._sets)
         self.set_combo.setEnabled(has)
-        self.run_btn.setEnabled(has)
+        self._update_run_enabled()
         names = [s.name for s in self._sets]
         if select in names:
             self.set_combo.setCurrentIndex(names.index(select))
@@ -110,6 +122,9 @@ class QAChecksDialog(QDialog):
                 "<b>QA</b> for operations in Find &amp; Replace → F&amp;R Sets.")
         self.basic_btn.setVisible(qa_checks.BASIC_SET_NAME not in
                                   [s.name for s in qa_checks.load_sets(self._sets_dir)])
+
+    def _update_run_enabled(self, *args):
+        self.run_btn.setEnabled(bool(getattr(self, '_sets', None)) or self.tags_cb.isChecked())
 
     def _add_basic_set(self):
         qa_checks.save_set(self._sets_dir, qa_checks.basic_qa_set())
@@ -123,20 +138,27 @@ class QAChecksDialog(QDialog):
     # ── Running ─────────────────────────────────────────────────────────────
     def run(self):
         i = self.set_combo.currentIndex()
-        if not (0 <= i < len(self._sets)):
+        fr_set = self._sets[i] if 0 <= i < len(self._sets) else None
+        check_tags = self.tags_cb.isChecked() and self._extract_tags is not None
+        if fr_set is None and not check_tags:
             return
         segments = self._get_segments() or []
         if not segments:
             QMessageBox.information(self, "QA Checks", "Open a project first.")
             return
-        fr_set = self._sets[i]
-        findings, problems = qa_checks.run_checks(segments, qa_checks.checks_in(fr_set))
+        findings, problems = (qa_checks.run_checks(segments, qa_checks.checks_in(fr_set))
+                              if fr_set is not None else ([], []))
+        if check_tags:
+            findings += qa_checks.tag_findings(segments, self._extract_tags)
         self._findings = findings
         self._fill(findings)
         n_segments = len({f.segment_id for f in findings})
+        used = [f"“{html.escape(fr_set.name)}”"] if fr_set is not None else []
+        if check_tags:
+            used.append("the tag &amp; code check")
         text = (f"{len(findings)} finding{'s' if len(findings) != 1 else ''} in "
                 f"{n_segments} segment{'s' if n_segments != 1 else ''} "
-                f"({len(segments)} checked with “{html.escape(fr_set.name)}”).")
+                f"({len(segments)} checked with {' and '.join(used)}).")
         if problems:
             text += "<br><span style='color:#c62828;'>" + "<br>".join(
                 html.escape(p) for p in problems) + "</span>"
