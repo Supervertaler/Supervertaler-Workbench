@@ -1840,6 +1840,7 @@ class Segment:
     okapi_tu_id: str = ""  # Okapi text unit ID for merge round-trip
     okapi_segment_index: int = -1  # Segment index within Okapi text unit (-1 = not from Okapi)
     category: str = ""  # Okapi sub-document category: "" (body) / "comment" / "header" / "footer" / "property" / "notes"
+    join_before: Optional[str] = None  # Whitespace between this segment and the previous one on the same line when Supervertaler split the line (issue #191); plain-text export uses it to rebuild the line exactly. None = unknown → a single space
 
     def __post_init__(self):
         """Initialize timestamps and reconcile comments[] ↔ notes."""
@@ -12864,9 +12865,8 @@ class SupervertalerQt(QMainWindow):
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
 
-        from modules.simple_segmenter import MarkdownSegmenter, SimpleSegmenter
         is_markdown = (getattr(proj, 'original_txt_path', None) or '').lower().endswith('.md')
-        segmenter = MarkdownSegmenter() if is_markdown else SimpleSegmenter()
+        segmenter = self._make_sentence_segmenter(markdown=is_markdown)
         pairs = ssm.split_source_text(editor.toPlainText(), segmenter.segment_text)
         if not pairs:
             return
@@ -18818,145 +18818,32 @@ class SupervertalerQt(QMainWindow):
             QMessageBox.critical(self, "Clear Error", f"Failed to clear TM entries:\n\n{e}")
     
     def create_segmentation_rules_tab(self):
-        """Create Segmentation Rules management tab"""
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(10, 10, 10, 10)
-        
-        # Header
-        header = QLabel(self.tr("📏 Segmentation Rules"))
-        header.setStyleSheet("font-size: 14px; font-weight: bold; margin-bottom: 10px;")
-        layout.addWidget(header)
-        
-        # Description
-        desc = QLabel(self.tr("Manage language-specific segmentation rules for accurate sentence/segment boundaries."))
-        desc.setStyleSheet("color: #666; font-size: 11px; margin-bottom: 10px;")
-        layout.addWidget(desc)
-        
-        # Language Selection
-        lang_group = QGroupBox(self.tr("Select Language"))
-        lang_layout = QHBoxLayout()
-        
-        lang_combo = QComboBox()
-        languages = ["English (en)", "Dutch (nl)", "German (de)", "French (fr)", "Spanish (es)", "Italian (it)", "Portuguese (pt)", "Chinese (zh)", "Japanese (ja)", "Arabic (ar)"]
-        lang_combo.addItems(languages)
-        lang_layout.addWidget(QLabel(self.tr("Language:")))
-        lang_layout.addWidget(lang_combo, 1)
-        
-        lang_group.setLayout(lang_layout)
-        layout.addWidget(lang_group)
-        
-        # Segmentation Rules
-        rules_group = QGroupBox(self.tr("Segmentation Rules"))
-        rules_layout = QVBoxLayout()
-        
-        # Current implementation info
-        current_info = QLabel(
-            "Current Implementation: SimpleSegmenter (language-agnostic)\n\n"
-            "• Segments on: . ! ? (followed by space/newline)\n"
-            "• Handles basic abbreviations: Mr. Dr. etc.\n"
-            "• Preserves paragraph breaks\n"
-            "• Treats each table cell as separate segment"
-        )
-        current_info.setStyleSheet("padding: 10px; border-radius: 4px; font-family: monospace;")
-        rules_layout.addWidget(current_info)
-        
-        # Future implementation section
-        future_label = QLabel(self.tr("🚧 Language-Specific Rules (Planned):"))
-        future_label.setStyleSheet("font-weight: bold; margin-top: 15px;")
-        rules_layout.addWidget(future_label)
-        
-        future_info = QLabel(
-            "• German: Handle compound sentences, different abbreviations\n"
-            "• Chinese/Japanese: Word boundary detection, different punctuation\n"
-            "• Arabic: Right-to-left text handling\n"
-            "• French: Quotation mark handling, spacing rules\n"
-            "• Custom: User-defined regex patterns and exceptions"
-        )
-        future_info.setStyleSheet("color: #666; margin-left: 20px;")
-        rules_layout.addWidget(future_info)
-        
-        rules_group.setLayout(rules_layout)
-        layout.addWidget(rules_group)
-        
-        # Management buttons (for future implementation)
-        buttons_group = QGroupBox(self.tr("Rule Management"))
-        buttons_layout = QVBoxLayout()
-        
-        # Test segmentation button
-        test_btn = QPushButton(self.tr("🧪 Test Segmentation"))
-        test_btn.setToolTip(self.tr("Test current segmentation rules on sample text"))
-        test_btn.clicked.connect(self.test_segmentation_rules)
-        buttons_layout.addWidget(test_btn)
-        
-        # Import/Export buttons (disabled for now)
-        import_btn = QPushButton(self.tr("📥 Import Rules"))
-        import_btn.setToolTip(self.tr("Import segmentation rules from file (Coming Soon)"))
-        import_btn.setEnabled(False)
-        buttons_layout.addWidget(import_btn)
-        
-        export_btn = QPushButton(self.tr("📤 Export Rules"))
-        export_btn.setToolTip(self.tr("Export current segmentation rules (Coming Soon)"))
-        export_btn.setEnabled(False)
-        buttons_layout.addWidget(export_btn)
-        
-        buttons_group.setLayout(buttons_layout)
-        layout.addWidget(buttons_group)
-        
-        layout.addStretch()
-        
-        return tab
-    
-    def test_segmentation_rules(self):
-        """Test current segmentation rules with sample text"""
-        from PyQt6.QtWidgets import QInputDialog
-        
-        sample_text = (
-            "Hello world. This is a test! How are you? "
-            "Mr. Smith went to Dr. Jones. "
-            "The U.S.A. is great. "
-            "What about this... and that? "
-            "End of test."
-        )
-        
-        text, ok = QInputDialog.getMultiLineText(
-            self, 
-            "Test Segmentation", 
-            "Enter text to test segmentation:\n(Default sample text provided)",
-            sample_text
-        )
-        
-        if ok and text:
-            try:
-                # Test with current segmenter
-                from modules.simple_segmenter import SimpleSegmenter
-                segmenter = SimpleSegmenter()
-                
-                # Create fake paragraph list for testing
-                paragraphs = [(0, text)]
-                segments = segmenter.segment_paragraphs(paragraphs)
-                
-                # Show results
-                result_text = f"Input text:\n{text}\n\n"
-                result_text += f"Segmentation results ({len(segments)} segments):\n"
-                result_text += "=" * 50 + "\n"
-                
-                for i, (para_id, segment_text) in enumerate(segments, 1):
-                    result_text += f"{i}. {segment_text}\n"
-                
-                QMessageBox.information(
-                    self,
-                    "Segmentation Test Results",
-                    result_text
-                )
-                
-            except Exception as e:
-                QMessageBox.critical(
-                    self,
-                    "Segmentation Test Error",
-                    f"Error testing segmentation:\n\n{e}"
-                )
-    
+        """Settings → Segmentation Rules (issue #191): line-break and built-in
+        rule switches, extra abbreviations, and SRX-style custom break /
+        exception rules with SRX import/export and a live test box."""
+        from modules.segmentation_rules_widget import SegmentationRulesWidget
+        return SegmentationRulesWidget(self._load_segmentation_rules, self._save_segmentation_rules)
+
+    def _load_segmentation_rules(self):
+        from modules.segmentation_rules import SETTINGS_KEY, SegmentationRules
+        try:
+            return SegmentationRules.from_dict(self.load_general_settings().get(SETTINGS_KEY))
+        except Exception as e:
+            self.log(f"⚠ Could not read the segmentation rules: {e}")
+            return SegmentationRules()
+
+    def _save_segmentation_rules(self, rules):
+        from modules.segmentation_rules import SETTINGS_KEY
+        settings = self.load_general_settings()
+        settings[SETTINGS_KEY] = rules.to_dict()
+        self.save_general_settings(settings)
+
+    def _make_sentence_segmenter(self, markdown: bool = False):
+        """The sentence segmenter for text Supervertaler splits itself, with
+        the user's rules from Settings → Segmentation Rules."""
+        from modules.simple_segmenter import MarkdownSegmenter, SimpleSegmenter
+        return (MarkdownSegmenter if markdown else SimpleSegmenter)(self._load_segmentation_rules())
+
     def _update_both_termlens(self, source_text, termbase_list, nt_matches, status_hint=None):
         """Update all three TermLens instances with the same data.
 
@@ -33131,8 +33018,7 @@ class SupervertalerQt(QMainWindow):
             QVBoxLayout, QHBoxLayout, QFormLayout, QGroupBox, QTextEdit,
             QComboBox, QRadioButton, QButtonGroup, QPushButton, QTabWidget
         )
-        from modules.simple_segmenter import SimpleSegmenter
-        
+
         # Create dialog
         dialog = QDialog(self)
         dialog.setWindowTitle(self.tr("New Translation Project"))
@@ -33343,7 +33229,7 @@ class SupervertalerQt(QMainWindow):
         source_text = text_input.toPlainText().strip()
         if source_text:
             try:
-                segmenter = SimpleSegmenter()
+                segmenter = self._make_sentence_segmenter()
                 sentences = segmenter.segment_text(source_text)
                 
                 # Create segments
@@ -37373,7 +37259,8 @@ class SupervertalerQt(QMainWindow):
         segment_checkbox.setChecked(last_segment_setting)
         segment_checkbox.setToolTip(
             "When checked, long lines will be split into individual sentences\n"
-            "for easier translation. Sentences are automatically rejoined on export."
+            "for easier translation. Sentences are automatically rejoined on export.\n"
+            "Where lines are split is set in Settings → Segmentation Rules."
         )
         layout.addWidget(segment_checkbox)
 
@@ -37437,12 +37324,7 @@ class SupervertalerQt(QMainWindow):
             # Create segments from lines
             segments = []
             if use_sentence_segmentation:
-                if is_markdown:
-                    from modules.simple_segmenter import MarkdownSegmenter
-                    segmenter = MarkdownSegmenter()
-                else:
-                    from modules.simple_segmenter import SimpleSegmenter
-                    segmenter = SimpleSegmenter()
+                segmenter = self._make_sentence_segmenter(markdown=is_markdown)
                 for line_num, line in enumerate(lines, 1):
                     text = line.rstrip('\r\n')
                     if not text.strip():
@@ -37453,12 +37335,12 @@ class SupervertalerQt(QMainWindow):
                             paragraph_id=line_num, document_position=line_num
                         ))
                     else:
-                        sentences = segmenter.segment_text(text)
-                        for sentence in sentences:
+                        for sentence, separator in segmenter.segment_with_separators(text):
                             segments.append(Segment(
                                 id=len(segments) + 1, source=sentence, target="",
                                 status="untranslated", notes="", type="para",
-                                paragraph_id=line_num, document_position=line_num
+                                paragraph_id=line_num, document_position=line_num,
+                                join_before=separator
                             ))
             else:
                 for line_num, line in enumerate(lines, 1):
@@ -37566,12 +37448,7 @@ class SupervertalerQt(QMainWindow):
                     # Re-run import with this encoding
                     segments = []
                     if use_sentence_segmentation:
-                        if is_markdown:
-                            from modules.simple_segmenter import MarkdownSegmenter
-                            segmenter = MarkdownSegmenter()
-                        else:
-                            from modules.simple_segmenter import SimpleSegmenter
-                            segmenter = SimpleSegmenter()
+                        segmenter = self._make_sentence_segmenter(markdown=is_markdown)
                         for line_num, line in enumerate(lines, 1):
                             text = line.rstrip('\r\n')
                             if not text.strip():
@@ -37581,11 +37458,12 @@ class SupervertalerQt(QMainWindow):
                                     paragraph_id=line_num, document_position=line_num
                                 ))
                             else:
-                                for sentence in segmenter.segment_text(text):
+                                for sentence, separator in segmenter.segment_with_separators(text):
                                     segments.append(Segment(
                                         id=len(segments) + 1, source=sentence, target="",
                                         status="untranslated", notes="", type="para",
-                                        paragraph_id=line_num, document_position=line_num
+                                        paragraph_id=line_num, document_position=line_num,
+                                        join_before=separator
                                     ))
                     else:
                         for line_num, line in enumerate(lines, 1):
@@ -37780,22 +37658,21 @@ class SupervertalerQt(QMainWindow):
             # Build output lines, grouping segments by paragraph_id
             # (when sentence segmentation was used, multiple segments share a paragraph_id)
             from itertools import groupby
+            from modules.simple_segmenter import join_segments
             output_lines = []
             for _para_id, group in groupby(segments, key=lambda s: s.paragraph_id):
                 parts = []
                 for seg in group:
                     if seg.target and seg.target.strip():
-                        parts.append(seg.target)
+                        text = seg.target
                     elif use_source_fallback:
-                        parts.append(seg.source)
+                        text = seg.source
                     else:
-                        parts.append("")
-                # Join sentence segments with space; empty segments produce empty lines
-                if any(p.strip() for p in parts):
-                    line = ' '.join(p for p in parts if p.strip())
-                else:
-                    line = ""
-                output_lines.append(line)
+                        text = ""
+                    parts.append((text, getattr(seg, 'join_before', None)))
+                # Rejoin sentence segments with the spacing they had in the
+                # source line (a space if unknown); empty segments produce empty lines
+                output_lines.append(join_segments(parts))
 
             # Write file
             with open(file_path, 'w', encoding=encoding, newline='\n') as f:
@@ -38281,7 +38158,8 @@ class SupervertalerQt(QMainWindow):
         segment_checkbox.setChecked(last_segment_setting)
         segment_checkbox.setToolTip(
             "When checked, long lines in TXT/MD files will be split into individual\n"
-            "sentences for easier translation. Sentences are automatically rejoined on export."
+            "sentences for easier translation. Sentences are automatically rejoined on export.\n"
+            "Where lines are split is set in Settings → Segmentation Rules."
         )
         format_layout.addWidget(segment_checkbox)
 
@@ -38380,10 +38258,6 @@ class SupervertalerQt(QMainWindow):
             self.log(f"   ⚠️ Could not create backup folder: {str(e)}")
             source_backup_folder = None
 
-        if not hasattr(self, 'segmenter'):
-            from modules.simple_segmenter import SimpleSegmenter
-            self.segmenter = SimpleSegmenter()
-        
         all_segments = []
         file_metadata = []  # Track file info for the project
         current_segment_id = 1
@@ -38437,12 +38311,7 @@ class SupervertalerQt(QMainWindow):
                         lines = f.readlines()
 
                     if sentence_segment:
-                        if file_type == 'md':
-                            from modules.simple_segmenter import MarkdownSegmenter
-                            txt_segmenter = MarkdownSegmenter()
-                        else:
-                            from modules.simple_segmenter import SimpleSegmenter
-                            txt_segmenter = SimpleSegmenter()
+                        txt_segmenter = self._make_sentence_segmenter(markdown=(file_type == 'md'))
                         for line_num, line in enumerate(lines, 1):
                             text = line.rstrip('\n\r')
                             if not text.strip():
@@ -38454,12 +38323,12 @@ class SupervertalerQt(QMainWindow):
                                 ))
                                 current_segment_id += 1
                             else:
-                                for sentence in txt_segmenter.segment_text(text):
+                                for sentence, separator in txt_segmenter.segment_with_separators(text):
                                     file_segments.append(Segment(
                                         id=current_segment_id, source=sentence, target="",
                                         status=DEFAULT_STATUS.key, file_id=file_id,
                                         file_name=file_name, paragraph_id=line_num,
-                                        document_position=line_num
+                                        document_position=line_num, join_before=separator
                                     ))
                                     current_segment_id += 1
                     else:
@@ -39122,18 +38991,17 @@ class SupervertalerQt(QMainWindow):
             text = re.sub(r'</?li-[ob]>', '', text)
             return text
 
+        from modules.simple_segmenter import join_segments
+
         with open(output_path, 'w', encoding='utf-8') as f:
             for _para_id, group in groupby(segments, key=lambda s: s.paragraph_id):
                 parts = []
                 for seg in group:
                     text = seg.target if seg.target and seg.target.strip() else seg.source
-                    parts.append(strip_tags(text))
-                # Join sentence segments with space; empty segments produce empty lines
-                if any(p.strip() for p in parts):
-                    line = ' '.join(p for p in parts if p.strip())
-                else:
-                    line = ""
-                f.write(line + '\n')
+                    parts.append((strip_tags(text), getattr(seg, 'join_before', None)))
+                # Rejoin sentence segments with the spacing they had in the
+                # source line (a space if unknown); empty segments produce empty lines
+                f.write(join_segments(parts) + '\n')
     
     def _export_file_as_docx(self, segments: list, output_path: str, original_path: str = None):
         """

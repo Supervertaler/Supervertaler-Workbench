@@ -7,6 +7,36 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ## Unreleased
 
+### Added (Settings · your own segmentation rules)
+
+**Settings → 📏 Segmentation Rules** used to be a placeholder. It now controls where Supervertaler splits text into segments whenever it does the splitting itself (issue #191). That covers:
+- plain-text and Markdown imports with "Split lines into sentences" ticked;
+- text pasted into New Project;
+- Add Segments.
+
+The page offers:
+- **Start a new segment at every line break**, so pasted text is split at line breaks as well as at sentence ends.
+- **Use the built-in sentence rules**. Untick it to let only your own rules decide.
+- **Extra abbreviations**: a full stop after these never ends a segment, e.g. `np, itd, tzn` for Polish.
+- **Custom rules** in the SRX style that OmegaT and Okapi use. Each rule is a *break* or an *exception*, with one regular expression for the text before the break and one for the text after it. Rules are checked from top to bottom, before the built-in rules, and the first match wins.
+  - **➕ Break after text…** creates a rule that splits after a delimiter such as `<>` or `|`, with no regular expression needed.
+  - A rule with an unusable pattern is marked in red and ignored.
+- **📥 Import SRX / 📤 Export SRX** exchanges rules with other tools, for example OmegaT's `segmentation.srx`. Java's `\p{Lu}` style classes are translated.
+- A **Test** box shows the resulting segments live as you edit.
+
+When a rule splits where there was no space (`Cześć<>Siema<>`), the plain-text export now rebuilds the line exactly. Supervertaler records the spacing between the segments of each line rather than always inserting one space. Splitting and merging segments uses that spacing too.
+
+DOCX and the other document formats are split by the Okapi engine with its own rules and are not affected.
+
+### Fixed (Segmentation · lost words and leaked placeholders)
+
+Found while rebuilding the segmenter for the new rules:
+- **A sentence starting with an abbreviation lost it.** "Dr. Smith works here." was imported as "Smith works here.", and the "Dr." was gone from the project and from the export. Segments are now always slices of the original text, so nothing can be dropped. Mr., Mrs., Dr. and Prof. never end a sentence.
+- **"?!" became a segment of its own.** "Really?! Yes." gave three segments; it now gives two.
+- **Markdown import could leave `\x00MD0\x00` in the text.** This happened with links whose text is inline code, such as ``[`guide.md`](guide.md)``: the code was replaced by the internal placeholder, both in the segment and in the exported file. It is now restored correctly. Against this repository's own documentation, 47 lines were affected.
+- **Sentences start with accented capitals too.** A sentence beginning with a capital outside A–Z (Ł, É, Ö…) now counts as a new sentence.
+- **A closing quote or bracket after the full stop is handled.** In `He said "Stop." Then…` the quote stays with its sentence, and the text after it starts a new one.
+
 ### Improved (Match Panel · TM differences around inline tags)
 
 In the Match Panel's **TM Source** box, the differences from the current segment are shown as struck-through and underlined words (issue #117). The comparison worked word by word, where a word was anything between spaces. A tag glued to a word, as in `<b>tap</b>` → `<b>valve</b>`, therefore marked the whole thing as changed, tags included. Inline tags (`<1>`, `</b>`, `<x id="3"/>`, `{1}` and so on) are now compared as items of their own, so only the word that actually changed is marked. Spacing is also reproduced exactly as in the TM entry, rather than rebuilt with one space between every word.

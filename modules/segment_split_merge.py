@@ -138,6 +138,19 @@ def _join_text(a: str, b: str) -> str:
     return a + " " + b
 
 
+def _join_with(a: str, b: str, separator) -> str:
+    """Like ``_join_text``, but with the separator the segmenter recorded
+    between the two segments (``join_before``, issue #191) when it is known –
+    a custom rule may have split where there was no space at all."""
+    if separator is None:
+        return _join_text(a, b)
+    a = a or ""
+    b = b or ""
+    if not a or not b:
+        return a or b
+    return a + separator + b
+
+
 def can_split(segment, offset: int) -> bool:
     """A split is valid strictly inside the source text of an unlocked segment."""
     if getattr(segment, "locked", False):
@@ -233,6 +246,8 @@ def split_segment(segments: List, idx: int, offset: int) -> object:
     new.comments = right_comments
     new.proofreading_notes = {}
     new.modified = True
+    if hasattr(new, "join_before"):
+        new.join_before = ""      # the cut keeps any whitespace inside the text
 
     segments.insert(idx + 1, new)
     return new
@@ -256,11 +271,12 @@ def merge_with_next(segments: List, idx: int) -> object:
     a = segments[idx]
     b = segments[idx + 1]
 
-    merged_source = _join_text(a.source, b.source)
+    separator = getattr(b, "join_before", None)
+    merged_source = _join_with(a.source, b.source, separator)
     src_shift = len(merged_source) - len(a.source or "") - len(b.source or "")
     src_offset_b = len(a.source or "") + src_shift
 
-    merged_target = _join_text(a.target, b.target)
+    merged_target = _join_with(a.target, b.target, separator)
     tgt_shift = len(merged_target) - len(a.target or "") - len(b.target or "")
     tgt_offset_b = len(a.target or "") + tgt_shift
 
