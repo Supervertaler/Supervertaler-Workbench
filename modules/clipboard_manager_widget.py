@@ -133,10 +133,7 @@ class ClipboardManagerWidget(QWidget):
     MAX_TEXT_ITEMS  = 200
     MAX_IMAGE_ITEMS = 50
 
-    _COLOUR_NORMAL = QColor("#1E1E1E")
     _COLOUR_PASTED = QColor("#AAAAAA")
-    _BG_PASTED     = QColor("#F8F8F8")
-    _BG_NORMAL     = QColor(Qt.GlobalColor.white)
 
     _THUMB_SIZE = QSize(48, 48)   # icon size shown in the list
 
@@ -224,7 +221,8 @@ class ClipboardManagerWidget(QWidget):
         return f"""
             QListWidget {{
                 border: 1px solid #E0E0E0; border-radius: 4px;
-                background: white; font-size: {scaled_pt(9):.1f}pt; outline: none;
+                background: white; color: #1E1E1E;
+                font-size: {scaled_pt(9):.1f}pt; outline: none;
             }}
             QListWidget::item {{
                 padding: 5px 8px; border-bottom: 1px solid #E4E4E4;
@@ -1091,12 +1089,11 @@ class ClipboardManagerWidget(QWidget):
     # ------------------------------------------------------------------
 
     def _apply_style(self, item: QListWidgetItem, pasted: bool):
-        if pasted:
-            item.setForeground(self._COLOUR_PASTED)
-            item.setBackground(self._BG_PASTED)
-        else:
-            item.setForeground(self._COLOUR_NORMAL)
-            item.setBackground(self._BG_NORMAL)
+        # Ordinary clips take their colours from the list's stylesheet, which
+        # the dark theme rewrites; a fixed per-item colour stayed near-black
+        # on the dark list (issue #78). Pasted clips are grey in either theme.
+        item.setData(Qt.ItemDataRole.ForegroundRole, self._COLOUR_PASTED if pasted else None)
+        item.setData(Qt.ItemDataRole.BackgroundRole, None)
 
     @staticmethod
     def _format_display(text: str, max_len: int = 120) -> str:

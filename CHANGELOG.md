@@ -107,6 +107,8 @@ In a dark theme these colours are now adjusted automatically, everywhere at once
 
 Strong colours, such as the orange, blue and green buttons, are left as they are. The light themes are not affected; screenshots of every tab are identical before and after. Switching from Dark back to a light theme restores the original colours.
 
+The clips in the Clipboard Manager's text history set their own near-black text colour, so once the column turned dark they could not be read; only the selected clip could. They now take their colour from the theme as well, and clips you have already pasted stay grey.
+
 ### Added (QA · check the translation with LanguageTool)
 
 **QA → 📝 Check with LanguageTool…** checks the target text of every segment for grammar, spelling and style mistakes with LanguageTool (issue #233). LanguageTool is particularly good at German and Dutch grammar.
