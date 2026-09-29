@@ -7,6 +7,15 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ## Unreleased
 
+### Added (Editor · tags are protected in the target, as in memoQ and Trados)
+
+Inline tags in the target cell now behave as single units, so a stray keystroke can no longer leave half a tag behind (issue #113). This covers `<b>`, `</1>`, `[2}`, `{3}`, Déjà Vu `{00108}` and your own codes from Settings → Inline Codes:
+- **The cursor steps over a tag** instead of landing inside it, whether you use the arrow keys or click in it.
+- **Backspace just after a tag, or Delete just before it, removes the whole tag.** Ctrl+Z brings it back.
+- **Typing, pasting or cutting over a selection that cuts into a tag takes the whole tag.** A paste made with the cursor inside a tag lands just after it.
+
+It is on by default. To edit tags character by character again, untick **Settings → 🏷️ Inline Codes → Protect tags and codes in the target**. **Ctrl+,** still inserts the next tag from the source.
+
 ### Changed (Voice · the last pointers to Sidekick are gone)
 
 Sidekick was retired in v1.10.4, but a few places still sent you looking for it (issue #199):

@@ -8,7 +8,7 @@ the patterns find. Saved on every change, like the other newer settings pages.
 """
 
 import html
-from typing import Callable, Dict, List
+from typing import Callable, Dict, List, Optional
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor
@@ -27,7 +27,8 @@ SAMPLE_TEXT = ("{PKMN} can't be the same.\nYou have %d new messages from %s.\n"
 
 class InlineCodesWidget(QWidget):
     def __init__(self, load: Callable[[], List[Dict]], save: Callable[[List[Dict]], None],
-                 parent=None):
+                 parent=None, protect_tags: Optional[bool] = None,
+                 on_protect_tags: Optional[Callable[[bool], None]] = None):
         super().__init__(parent)
         self._save = save
         self._loading = True
@@ -35,6 +36,25 @@ class InlineCodesWidget(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(15)
+
+        # Tag protection (issue #113) – about all tags, not only these codes,
+        # but it lives here beside the codes it also protects.
+        self.protect_cb = None
+        if protect_tags is not None:
+            from modules.styled_widgets import CheckmarkCheckBox
+            protect_group = QGroupBox("Tag protection")
+            playout = QVBoxLayout(protect_group)
+            self.protect_cb = CheckmarkCheckBox(
+                "Protect tags and codes in the target – treat each one as a single unit")
+            self.protect_cb.setChecked(bool(protect_tags))
+            self.protect_cb.setToolTip(
+                "The cursor steps over a tag instead of landing inside it, Backspace just after\n"
+                "a tag or Delete just before it removes the whole tag, and typing or pasting over\n"
+                "part of a tag replaces the whole tag. Untick to edit tags character by character.")
+            if on_protect_tags is not None:
+                self.protect_cb.toggled.connect(on_protect_tags)
+            playout.addWidget(self.protect_cb)
+            layout.addWidget(protect_group)
 
         info = QLabel(
             "Inline codes are placeholders and markup in the text that must reach the translation "

@@ -298,6 +298,7 @@ from modules.project_assets import bundle_source, resolve_source_path, ensure_ta
 from modules.voice_dictation_lite import QuickDictationThread  # Voice dictation
 from modules.voice_commands import VoiceCommandManager, VoiceCommand, ContinuousVoiceListener  # Voice commands (Talon-style)
 from modules import inline_codes as _inline_codes  # User-defined inline codes / placeholders (issue #194)
+from modules import tag_protection as _tag_protection  # Tags as single units in the target cell (issue #113)
 from modules.voice_command_dialog import VoiceCommandEditDialog  # Voice command edit dialog
 from modules.styled_widgets import CheckmarkCheckBox, PurpleCheckmarkCheckBox, TealCheckmarkCheckBox, CheckmarkRadioButton
 from modules.statuses import (
@@ -4778,20 +4779,10 @@ class TagHighlighter(QSyntaxHighlighter):
         # `wj?` after each "/" tolerates the display-only WORD JOINER that
         # protect_tags_from_linebreak inserts (to stop tags wrapping mid-way).
         # It's optional, so tags without the joiner still match.
-        wj = WORD_JOINER
-        tag_patterns = [
-            r'</?' + wj + r'?[a-zA-Z][a-zA-Z0-9-]*/?' + wj + r'?(?:\s[^>]*)?>',  # HTML/XML tags
-            r'</?' + wj + r'?\d+>',                       # Trados numeric: <1>, </1>
-            r'\{/?' + wj + r'?\d+/?' + wj + r'?\}',       # Compact tag placeholders: {1}, {/1}, {1/}
-            r'\[\d+[}\]]',                                # memoQ numeric: [1}, [1]
-            r'\{\d+[}\]]',                                # memoQ numeric: {1}, {1]
-            r'\[[^}\]]+\}',                               # memoQ mixed: [anything} (exclude } and ])
-            r'\{[^\[\]]+\]',                              # memoQ mixed: {anything] (exclude [ and ])
-            r'\[[a-zA-Z][^}\]]*\s[^}\]]*\]',              # memoQ content: [tag attr...] (exclude } and ])
-            r'\{[a-zA-Z][a-zA-Z0-9_-]*\}',                # memoQ closing: {uicontrol}, {MQ}
-            r'\{\d{5}\}',                                 # Déjà Vu tags: {00108}, {00109}, etc.
-        ]
-        combined_pattern = re.compile('|'.join(tag_patterns))
+        # The pattern lives in modules/tag_protection.py (TAG_PATTERNS lists
+        # each form) so tag protection in the target cell (issue #113) guards
+        # exactly what is coloured here.
+        combined_pattern = _tag_protection.TAG_RE
 
         matches_found = list(combined_pattern.finditer(text))
 
@@ -5091,6 +5082,11 @@ class EditableGridTextEditor(QTextEdit):
         # Set minimum height to 0 - let content determine size
         self.setMinimumHeight(0)
         self.setMaximumHeight(16777215)  # Qt's max int
+
+        # Tag protection (issue #113): the cursor never rests inside a tag
+        self._last_cursor_pos = 0
+        self._snapping_out_of_tag = False
+        self.cursorPositionChanged.connect(self._keep_cursor_out_of_tags)
 
     def mouseDoubleClickEvent(self, event):
         """Handle double-click to select words properly when invisibles are shown.
@@ -5917,6 +5913,12 @@ class EditableGridTextEditor(QTextEdit):
                 event.accept()
                 return
 
+        # Tag protection (issue #113): Backspace/Delete remove a tag whole,
+        # and edits never cut a tag in half
+        if self._protect_tags_for_key(event):
+            event.accept()
+            return
+
         # v1.10.229: Shift+F3 — toggle case of the selection (or the word at
         # the cursor if there is no selection). Cycles:
         #   lowercase → Sentence case → UPPERCASE → lowercase
@@ -6237,6 +6239,104 @@ class EditableGridTextEditor(QTextEdit):
             # as None so a subsequent Backspace deletes a character
             # normally.
             _ = had_pending  # marker var for future debugging
+
+    # ── Tag protection (issue #113) ────────────────────────────────────────
+
+    def _tag_protection_on(self) -> bool:
+        mw = self._get_main_window()
+        return bool(getattr(mw, 'protect_tags_in_target', True)) if mw else False
+
+    def _protect_tags_for_key(self, event) -> bool:
+        """Keep tags whole for this key press. Returns True when the key has
+        been dealt with here (a whole tag removed); otherwise the selection
+        or cursor may have been adjusted and Qt handles the key as usual."""
+        from PyQt6.QtGui import QKeySequence, QTextCursor
+        if not self._tag_protection_on():
+            return False
+        spans = _tag_protection.tag_spans(self.toPlainText())
+        if not spans:
+            return False
+        key, mods = event.key(), event.modifiers()
+        text = event.text()
+        edits = (key in (Qt.Key.Key_Backspace, Qt.Key.Key_Delete)
+                 or event.matches(QKeySequence.StandardKey.Cut)
+                 or event.matches(QKeySequence.StandardKey.Paste)
+                 or bool(text and text.isprintable()))
+        if not edits:
+            return False
+        cursor = self.textCursor()
+        if cursor.hasSelection():
+            self._select_whole_tags(spans)
+            return False
+        pos = cursor.position()
+        if mods == Qt.KeyboardModifier.NoModifier and key in (Qt.Key.Key_Backspace, Qt.Key.Key_Delete):
+            span = (_tag_protection.backspace_span(spans, pos) if key == Qt.Key.Key_Backspace
+                    else _tag_protection.delete_span(spans, pos))
+            if span is None:
+                return False
+            cursor.setPosition(span[0])
+            cursor.setPosition(span[1], QTextCursor.MoveMode.KeepAnchor)
+            cursor.removeSelectedText()
+            self.setTextCursor(cursor)
+            return True
+        outside = _tag_protection.snap(spans, pos, forward=True)
+        if outside != pos:
+            cursor.setPosition(outside)
+            self.setTextCursor(cursor)
+        return False
+
+    def _select_whole_tags(self, spans=None):
+        """Widen the selection so it never cuts through a tag."""
+        from PyQt6.QtGui import QTextCursor
+        cursor = self.textCursor()
+        if not cursor.hasSelection():
+            return
+        spans = spans if spans is not None else _tag_protection.tag_spans(self.toPlainText())
+        anchor, pos = cursor.anchor(), cursor.position()
+        start, end = _tag_protection.expand(spans, anchor, pos)
+        if (min(anchor, pos), max(anchor, pos)) == (start, end):
+            return
+        forward = pos >= anchor
+        self._snapping_out_of_tag = True
+        try:
+            cursor.setPosition(start if forward else end)
+            cursor.setPosition(end if forward else start, QTextCursor.MoveMode.KeepAnchor)
+            self.setTextCursor(cursor)
+        finally:
+            self._snapping_out_of_tag = False
+
+    def _keep_cursor_out_of_tags(self):
+        """Step the cursor over a tag instead of letting it land inside one."""
+        if self._snapping_out_of_tag:
+            return
+        cursor = self.textCursor()
+        pos = cursor.position()
+        if cursor.hasSelection() or not self._tag_protection_on():
+            self._last_cursor_pos = pos
+            return
+        spans = _tag_protection.tag_spans(self.toPlainText())
+        new_pos = _tag_protection.snap(spans, pos, forward=pos >= self._last_cursor_pos)
+        if new_pos != pos:
+            self._snapping_out_of_tag = True
+            try:
+                cursor.setPosition(new_pos)
+                self.setTextCursor(cursor)
+            finally:
+                self._snapping_out_of_tag = False
+        self._last_cursor_pos = new_pos
+
+    def insertFromMimeData(self, source):
+        """Pasting (Ctrl+V or the context menu) never lands inside a tag or
+        replaces half of one (issue #113)."""
+        if self._tag_protection_on():
+            cursor = self.textCursor()
+            spans = _tag_protection.tag_spans(self.toPlainText())
+            if cursor.hasSelection():
+                self._select_whole_tags(spans)
+            elif _tag_protection.inside(spans, cursor.position()):
+                cursor.setPosition(_tag_protection.snap(spans, cursor.position(), forward=True))
+                self.setTextCursor(cursor)
+        super().insertFromMimeData(source)
 
     def _handle_add_to_nt(self):
         """Handle Ctrl+Alt+N: Add selected text to active non-translatable list(s)"""
@@ -18860,7 +18960,21 @@ class SupervertalerQt(QMainWindow):
         from modules.inline_codes_widget import InlineCodesWidget
         entries = self._load_inline_codes()
         _inline_codes.set_active(entries)
-        return InlineCodesWidget(lambda: entries, self._save_inline_codes)
+        # Tag protection in the target cell (issue #113), on unless switched off
+        try:
+            self.protect_tags_in_target = bool(
+                self.load_general_settings().get(_tag_protection.SETTINGS_KEY, True))
+        except Exception:
+            self.protect_tags_in_target = True
+        return InlineCodesWidget(lambda: entries, self._save_inline_codes,
+                                 protect_tags=self.protect_tags_in_target,
+                                 on_protect_tags=self._save_tag_protection)
+
+    def _save_tag_protection(self, enabled: bool):
+        self.protect_tags_in_target = bool(enabled)
+        settings = self.load_general_settings()
+        settings[_tag_protection.SETTINGS_KEY] = self.protect_tags_in_target
+        self.save_general_settings(settings)
 
     def _load_inline_codes(self) -> list:
         try:
