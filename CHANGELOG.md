@@ -22,6 +22,10 @@ Inline tags in the target cell now behave as single units, so a stray keystroke 
 
 It is on by default. To edit tags character by character again, untick **Settings → 🏷️ Inline Codes → Protect tags and codes in the target**. **Ctrl+,** still inserts the next tag from the source.
 
+### Fixed (Dark theme · glossary synonyms turned black and unreadable)
+
+In the glossary entry editor, promoting a synonym or switching its "forbidden" mark off set its text to solid black, which could not be read on the dark theme. This is the same kind of fixed per-item colour as the Clipboard Manager fix in v1.10.372. The text now takes the theme's colour; forbidden synonyms stay red.
+
 ### Changed (Voice · the last pointers to Sidekick are gone)
 
 Sidekick was retired in v1.10.4, but a few places still sent you looking for it (issue #199):
