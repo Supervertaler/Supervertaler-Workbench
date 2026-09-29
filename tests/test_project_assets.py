@@ -172,3 +172,61 @@ if __name__ == "__main__":
             traceback.print_exc()
     print(f"\n{len(fns) - failed}/{len(fns)} passed")
     sys.exit(1 if failed else 0)
+
+
+# --- safe saving (issue #228) -------------------------------------------------
+
+def test_write_project_file_keeps_the_previous_version_as_bak():
+    from modules.project_assets import read_backup, write_project_file
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "Job.svproj")
+        assert write_project_file(path, '{"segments": [1]}') is None      # first save: nothing to back up
+        backup = write_project_file(path, '{"segments": [1, 2]}')
+        assert backup == path + ".bak"
+        assert open(backup, encoding="utf-8").read() == '{"segments": [1]}'
+        assert open(path, encoding="utf-8").read() == '{"segments": [1, 2]}'
+        assert not os.path.exists(path + ".tmp")
+        data, saved_at = read_backup(path)
+        assert data == {"segments": [1]} and saved_at > 0
+
+
+def test_a_truncated_project_never_overwrites_a_good_backup():
+    from modules.project_assets import write_project_file
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "Job.svproj")
+        write_project_file(path, '{"segments": [1]}')
+        write_project_file(path, '{"segments": [1, 2]}')                  # .bak = [1]
+        with open(path, "w", encoding="utf-8") as f:
+            f.write('{"segments": [1, 2')                                  # damaged by something else
+        write_project_file(path, '{"segments": [1, 2, 3]}')
+        assert open(path + ".bak", encoding="utf-8").read() == '{"segments": [1]}'
+
+
+def test_a_failed_write_leaves_the_project_untouched():
+    from modules import project_assets
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "Job.svproj")
+        project_assets.write_project_file(path, '{"segments": [1]}')
+        original_replace = os.replace
+        try:
+            def boom(*a, **k):
+                raise OSError("disk full")
+            os.replace = boom
+            try:
+                project_assets.write_project_file(path, '{"segments": [9]}')
+            except OSError:
+                pass
+        finally:
+            os.replace = original_replace
+        assert open(path, encoding="utf-8").read() == '{"segments": [1]}'
+        assert not os.path.exists(path + ".tmp")
+
+
+def test_read_backup_ignores_missing_or_broken_backups():
+    from modules.project_assets import read_backup
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "Job.svproj")
+        assert read_backup(path) is None
+        with open(path + ".bak", "w", encoding="utf-8") as f:
+            f.write("{not json")
+        assert read_backup(path) is None

@@ -99,3 +99,66 @@ def bundle_source(original_path, project_dir, subdir=SOURCE_SUBDIR):
     if os.path.abspath(original_path) != os.path.abspath(bundled):
         shutil.copy2(original_path, bundled)
     return os.path.relpath(bundled, project_dir).replace(os.sep, "/")
+
+
+# ── Safe saving (issue #228) ────────────────────────────────────────────────
+
+BACKUP_SUFFIX = ".bak"
+
+
+def _looks_complete(path):
+    """Cheap check that a saved project file was written to the end (a JSON
+    object ends with "}"), so a damaged file never overwrites a good backup."""
+    try:
+        size = os.path.getsize(path)
+        if size == 0:
+            return False
+        with open(path, "rb") as f:
+            f.seek(max(0, size - 64))
+            return f.read().rstrip().endswith(b"}")
+    except OSError:
+        return False
+
+
+def write_project_file(path, text):
+    """Write a project file safely.
+
+    The previous version is kept as ``<name>.svproj.bak`` (only when it was
+    itself complete), and the new content goes to a temporary file next to
+    the project that then replaces it in one step – so a save that fails
+    part-way (full disk, crash, a value that will not serialise) can no
+    longer leave a truncated ``.svproj``. Returns the backup path or None.
+    """
+    backup = None
+    if os.path.exists(path) and _looks_complete(path):
+        backup = path + BACKUP_SUFFIX
+        shutil.copy2(path, backup)
+    tmp = path + ".tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+    return backup
+
+
+def read_backup(path):
+    """``(data, modified_timestamp)`` from ``<path>.bak`` when it holds a valid
+    project, else None – used to offer recovery when a project will not open."""
+    import json
+
+    backup = path + BACKUP_SUFFIX
+    if not os.path.exists(backup):
+        return None
+    try:
+        with open(backup, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict) or "segments" not in data:
+        return None
+    return data, os.path.getmtime(backup)

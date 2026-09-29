@@ -294,7 +294,7 @@ if sys.platform == 'win32':
 import pyperclip  # For clipboard operations in Superlookup
 from modules.superlookup import SuperlookupEngine  # Superlookup engine
 from modules.pseudo_translate_dialog import run_pseudo_translation  # Pseudo-translation export test (dialog + apply)
-from modules.project_assets import bundle_source, resolve_source_path, ensure_target_dir, nest_in_own_folder  # Project-folder model (issue #228)
+from modules.project_assets import bundle_source, resolve_source_path, ensure_target_dir, nest_in_own_folder, write_project_file, read_backup  # Project-folder model (issue #228)
 from modules.voice_dictation_lite import QuickDictationThread  # Voice dictation
 from modules.voice_commands import VoiceCommandManager, VoiceCommand, ContinuousVoiceListener  # Voice commands (Talon-style)
 from modules import inline_codes as _inline_codes  # User-defined inline codes / placeholders (issue #194)
@@ -33288,7 +33288,7 @@ class SupervertalerQt(QMainWindow):
         # them into whatever folder the user saves into. Default on.
         subfolder_check = CheckmarkCheckBox(
             self.tr("📁 Create a dedicated folder for this project"))
-        subfolder_check.setChecked(getattr(self, 'create_project_subfolder', True))
+        subfolder_check.setChecked(self._create_project_subfolder_pref())
         subfolder_check.setToolTip(self.tr(
             "When you first save, place the .svproj in its own folder so its "
             "source/ and target/ subfolders stay self-contained."))
@@ -33315,8 +33315,15 @@ class SupervertalerQt(QMainWindow):
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
 
-        # Remember the folder preference for the first save (and future Save As).
+        # Remember the folder preference for the first save and future Save As
+        # – across sessions too (issue #228).
         self.create_project_subfolder = subfolder_check.isChecked()
+        try:
+            _gs = self.load_general_settings()
+            _gs['create_project_subfolder'] = self.create_project_subfolder
+            self.save_general_settings(_gs)
+        except Exception as e:
+            self.log(f"⚠ Could not remember the project folder preference: {e}")
 
         # Create project
         project_name = name_input.text().strip() or "Untitled Project"
@@ -33922,13 +33929,22 @@ class SupervertalerQt(QMainWindow):
             QApplication.processEvents()
 
             # Try UTF-8 first, fall back to latin-1 if it fails
+            recovered_from_backup = False
             try:
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-            except UnicodeDecodeError:
-                self.log(f"⚠ UTF-8 decoding failed, trying latin-1 encoding...")
-                with open(file_path, 'r', encoding='latin-1') as f:
-                    data = json.load(f)
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                except UnicodeDecodeError:
+                    self.log(f"⚠ UTF-8 decoding failed, trying latin-1 encoding...")
+                    with open(file_path, 'r', encoding='latin-1') as f:
+                        data = json.load(f)
+            except json.JSONDecodeError as damaged:
+                # A damaged project file: offer the copy kept at the last good
+                # save (<name>.svproj.bak, issue #228)
+                data = self._offer_project_backup(file_path, damaged, progress)
+                if data is None:
+                    raise
+                recovered_from_backup = True
             
             # If no name in file, use filename
             if 'name' not in data:
@@ -33936,7 +33952,9 @@ class SupervertalerQt(QMainWindow):
             
             self.current_project = Project.from_dict(data)
             self.project_file_path = file_path
-            self.project_modified = False
+            # Opened from the backup: mark it modified so the next save repairs
+            # the damaged file
+            self.project_modified = recovered_from_backup
 
             # Clear the previous project's per-segment comment/notes editors up
             # front, so opening this project directly (without closing the last
@@ -34443,6 +34461,30 @@ class SupervertalerQt(QMainWindow):
                 progress.close()
             except Exception:
                 pass
+
+    def _offer_project_backup(self, file_path: str, error, progress=None):
+        """The project file will not parse: offer the backup copy from the
+        last good save. Returns its data, or None to report the error."""
+        found = read_backup(file_path)
+        if found is None:
+            return None
+        data, saved_at = found
+        if progress is not None:
+            progress.hide()
+        when = datetime.fromtimestamp(saved_at).strftime('%Y-%m-%d %H:%M')
+        reply = QMessageBox.question(
+            self, "Project file damaged",
+            f"{os.path.basename(file_path)} is damaged and cannot be read:\n{error}\n\n"
+            f"A backup copy from the previous save ({when}) is available. "
+            "Open the backup? Saving then replaces the damaged file.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes)
+        if progress is not None:
+            progress.show()
+        if reply != QMessageBox.StandardButton.Yes:
+            return None
+        self.log(f"♻ Opened the backup copy of {os.path.basename(file_path)} (saved {when})")
+        return data
 
     def _load_synonyms_bulk(self):
         """Load every synonym from ``termbase_synonyms`` in one query,
@@ -35818,7 +35860,7 @@ class SupervertalerQt(QMainWindow):
                 file_path += '.svproj'
             # Optionally tuck the project into its own folder so its source/ and
             # target/ subfolders stay self-contained (project-folder model, #228).
-            if getattr(self, 'create_project_subfolder', True):
+            if self._create_project_subfolder_pref():
                 try:
                     file_path = nest_in_own_folder(file_path)
                 except Exception as exc:
@@ -35831,6 +35873,16 @@ class SupervertalerQt(QMainWindow):
             self.project_file_path = file_path
             self.add_to_recent_projects(file_path)
     
+    def _create_project_subfolder_pref(self) -> bool:
+        """"Create a dedicated folder for this project" (issue #228): this
+        session's choice, else the one remembered in the settings (default on)."""
+        if hasattr(self, 'create_project_subfolder'):
+            return bool(self.create_project_subfolder)
+        try:
+            return bool(self.load_general_settings().get('create_project_subfolder', True))
+        except Exception:
+            return True
+
     def save_project_to_file(self, file_path: str):
         """Save project to specified file"""
         try:
@@ -35987,11 +36039,17 @@ class SupervertalerQt(QMainWindow):
                 if seg.target:
                     seg.target = strip_invisible_markers(seg.target)
 
-            with open(file_path, 'w', encoding='utf-8') as f:
-                json.dump(self.current_project.to_dict(), f, indent=2, ensure_ascii=False)
-
-            # Restore the current (sorted) order after saving
-            self.current_project.segments = current_segments
+            try:
+                # Serialise first, then write through a temporary file that
+                # replaces the project in one step, keeping the previous
+                # version as <name>.svproj.bak (issue #228). Writing straight
+                # into the .svproj left it truncated when a save failed half-way.
+                payload = json.dumps(self.current_project.to_dict(), indent=2, ensure_ascii=False)
+                write_project_file(file_path, payload)
+            finally:
+                # Restore the current (sorted) order after saving – also when
+                # the save failed
+                self.current_project.segments = current_segments
             
             self.project_modified = False
             self.update_window_title()

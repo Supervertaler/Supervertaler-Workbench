@@ -7,6 +7,14 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ## Unreleased
 
+### Fixed (Projects · a failed save could destroy the project file)
+
+Saving wrote the project straight over the existing `.svproj`. If anything went wrong halfway (a full disk, a crash, a value that could not be saved), the file was left cut off and could no longer be opened. Now (issue #228):
+- **Saving is all-or-nothing.** The project is written to a temporary file next to it, which then replaces the `.svproj` in one step, so a failed save leaves the previous version intact.
+- **A `.svproj.bak` safety copy** of the previous save is kept next to the project, as OmegaT does. A damaged file never overwrites a good backup.
+- **Recovery when opening.** If a project file cannot be read, Supervertaler offers to open the backup copy and says when it was saved. The next save then replaces the damaged file.
+- **"📁 Create a dedicated folder for this project"** in New Project is now remembered between sessions, not only until you close the app.
+
 ### Improved (Glossaries · synonyms are first-class citizens)
 
 Two improvements for glossary synonyms (issue #114):
