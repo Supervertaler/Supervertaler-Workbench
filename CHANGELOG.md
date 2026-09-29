@@ -5,6 +5,16 @@ All notable changes to Supervertaler Workbench are documented in this file.
 **Current Version:** v1.10.372 (September 29, 2026)
 
 
+## Unreleased
+
+### Changed (Voice · the last pointers to Sidekick are gone)
+
+Sidekick was retired in v1.10.4, but a few places still sent you looking for it (issue #199):
+- **Settings → 🎤 Voice** was a signpost saying Voice "lives in Supervertaler Sidekick". It has been removed: Voice has its own **🎤 Voice** tab.
+- **Chat replies** were labelled "Supervertaler Sidekick"; they now say "Supervertaler".
+- **Two dictation error messages** told you to "switch to 'OpenAI Whisper API' in Sidekick → Voice". Neither that window nor that option exists any more, so the messages now give only the fix that works: reinstall, or install FFmpeg.
+
+
 ## v1.10.372 - September 29, 2026
 
 ### Added (Settings · inline codes and placeholders treated like tags)

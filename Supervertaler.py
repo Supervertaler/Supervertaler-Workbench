@@ -24055,10 +24055,6 @@ class SupervertalerQt(QMainWindow):
         settings_tabs.addTab(ai_scroll, self.tr("🤖 AI Settings"))
         self.ai_settings_scroll = ai_scroll  # Store reference for scrolling to API keys
 
-        # ===== TAB: Voice (commands & dictation, lives in Sidekick) =====
-        voice_tab = self._create_voice_settings_tab()
-        settings_tabs.addTab(scroll_area_wrapper(voice_tab), self.tr("🎤 Voice"))
-
         # ===== TAB: Clipboard privacy (issue #246) =====
         clipboard_tab = self._create_clipboard_settings_tab()
         settings_tabs.addTab(scroll_area_wrapper(clipboard_tab), self.tr("📋 Clipboard"))
@@ -29086,84 +29082,13 @@ class SupervertalerQt(QMainWindow):
         self.log(f"✓ User identity saved: translator name = {display}")
         QMessageBox.information(self, "Settings Saved", f"User identity saved.\nTranslator name: {display}")
 
-    def _create_voice_settings_tab(self):
-        """Create the Voice info/redirect tab.
-
-        Voice (commands & dictation) lives in Sidekick. This
-        Workbench Settings tab is just a signpost: a brief explanation, a
-        quick-reference card for the hotkeys, and a button that opens
-        Sidekick directly to the Voice tab.
-        """
-        from PyQt6.QtWidgets import QGroupBox, QPushButton
-
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(15)
-
-        header = QLabel(self.tr("🎤 <b>Voice</b> – commands and dictation"))
-        header.setTextFormat(Qt.TextFormat.RichText)
-        header.setStyleSheet("font-size: 14pt; padding: 8px;")
-        layout.addWidget(header)
-
-        info = QLabel(
-            "Voice is Supervertaler's command and dictation system. "
-            "Its full settings panel lives in <b>Supervertaler Sidekick</b>, the "
-            "floating companion window you can summon from anywhere on your "
-            "computer.<br><br>"
-            "<b>Why is it there and not here?</b><br>"
-            "Sidekick stays accessible even when Workbench is hidden – and "
-            "Voice's Always-On listening + global hotkeys are designed to "
-            "work across every app on your computer (Word, Trados, memoQ, "
-            "browsers, etc.), not just inside Workbench."
-        )
-        info.setTextFormat(Qt.TextFormat.RichText)
-        info.setWordWrap(True)
-        info.setStyleSheet(
-            "font-size: 9pt; color: #444; padding: 12px;"
-            " background-color: #E3F2FD; border-radius: 4px;"
-        )
-        layout.addWidget(info)
-
-        open_btn = QPushButton(self.tr("🎤  Open Voice"))
-        open_btn.setStyleSheet(
-            "background-color: #4CAF50; color: white; font-weight: bold;"
-            " padding: 12px; font-size: 11pt; border: none;"
-        )
-        open_btn.clicked.connect(self._open_voice_in_workbench)
-        layout.addWidget(open_btn)
-
-        quick_ref_group = QGroupBox(self.tr("📖 Quick Reference"))
-        quick_ref_layout = QVBoxLayout()
-        quick_ref = QLabel(
-            "<b>Dictation hotkey</b> (default <b>Ctrl+Shift+Space</b>) – "
-            "hold to dictate, release to transcribe. Works in the "
-            "Workbench grid and in any other app on your computer.<br>"
-            "<b>Always-On</b> – toggleable in Sidekick → Voice tab; "
-            "listens continuously, hands-free.<br>"
-            "<b>Voice commands</b> – say a phrase to execute keystrokes, "
-            "AutoHotkey scripts, or built-in actions. Editable in Sidekick.<br><br>"
-            "Rebind the dictation hotkey to any key you like "
-            "(numpad+, a function key, anything) in "
-            "<b>Settings → Keyboard Shortcuts → Special → Voice dictation</b>."
-        )
-        quick_ref.setTextFormat(Qt.TextFormat.RichText)
-        quick_ref.setWordWrap(True)
-        quick_ref.setStyleSheet("font-size: 9pt; color: #555; padding: 8px;")
-        quick_ref_layout.addWidget(quick_ref)
-        quick_ref_group.setLayout(quick_ref_layout)
-        layout.addWidget(quick_ref_group)
-
-        layout.addStretch()
-        return tab
-
     def _open_voice_in_workbench(self):
         """Open Workbench's Voice top tab from a Settings link / tray menu.
 
         Method was renamed from _open_voice_in_sidekick in v1.10.10
-        when Sidekick was retired. The two existing call sites
-        (Voice settings link and Always-On tray menu) were updated
-        to match.
+        when Sidekick was retired. The Settings → Voice signpost page that
+        also called it was removed once Voice became a top tab (#199); the
+        Always-On tray menu still uses it.
         """
         try:
             if hasattr(self, '_ensure_voice_top_tab'):

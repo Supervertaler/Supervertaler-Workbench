@@ -98,8 +98,7 @@ class QuickDictationThread(QThread):
                 if not ensure_ffmpeg_available():
                     self.error_occurred.emit(
                         "FFmpeg not found. Local Whisper requires FFmpeg.\n\n"
-                        "Option A (recommended): Switch to 'OpenAI Whisper API' in Sidekick → Voice.\n\n"
-                        "Option B: Install FFmpeg (PowerShell as Admin):\n"
+                        "Install FFmpeg (PowerShell as Admin):\n"
                         "winget install FFmpeg  (or)  choco install ffmpeg"
                     )
                     return
@@ -250,8 +249,7 @@ class QuickDictationThread(QThread):
                 msg = (
                     "faster-whisper is not installed in this environment.\n\n"
                     "Re-install Supervertaler:\n"
-                    "  pip install --upgrade supervertaler\n\n"
-                    "Or switch to 'OpenAI Whisper API' in Sidekick → Voice."
+                    "  pip install --upgrade supervertaler"
                 )
                 self.error_occurred.emit(msg)
                 return ""
