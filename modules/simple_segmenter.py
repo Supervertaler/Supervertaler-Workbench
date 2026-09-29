@@ -1,97 +1,142 @@
 """
 Simple Segmenter
-Basic sentence segmentation using regex patterns
+Sentence segmentation for the text Supervertaler splits itself (plain-text and
+Markdown imports, pasted text), extended with the user's segmentation rules
+from Settings → Segmentation Rules (issue #191).
+
+Segments are always slices of the input with only the whitespace at each cut
+trimmed – no characters are ever dropped – and ``segment_with_separators``
+returns that whitespace too, so a plain-text export can rebuild each line
+exactly (a custom rule may split where there is no space at all).
 """
 
 import re
-from typing import List
+from typing import List, Optional, Tuple
+
+try:
+    from modules.segmentation_rules import SegmentationRules, compile_rules, rule_positions
+except ImportError:  # run as a script from modules/
+    from segmentation_rules import SegmentationRules, compile_rules, rule_positions
+
+# Sentence-final punctuation (and any closing quote or bracket after it),
+# followed by whitespace; group 1 is the first character after the whitespace.
+_TERMINATOR = re.compile(r'[.!?]+["\'\u201d\u2019\u00bb)\]]*(?=\s+(\S))')
+# Characters that may open a new sentence besides a capital letter.
+_OPENERS = '"\'\u201c\u2018\u201e\u00ab\u00bf\u00a1'
+_LEADING_PUNCTUATION = '([{"\'\u201c\u2018\u201e\u00ab\u00bf\u00a1'
+
 
 class SimpleSegmenter:
-    """Simple sentence segmenter using regex patterns"""
-    
-    def __init__(self):
-        # Common abbreviations that shouldn't trigger sentence breaks
+    """Rule-based sentence segmenter: the user's custom rules first, then the
+    built-in sentence rules."""
+
+    def __init__(self, rules: Optional[SegmentationRules] = None):
+        # Common abbreviations: a full stop after these ends a sentence only
+        # when a reasonably long sentence follows.
         self.abbreviations = {
             'mr', 'mrs', 'ms', 'dr', 'prof', 'sr', 'jr',
             'inc', 'ltd', 'co', 'corp', 'fig', 'figs',
             'etc', 'vs', 'e.g', 'i.e', 'cf', 'approx', 'ca',
             'no', 'nos', 'vol', 'p', 'pp', 'art', 'op'
         }
-    
+        # Titles are always followed by a name, never by a new sentence
+        # ("Ms" only capitalised: lower-case "ms." is milliseconds).
+        self.title_abbreviations = {'mr', 'mrs', 'dr', 'prof'}
+        self.rules = rules or SegmentationRules()
+        self.never_break_after = self.title_abbreviations | set(self.rules.extra_abbreviations)
+        self._compiled = compile_rules(self.rules.rules)
+
     def segment_text(self, text: str) -> List[str]:
         """
         Segment text into sentences
-        
+
         Returns: List of sentences
         """
+        return [segment for segment, _ in self.segment_with_separators(text)]
+
+    def segment_with_separators(self, text: str) -> List[Tuple[str, str]]:
+        """``[(segment, whitespace before it)]`` – the first segment's
+        separator is empty; joining ``separator + segment`` rebuilds the
+        text apart from whitespace at its very start and end."""
         if not text or not text.strip():
             return []
-        
-        # Replace newlines with spaces (preserve paragraph structure elsewhere)
-        text = text.replace('\n', ' ').replace('\r', '')
-        
-        # Find potential sentence boundaries
-        # Pattern: sentence-ending punctuation followed by space and capital letter or quote
-        pattern = r'([.!?]+)\s+(?=[A-Z"\'])'
-        
-        # Split but keep the punctuation
-        parts = re.split(pattern, text)
-        
-        # Reconstruct sentences
-        sentences = []
-        i = 0
-        while i < len(parts):
-            if i + 1 < len(parts) and parts[i+1] in ['.', '!', '?', '...', '.)', '."']:
-                # Combine text with its ending punctuation
-                sentence = (parts[i] + parts[i+1]).strip()
-                i += 2
-            else:
-                sentence = parts[i].strip()
-                i += 1
-            
-            if sentence and not self._is_abbreviation_only(sentence):
-                sentences.append(sentence)
-        
-        # Post-process: merge sentences that were incorrectly split at abbreviations
-        sentences = self._merge_abbreviation_splits(sentences)
-        
-        return sentences
-    
-    def _is_abbreviation_only(self, text: str) -> bool:
-        """Check if text is just an abbreviation"""
-        cleaned = text.lower().rstrip('.')
-        return cleaned in self.abbreviations
-    
-    def _merge_abbreviation_splits(self, sentences: List[str]) -> List[str]:
-        """Merge sentences that were incorrectly split at abbreviations"""
-        if not sentences:
+        if self.rules.split_at_line_breaks:
+            out: List[Tuple[str, str]] = []
+            breaks = ''       # line breaks since the last segment
+            for line in re.split(r'\r\n|\r|\n', text):
+                for n, (segment, separator) in enumerate(self._split_line(line)):
+                    out.append((segment, (breaks if out else '') if n == 0 else separator))
+                    breaks = ''
+                breaks += '\n'
+            return out
+        # Line breaks inside the text are treated as spaces.
+        return self._split_line(text.replace('\r', '').replace('\n', ' '))
+
+    # ── internals ──────────────────────────────────────────────────────
+
+    def _split_line(self, text: str) -> List[Tuple[str, str]]:
+        if not text.strip():
             return []
-        
-        merged = []
-        current = sentences[0]
-        
-        for i in range(1, len(sentences)):
-            # Check if previous sentence ends with common abbreviation
-            prev_words = current.split()
-            if prev_words:
-                last_word = prev_words[-1].lower().rstrip('.')
-                
-                # If it's an abbreviation and next sentence starts with lowercase
-                # or is very short, merge them
-                if (last_word in self.abbreviations and 
-                    (sentences[i][0].islower() or len(sentences[i]) < 10)):
-                    current += ' ' + sentences[i]
+        decided = {}          # position → (is_break, soft)
+        for pattern, is_break in self._compiled:
+            for pos in rule_positions(pattern, text):
+                decided.setdefault(self._settle(text, pos), (is_break, False))
+        if self.rules.use_builtin_rules:
+            for pos, is_break, soft in self._builtin_positions(text):
+                decided.setdefault(pos, (is_break, soft))
+
+        breaks = sorted(p for p, (is_break, _) in decided.items()
+                        if is_break and 0 < p < len(text))
+        kept = []
+        for i, pos in enumerate(breaks):
+            if decided[pos][1]:
+                following = text[pos:breaks[i + 1] if i + 1 < len(breaks) else len(text)].strip()
+                if len(following) < 10 or following[:1].islower():
                     continue
-            
-            # Otherwise, save current and start new
-            merged.append(current)
-            current = sentences[i]
-        
-        # Don't forget the last one
-        merged.append(current)
-        
-        return merged
-    
+            kept.append(pos)
+
+        out: List[Tuple[str, str]] = []
+        pending = ''
+        for start, end in zip([0] + kept, kept + [len(text)]):
+            piece = text[start:end]
+            core = piece.strip()
+            if not core:
+                pending += piece
+                continue
+            lead = piece[:len(piece) - len(piece.lstrip())]
+            out.append((core, (pending + lead) if out else ''))
+            pending = piece[len(piece.rstrip()):]
+        return out
+
+    @staticmethod
+    def _settle(text: str, pos: int) -> int:
+        """Move a break position left over any whitespace, so a rule that
+        ends with the space and one that ends before it name the same cut."""
+        while pos > 0 and text[pos - 1].isspace():
+            pos -= 1
+        return pos
+
+    def _builtin_positions(self, text: str):
+        """``(position, is_break, soft)`` for every candidate sentence end."""
+        for m in _TERMINATOR.finditer(text):
+            nxt = m.group(1)
+            if not (nxt.isupper() or nxt in _OPENERS):
+                continue
+            if m.start() > 0 and text[m.start() - 1] in '([':
+                continue          # "(?)", "(!)" – a remark, not a sentence end
+            if text[m.start():m.end()].rstrip(_OPENERS + '\u201d\u2019\u00bb)]') == '.':
+                k = m.start()
+                while k > 0 and not text[k - 1].isspace():
+                    k -= 1
+                word = text[k:m.start()].lstrip(_LEADING_PUNCTUATION)
+                if word.lower() in self.never_break_after or word == 'Ms':
+                    yield m.end(), False, False
+                    continue
+                if word.lower() in self.abbreviations:
+                    yield m.end(), True, True
+                    continue
+            yield m.end(), True, False
+
     def segment_paragraphs(self, paragraphs: List[str]) -> List[tuple]:
         """
         Segment a list of paragraphs, tracking which paragraph each segment belongs to
@@ -109,6 +154,20 @@ class SimpleSegmenter:
                 all_segments.append((para_idx, segment))
         
         return all_segments
+
+
+def join_segments(parts: List[Tuple[str, Optional[str]]]) -> str:
+    """Rebuild one line from ``[(text, separator before it)]`` for export.
+    Empty texts are skipped; an unknown separator (``None``, e.g. a project
+    created before separators were recorded) becomes a single space."""
+    line = ''
+    for text, separator in parts:
+        if not text or not text.strip():
+            continue
+        if line:
+            line += ' ' if separator is None else separator
+        line += text
+    return line
 
 
 class MarkdownSegmenter(SimpleSegmenter):
@@ -143,7 +202,7 @@ class MarkdownSegmenter(SimpleSegmenter):
         re.compile(r'</?[a-zA-Z][a-zA-Z0-9]*(?:\s+[^>]*)?>'),
     ]
 
-    def segment_text(self, text: str) -> list:
+    def segment_with_separators(self, text: str) -> list:
         """Segment text into sentences, protecting markdown constructs."""
         if not text or not text.strip():
             return []
@@ -162,14 +221,15 @@ class MarkdownSegmenter(SimpleSegmenter):
             protected = pattern.sub(_make_placeholder, protected)
 
         # Phase 2: Run normal sentence segmentation on protected text
-        sentences = super().segment_text(protected)
+        sentences = super().segment_with_separators(protected)
 
-        # Phase 3: Restore placeholders in each sentence
+        # Phase 3: Restore placeholders in each sentence – newest first, as a
+        # later construct can contain an earlier placeholder: [`code`](url)
         restored = []
-        for sentence in sentences:
-            for key, original in placeholders.items():
+        for sentence, separator in sentences:
+            for key, original in reversed(list(placeholders.items())):
                 sentence = sentence.replace(key, original)
-            restored.append(sentence)
+            restored.append((sentence, separator))
 
         return restored
 
