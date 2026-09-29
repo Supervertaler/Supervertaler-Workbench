@@ -12144,6 +12144,14 @@ class SupervertalerQt(QMainWindow):
         qa_checks_action.triggered.connect(self.show_qa_checks_dialog)
         self.qa_menu.addAction(qa_checks_action)
 
+        # Grammar / spelling / style through a LanguageTool server (#233)
+        languagetool_action = QAction(self.tr("📝 Check with &LanguageTool..."), self)
+        languagetool_action.setToolTip(self.tr(
+            "Check the target text for grammar, spelling and style with LanguageTool "
+            "(the free public API or your own LanguageTool server)"))
+        languagetool_action.triggered.connect(self.show_languagetool_dialog)
+        self.qa_menu.addAction(languagetool_action)
+
         proofreading_submenu = self.qa_menu.addMenu(self.tr("✅ &Proofreading"))
 
         proofread_action = QAction(self.tr("✅ &Proofread Translation..."), self)
@@ -54431,6 +54439,54 @@ class SupervertalerQt(QMainWindow):
         dlg.show()
         dlg.raise_()
         dlg.activateWindow()
+
+    def show_languagetool_dialog(self):
+        """QA → Check with LanguageTool (issue #233). Non-modal."""
+        from modules.languagetool_dialog import LanguageToolDialog
+        dlg = getattr(self, '_languagetool_dialog', None)
+        if dlg is None:
+            def _proxies():
+                url = self._get_proxy_url() if hasattr(self, '_get_proxy_url') else None
+                return {'http': url, 'https': url} if url else None
+            dlg = LanguageToolDialog(
+                self,
+                get_segments=lambda: self.current_project.segments if self.current_project else [],
+                get_target_language=lambda: getattr(self.current_project, 'target_lang', '') if self.current_project else '',
+                navigate=self._navigate_to_segment_by_id,
+                apply_target=self._set_target_from_tool,
+                load_settings=self.load_general_settings,
+                save_settings=self.save_general_settings,
+                get_proxies=_proxies)
+            self._languagetool_dialog = dlg
+        else:
+            from modules.languagetool_client import lt_language
+            if self.current_project:
+                dlg.language_edit.setText(lt_language(getattr(self.current_project, 'target_lang', '')))
+        dlg.show()
+        dlg.raise_()
+        dlg.activateWindow()
+
+    def _set_target_from_tool(self, segment_index, new_text):
+        """Replace a segment's target on behalf of a checking tool (LanguageTool
+        suggestion): undoable with Ctrl+Z, grid cell updated in place."""
+        if not self.current_project or not 0 <= segment_index < len(self.current_project.segments):
+            return
+        segment = self.current_project.segments[segment_index]
+        old_target, old_status = segment.target, segment.status
+        if new_text == old_target:
+            return
+        segment.target = new_text
+        self.record_undo_state(segment.id, old_target, new_text, old_status, old_status)
+        widget = self.table.cellWidget(segment_index, 3) if hasattr(self, 'table') else None
+        if widget is not None and hasattr(widget, 'setPlainText'):
+            display_text = new_text
+            if getattr(self, 'hide_outer_wrapping_tags', False):
+                display_text, _ = strip_outer_wrapping_tags(display_text)
+            widget.blockSignals(True)
+            widget.setPlainText(display_text)
+            widget.blockSignals(False)
+        self.project_modified = True
+        self.update_window_title()
 
     def _fr_run_set_batch(self, fr_set: FindReplaceSet):
         """Run all enabled operations in a F&R Set as a batch (optimized for speed)."""
