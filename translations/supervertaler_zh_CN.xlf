@@ -703,7 +703,8 @@
       <trans-unit id="SupervertalerQt.Confirmed_segments___Total_segments__percentage__Click_to_sw">
         <source>Confirmed segments / Total segments (percentage)
 Click to switch between segment- and word-based percentage</source>
-        <target state="needs-translation" />
+        <target state="translated">已确认句段 / 总句段（百分比）
+点击可在按句段与按字数计算的百分比之间切换</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -753,7 +754,8 @@ Click to toggle</source>
       <trans-unit id="SupervertalerQt.Confirmed_words___Total_words__percentage__Click_to_switch_t">
         <source>Confirmed words / Total words (percentage)
 Click to switch to segment-based percentage</source>
-        <target state="needs-translation" />
+        <target state="translated">已确认字数 / 总字数（百分比）
+点击切换为按句段计算的百分比</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -763,7 +765,8 @@ Click to switch to segment-based percentage</source>
       <trans-unit id="SupervertalerQt.Confirmed_segments___Total_segments__percentage__Click_to_sw">
         <source>Confirmed segments / Total segments (percentage)
 Click to switch to word-based percentage</source>
-        <target state="needs-translation" />
+        <target state="translated">已确认句段 / 总句段（百分比）
+点击切换为按字数计算的百分比</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -772,7 +775,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Percentage_by_segment_count">
         <source>Percentage by segment count</source>
-        <target state="needs-translation" />
+        <target state="translated">按句段数计算的百分比</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -781,7 +784,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Percentage_by_word_count">
         <source>Percentage by word count</source>
-        <target state="needs-translation" />
+        <target state="translated">按字数计算的百分比</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -938,7 +941,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.CafeTran">
         <source>&amp;CafeTran</source>
-        <target state="needs-translation" />
+        <target state="translated">CafeTran(&amp;C)</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -1007,7 +1010,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Phrase__Memsource">
         <source>&amp;Phrase (Memsource)</source>
-        <target state="needs-translation" />
+        <target state="translated">Phrase (Memsource)(&amp;P)</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -1018,7 +1021,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Bilingual__DOCX_...">
         <source>&amp;Bilingual (DOCX)...</source>
-        <target state="needs-translation" />
+        <target state="translated">双语 (DOCX)(&amp;B)...</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -1027,7 +1030,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Déjà_Vu_X3">
         <source>&amp;Déjà Vu X3</source>
-        <target state="needs-translation" />
+        <target state="translated">Déjà Vu X3(&amp;D)</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -1038,7 +1041,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Bilingual__RTF_...">
         <source>&amp;Bilingual (RTF)...</source>
-        <target state="needs-translation" />
+        <target state="translated">双语 (RTF)(&amp;B)...</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -1112,7 +1115,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Bilingual_Text__AI-friendly__-_Update_from__Pasted_Text...">
         <source>Bilingual Text (AI-friendly) - Update from &amp;Pasted Text...</source>
-        <target state="needs-translation" />
+        <target state="translated">双语文本 (AI 友好) - 从粘贴的文本更新(&amp;P)...</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -1121,7 +1124,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Paste_edited__SEGMENT_NNNN__text___for_example_an_AI_chat_s_">
         <source>Paste edited [SEGMENT NNNN] text – for example an AI chat's reply – to update the current project's translations, comments and statuses. No file needed.</source>
-        <target state="needs-translation" />
+        <target state="translated">粘贴已编辑的 [SEGMENT NNNN] 文本（例如 AI 聊天的回复），以更新当前项目的译文、注释和状态。无需文件。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -1215,7 +1218,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Bilingual__Table_-_Translated__DOCX_...">
         <source>Bilingual &amp;Table - Translated (DOCX)...</source>
-        <target state="needs-translation" />
+        <target state="translated">双语表格 - 已翻译 (DOCX)(&amp;T)...</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -1251,7 +1254,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Bilingual_-_Translated__DOCX_...">
         <source>&amp;Bilingual - Translated (DOCX)...</source>
-        <target state="needs-translation" />
+        <target state="translated">双语 - 已翻译 (DOCX)(&amp;B)...</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -1278,7 +1281,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Bilingual_-_Translated__RTF_...">
         <source>&amp;Bilingual - Translated (RTF)...</source>
-        <target state="needs-translation" />
+        <target state="translated">双语 - 已翻译 (RTF)(&amp;B)...</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -1368,7 +1371,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Back_Up_All_TMs____Termbases...">
         <source>📦 &amp;Back Up All TMs &amp;&amp; Termbases...</source>
-        <target state="needs-translation" />
+        <target state="translated">📦 备份所有 TM 和术语库(&amp;B)...</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -1377,7 +1380,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Write_every_translation_memory__TMX__and_termbase__TSV__incl">
         <source>Write every translation memory (TMX) and termbase (TSV, including non-translatables) in the database to a folder of your choice</source>
-        <target state="needs-translation" />
+        <target state="translated">将数据库中的所有翻译记忆库（TMX）和术语库（TSV，包括不译项）写入您选择的文件夹</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -1458,7 +1461,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Delete_Segment_s">
         <source>🗑 &amp;Delete Segment(s)</source>
-        <target state="needs-translation" />
+        <target state="translated">🗑 删除句段(&amp;D)</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -1467,7 +1470,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Delete_the_selected_segment_s_._Available_for_pasted___plain">
         <source>Delete the selected segment(s). Available for pasted / plain-text / Start-Empty projects (not DOCX / Okapi / bilingual round-trip).</source>
-        <target state="needs-translation" />
+        <target state="translated">删除所选句段。适用于粘贴文本 / 纯文本 / 空项目（不适用于 DOCX / Okapi / 双语往返项目）。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -1476,7 +1479,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Add_Source_Text...">
         <source>➕ &amp;Add Source Text...</source>
-        <target state="needs-translation" />
+        <target state="translated">➕ 添加源文本(&amp;A)...</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -1485,7 +1488,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Paste_or_type_more_source_text__it_is_split_into_sentences_a">
         <source>Paste or type more source text; it is split into sentences and added as new segments at the end. Available for pasted / plain-text / Start-Empty projects (not DOCX / Okapi / bilingual round-trip).</source>
-        <target state="needs-translation" />
+        <target state="translated">粘贴或输入更多源文本；文本将拆分为句子，并作为新句段添加到末尾。适用于粘贴文本 / 纯文本 / 空项目（不适用于 DOCX / Okapi / 双语往返项目）。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -1494,7 +1497,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.T_ranslate">
         <source>T&amp;ranslate</source>
-        <target state="needs-translation" />
+        <target state="translated">翻译(&amp;R)</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -1503,7 +1506,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Translate_Current_Segment">
         <source>🌐 &amp;Translate Current Segment</source>
-        <target state="needs-translation" />
+        <target state="translated">🌐 翻译当前句段(&amp;T)</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -1512,7 +1515,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Fuzzy_Fix_Current_Segment">
         <source>🔧 &amp;Fuzzy Fix Current Segment</source>
-        <target state="needs-translation" />
+        <target state="translated">🔧 对当前句段进行模糊修复(&amp;F)</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -1521,7 +1524,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Ask_the_AI_to_adapt_the_selected_fuzzy_TM_match_to_the_curre">
         <source>Ask the AI to adapt the selected fuzzy TM match to the current source</source>
-        <target state="needs-translation" />
+        <target state="translated">让 AI 根据当前源文本调整所选的 TM 模糊匹配</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -1530,7 +1533,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Auto-_tag_Current_Segment">
         <source>🏷️ Auto-&amp;tag Current Segment</source>
-        <target state="needs-translation" />
+        <target state="translated">🏷️ 为当前句段自动插入标签(&amp;T)</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -1539,7 +1542,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Ask_the_AI_to_place_the_source_segment_s_inline_tags_into_th">
         <source>Ask the AI to place the source segment's inline tags into the current translation</source>
-        <target state="needs-translation" />
+        <target state="translated">让 AI 将源句段的内联标签放入当前译文</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -1775,7 +1778,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Auto-tag_Segments__fix_inline_tags_with_AI">
         <source>🏷️ &amp;Auto-tag Segments (fix inline tags with AI)…</source>
-        <target state="needs-translation" />
+        <target state="translated">🏷️ 为句段自动插入标签（用 AI 修复内联标签）(&amp;A)…</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -1784,7 +1787,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Use_the_AI_to_place_each_segment_s_source_inline_tags_into_i">
         <source>Use the AI to place each segment's source inline tags into its existing translation (selected segments, or all if none selected)</source>
-        <target state="needs-translation" />
+        <target state="translated">使用 AI 将每个句段源文本中的内联标签放入其现有译文（所选句段；如未选择，则为全部句段）</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -1829,7 +1832,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Pseudo-translate__Export_Test_...">
         <source>🧪 &amp;Pseudo-translate (Export Test)...</source>
-        <target state="needs-translation" />
+        <target state="translated">🧪 伪翻译（导出测试）(&amp;P)...</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -1838,7 +1841,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Fill_targets_with_stress-tested_placeholder_text__length-exp">
         <source>Fill targets with stress-tested placeholder text (length-expanded, accented, tag-preserving) so you can export and check the document for layout/encoding problems before translating. Reversible via Undo.</source>
-        <target state="needs-translation" />
+        <target state="translated">用压力测试占位文本（加长、带重音符号、保留标签）填充目标，以便在翻译前导出并检查文档是否存在布局/编码问题。可通过撤销还原。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -1874,7 +1877,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.QA">
         <source>&amp;QA</source>
-        <target state="needs-translation" />
+        <target state="translated">QA(&amp;Q)</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -1883,7 +1886,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Run_QA__Checks...">
         <source>🔎 Run QA &amp;Checks...</source>
-        <target state="needs-translation" />
+        <target state="translated">🔎 运行 QA 检查(&amp;C)...</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -1892,7 +1895,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Run_saved_find-only_checks__double_spaces__doubled_words__yo">
         <source>Run saved find-only checks (double spaces, doubled words, your own patterns) over the project and list what they find</source>
-        <target state="needs-translation" />
+        <target state="translated">对项目运行已保存的仅查找检查（双空格、重复单词、自定义模式），并列出检查结果</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -1901,7 +1904,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Check_with__LanguageTool...">
         <source>📝 Check with &amp;LanguageTool...</source>
-        <target state="needs-translation" />
+        <target state="translated">📝 使用 LanguageTool 检查(&amp;L)...</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -1910,7 +1913,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Check_the_target_text_for_grammar__spelling_and_style_with_L">
         <source>Check the target text for grammar, spelling and style with LanguageTool (the free public API or your own LanguageTool server)</source>
-        <target state="needs-translation" />
+        <target state="translated">使用 LanguageTool（免费公共 API 或您自己的 LanguageTool 服务器）检查目标文本的语法、拼写和风格</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -1919,7 +1922,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Proofreading">
         <source>✅ &amp;Proofreading</source>
-        <target state="needs-translation" />
+        <target state="translated">✅ 校对(&amp;P)</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -1946,7 +1949,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Delete_All_Proofreading_Comments">
         <source>🗑️ &amp;Delete All Proofreading Comments</source>
-        <target state="needs-translation" />
+        <target state="translated">🗑️ 删除所有校对注释(&amp;D)</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -1955,7 +1958,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Remove_every_AI_proofreading_comment_from_the_project">
         <source>Remove every AI proofreading comment from the project</source>
-        <target state="needs-translation" />
+        <target state="translated">从项目中移除所有 AI 校对注释</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -2216,7 +2219,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Super_browser...">
         <source>🌐 Super&amp;browser...</source>
-        <target state="needs-translation" />
+        <target state="translated">🌐 Superbrowser(&amp;B)...</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -2225,7 +2228,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.ChatGPT__Claude__and_Gemini_side_by_side_in_one_window__with">
         <source>ChatGPT, Claude, and Gemini side by side in one window, with persistent logins – compare answers without switching tabs</source>
-        <target state="needs-translation" />
+        <target state="translated">在一个窗口中并排显示 ChatGPT、Claude 和 Gemini，并保持登录状态 – 无需切换标签页即可比较回答</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -2243,7 +2246,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Statistics__Analyse_Against_TM_...">
         <source>📊 &amp;Statistics (Analyse Against TM)...</source>
-        <target state="needs-translation" />
+        <target state="translated">📊 统计（基于 TM 分析）(&amp;S)...</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -2252,7 +2255,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Analyse_the_current_project_against_your_translation_memorie">
         <source>Analyse the current project against your translation memories and see a Trados/memoQ-style match breakdown (repetitions, 100%, fuzzy bands, no-match) to estimate how much work the document represents.</source>
-        <target state="needs-translation" />
+        <target state="translated">根据您的翻译记忆库分析当前项目，查看 Trados/memoQ 风格的匹配细分（重复、100%、模糊区间、无匹配），以估算文档的工作量。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -2261,7 +2264,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Quick_Count__pick_files__no_project_...">
         <source>⚡ &amp;Quick Count (pick files, no project)...</source>
-        <target state="needs-translation" />
+        <target state="translated">⚡ 快速统计（选择文件，无需项目）(&amp;Q)...</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -2270,7 +2273,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Quickly_count_one_or_more_files__DOCX__Trados_.sdlxliff__mem">
         <source>Quickly count one or more files (DOCX, Trados .sdlxliff, memoQ .mqxliff, and other formats) against your translation memories — without creating a project. For when you just want a fast word count / TM analysis.</source>
-        <target state="needs-translation" />
+        <target state="translated">根据您的翻译记忆库快速统计一个或多个文件（DOCX、Trados .sdlxliff、memoQ .mqxliff 及其他格式），无需创建项目。适用于只想快速统计字数 / 进行 TM 分析的情况。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -2335,7 +2338,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Token_Usage____Costs...">
         <source>💰 &amp;Token Usage &amp;&amp; Costs...</source>
-        <target state="needs-translation" />
+        <target state="translated">💰 Token 用量和费用(&amp;T)...</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -2344,7 +2347,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Token_usage_and_cost_totals_from_the_usage_log__with_CSV_Exc">
         <source>Token usage and cost totals from the usage log, with CSV/Excel export</source>
-        <target state="needs-translation" />
+        <target state="translated">来自用量日志的 Token 用量和费用总计，支持导出为 CSV/Excel</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -2380,7 +2383,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Open_the_Workbench_documentation_in_your_browser__press_F1_f">
         <source>Open the Workbench documentation in your browser (press F1 for help on the current panel)</source>
-        <target state="needs-translation" />
+        <target state="translated">在浏览器中打开 Workbench 文档（按 F1 获取当前面板的帮助）</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -2407,7 +2410,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Open_Sample_Project">
         <source>🎓 Open Sample Project</source>
-        <target state="needs-translation" />
+        <target state="translated">🎓 打开示例项目</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -2416,7 +2419,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Open_a_small_English___Dutch_project_with_a_sample_TM_and_gl">
         <source>Open a small English → Dutch project with a sample TM and glossary, to see TermLens, TM matches and the other panels in action</source>
-        <target state="needs-translation" />
+        <target state="translated">打开一个小型英语 → 荷兰语项目（含示例 TM 和术语表），实际体验 TermLens、TM 匹配及其他面板</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -2523,7 +2526,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Community_Discussions">
         <source>💬 Community Discussions</source>
-        <target state="needs-translation" />
+        <target state="translated">💬 社区讨论</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -2532,7 +2535,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Ask_questions__request_features_and_share_tips_in_GitHub_Dis">
         <source>Ask questions, request features and share tips in GitHub Discussions</source>
-        <target state="needs-translation" />
+        <target state="translated">在 GitHub Discussions 中提问、请求功能和分享技巧</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -2568,7 +2571,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Merge_segments">
         <source>Merge segments</source>
-        <target state="needs-translation" />
+        <target state="translated">合并句段</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -2577,7 +2580,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Delete_segments">
         <source>Delete segments</source>
-        <target state="needs-translation" />
+        <target state="translated">删除句段</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -2590,7 +2593,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Switch_to_Document_Order__Sort_menu__to_delete_segments.">
         <source>Switch to Document Order (Sort menu) to delete segments.</source>
-        <target state="needs-translation" />
+        <target state="translated">请切换到文档顺序（排序菜单）以删除句段。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -2599,7 +2602,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Add_Source_Text">
         <source>Add Source Text</source>
-        <target state="needs-translation" />
+        <target state="translated">添加源文本</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -2614,7 +2617,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Open_or_create_a_project_first.">
         <source>Open or create a project first.</source>
-        <target state="needs-translation" />
+        <target state="translated">请先打开或创建项目。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -2623,7 +2626,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Adding_source_text_is_only_available_for_pasted___plain-text">
         <source>Adding source text is only available for pasted / plain-text / Start-Empty projects. A DOCX, Okapi or bilingual-CAT project is exported back into its original file, which has no place for new text.</source>
-        <target state="needs-translation" />
+        <target state="translated">仅粘贴文本 / 纯文本 / 空项目支持添加源文本。DOCX、Okapi 或双语 CAT 项目会导出回其原始文件，而原始文件中没有容纳新文本的位置。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -2632,7 +2635,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Switch_to_Document_Order__Sort_menu__to_add_source_text.">
         <source>Switch to Document Order (Sort menu) to add source text.</source>
-        <target state="needs-translation" />
+        <target state="translated">请切换到文档顺序（排序菜单）以添加源文本。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -2641,7 +2644,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Paste_or_type_the_source_text_to_add._It_is_split_into_sente">
         <source>Paste or type the source text to add. It is split into sentences, the same way as when a project is created, and added as new segments at the end of the project. Each line becomes its own paragraph.</source>
-        <target state="needs-translation" />
+        <target state="translated">粘贴或输入要添加的源文本。文本将按照创建项目时的相同方式拆分为句子，并作为新句段添加到项目末尾。每一行都会成为一个独立段落。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -2650,7 +2653,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Paste_here__Ctrl_V">
         <source>Paste here (Ctrl+V)…</source>
-        <target state="needs-translation" />
+        <target state="translated">在此粘贴（Ctrl+V）…</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -2661,7 +2664,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Add_Segments">
         <source>Add Segments</source>
-        <target state="needs-translation" />
+        <target state="translated">添加句段</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -2670,7 +2673,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Deleting_segments_is_only_available_for_pasted___plain-text_">
         <source>Deleting segments is only available for pasted / plain-text / Start-Empty projects. Deleting from a DOCX, Okapi or bilingual-CAT project would leave a gap in the exported file.</source>
-        <target state="needs-translation" />
+        <target state="translated">仅粘贴文本 / 纯文本 / 空项目支持删除句段。从 DOCX、Okapi 或双语 CAT 项目中删除句段会在导出的文件中留下空缺。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -2679,7 +2682,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Superbrowser___Supervertaler">
         <source>🌐 Superbrowser – Supervertaler</source>
-        <target state="needs-translation" />
+        <target state="translated">🌐 Superbrowser – Supervertaler</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -2717,7 +2720,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Open_a_project_with_segments_first__then_run_Statistics.">
         <source>Open a project with segments first, then run Statistics.</source>
-        <target state="needs-translation" />
+        <target state="translated">请先打开包含句段的项目，然后再运行统计。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -2747,7 +2750,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Quick_Count___select_file_s">
         <source>Quick Count – select file(s)</source>
-        <target state="needs-translation" />
+        <target state="translated">快速统计 – 选择文件</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -2756,7 +2759,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Reading_files">
         <source>Reading files…</source>
-        <target state="needs-translation" />
+        <target state="translated">正在读取文件…</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -2765,7 +2768,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Quick_Count">
         <source>Quick Count</source>
-        <target state="needs-translation" />
+        <target state="translated">快速统计</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -2778,7 +2781,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Reading">
         <source>Reading: </source>
-        <target state="needs-translation" />
+        <target state="translated">正在读取： </target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -2789,7 +2792,9 @@ Click to switch to word-based percentage</source>
         <source>Some files could not be read:
 
 </source>
-        <target state="needs-translation" />
+        <target state="translated">部分文件无法读取：
+
+</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -2798,7 +2803,7 @@ Click to switch to word-based percentage</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.No_countable_source_segments_were_found_in_the_selected_file">
         <source>No countable source segments were found in the selected file(s).</source>
-        <target state="needs-translation" />
+        <target state="translated">所选文件中未找到可统计的源句段。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -3318,7 +3323,7 @@ Database not initialized.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Select_All_SuperLookup">
         <source>Select All SuperLookup</source>
-        <target state="needs-translation" />
+        <target state="translated">全选 SuperLookup</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -3329,7 +3334,7 @@ Database not initialized.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Clear_All_SuperLookup">
         <source>Clear All SuperLookup</source>
-        <target state="needs-translation" />
+        <target state="translated">清除全部 SuperLookup</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -3340,7 +3345,7 @@ Database not initialized.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Uncheck_the_SuperLookup_flag_on_every_TM__exclude_all_TMs_fr">
         <source>Uncheck the SuperLookup flag on every TM (exclude all TMs from SuperLookup)</source>
-        <target state="needs-translation" />
+        <target state="translated">取消所有 TM 的 SuperLookup 标记（将所有 TM 排除在 SuperLookup 之外）</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -3367,7 +3372,7 @@ Database not initialized.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.SuperLookup__TM_is_searched_by_SuperLookup._Independent_of_R">
         <source>SuperLookup: TM is searched by SuperLookup. Independent of Read — leave Read off for a project and still search this TM.</source>
-        <target state="needs-translation" />
+        <target state="translated">SuperLookup：SuperLookup 会搜索此 TM。与“读取”无关 — 即使在项目中关闭“读取”，仍可搜索此 TM。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -3573,7 +3578,7 @@ Database not initialized.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Original_document_not_found">
         <source>Original document not found</source>
-        <target state="needs-translation" />
+        <target state="translated">未找到原始文档</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -3584,7 +3589,9 @@ Database not initialized.</source>
         <source>Supervertaler can't find the original source document for this project, so the export would be rebuilt from the translated segments alone – losing the document's formatting (line numbers, headings, page layout).
 
 Locate the original document to keep its formatting.</source>
-        <target state="needs-translation" />
+        <target state="translated">Supervertaler 找不到此项目的原始源文档，因此导出时只能根据已翻译的句段重建文档 – 这会丢失文档的格式（行号、标题、页面布局）。
+
+请定位原始文档以保留其格式。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -3593,7 +3600,7 @@ Locate the original document to keep its formatting.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Locate_original">
         <source>Locate original…</source>
-        <target state="needs-translation" />
+        <target state="translated">定位原始文档…</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -3602,7 +3609,7 @@ Locate the original document to keep its formatting.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Export_without_formatting">
         <source>Export without formatting</source>
-        <target state="needs-translation" />
+        <target state="translated">不带格式导出</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -3611,7 +3618,7 @@ Locate the original document to keep its formatting.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Locate_the_original_source_document">
         <source>Locate the original source document</source>
-        <target state="needs-translation" />
+        <target state="translated">定位原始源文档</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -3620,7 +3627,7 @@ Locate the original document to keep its formatting.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Formatting_tags_missing_from_translation">
         <source>Formatting tags missing from translation</source>
-        <target state="needs-translation" />
+        <target state="translated">译文中缺少格式标签</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -3629,7 +3636,7 @@ Locate the original document to keep its formatting.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Export_anyway">
         <source>Export anyway</source>
-        <target state="needs-translation" />
+        <target state="translated">仍然导出</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -3638,7 +3645,7 @@ Locate the original document to keep its formatting.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Cancel____fix_tags">
         <source>Cancel &amp;&amp; fix tags</source>
-        <target state="needs-translation" />
+        <target state="translated">取消并修复标签</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -3647,7 +3654,7 @@ Locate the original document to keep its formatting.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Possible_Missing_Text_in_Export">
         <source>Possible Missing Text in Export</source>
-        <target state="needs-translation" />
+        <target state="translated">导出内容可能缺少文本</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -3660,7 +3667,11 @@ Locate the original document to keep its formatting.</source>
 {detail}
 
 Please open the file(s) and check before delivering. If the difference is expected (e.g. lots of numbers or comments), you can adjust or disable this check in settings.json ("export" → "word_count_check_threshold" / "word_count_check_enabled").</source>
-        <target state="needs-translation" />
+        <target state="translated">导出的文档字数明显少于已翻译的句段，这可能意味着导出时丢失了文本：
+
+{detail}
+
+交付前请打开文件进行检查。如果差异在预期之内（例如含有大量数字或注释），可以在 settings.json 中调整或禁用此检查（"export" → "word_count_check_threshold" / "word_count_check_enabled"）。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -3669,7 +3680,7 @@ Please open the file(s) and check before delivering. If the difference is expect
       </trans-unit>
       <trans-unit id="SupervertalerQt.Back_Up_Resources">
         <source>Back Up Resources</source>
-        <target state="needs-translation" />
+        <target state="translated">备份资源</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -3684,7 +3695,7 @@ Please open the file(s) and check before delivering. If the difference is expect
       </trans-unit>
       <trans-unit id="SupervertalerQt.The_resource_database_is_not_available.">
         <source>The resource database is not available.</source>
-        <target state="needs-translation" />
+        <target state="translated">资源数据库不可用。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -3693,7 +3704,7 @@ Please open the file(s) and check before delivering. If the difference is expect
       </trans-unit>
       <trans-unit id="SupervertalerQt.Choose_a_folder_for_the_backup">
         <source>Choose a folder for the backup</source>
-        <target state="needs-translation" />
+        <target state="translated">选择备份文件夹</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -3702,7 +3713,7 @@ Please open the file(s) and check before delivering. If the difference is expect
       </trans-unit>
       <trans-unit id="SupervertalerQt.Backing_up_resources">
         <source>Backing up resources…</source>
-        <target state="needs-translation" />
+        <target state="translated">正在备份资源…</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -3711,7 +3722,7 @@ Please open the file(s) and check before delivering. If the difference is expect
       </trans-unit>
       <trans-unit id="SupervertalerQt.Open_Folder">
         <source>Open Folder</source>
-        <target state="needs-translation" />
+        <target state="translated">打开文件夹</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -3778,7 +3789,7 @@ Database not initialized.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Uncheck_the_SuperLookup_flag_on_every_termbase__exclude_all_">
         <source>Uncheck the SuperLookup flag on every termbase (exclude all from SuperLookup)</source>
-        <target state="needs-translation" />
+        <target state="translated">取消所有术语库的 SuperLookup 标记（将全部术语库排除在 SuperLookup 之外）</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -3958,7 +3969,7 @@ Database not initialized.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Set_as_Project_Termbase__highest_priority__pink_._Ticking_al">
         <source>Set as Project Termbase (highest priority, pink). Ticking also enables Read – a project termbase is always used for matching.</source>
-        <target state="needs-translation" />
+        <target state="translated">设为项目术语库（最高优先级，粉色）。勾选时还会启用“读取” – 项目术语库始终用于匹配。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -3967,7 +3978,7 @@ Database not initialized.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Open_a_project_to_set_a_project_termbase">
         <source>Open a project to set a project termbase</source>
-        <target state="needs-translation" />
+        <target state="translated">打开项目以设置项目术语库</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -3985,7 +3996,7 @@ Database not initialized.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Large_termbase">
         <source>Large termbase</source>
-        <target state="needs-translation" />
+        <target state="translated">大型术语库</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -4003,7 +4014,7 @@ Database not initialized.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.SuperLookup__termbase_is_searched_by_SuperLookup._Independen">
         <source>SuperLookup: termbase is searched by SuperLookup. Independent of Read — leave Read off for a project and still search this termbase.</source>
-        <target state="needs-translation" />
+        <target state="translated">SuperLookup：SuperLookup 会搜索此术语库。与“读取”无关 — 即使在项目中关闭“读取”，仍可搜索此术语库。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -4090,7 +4101,7 @@ Database not initialized.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Open_a_project_first_to_create_a_project-specific_termbase">
         <source>Open a project first to create a project-specific termbase</source>
-        <target state="needs-translation" />
+        <target state="translated">请先打开项目以创建项目专用术语库</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -4110,7 +4121,7 @@ Database not initialized.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.No_Project_Open">
         <source>No Project Open</source>
-        <target state="needs-translation" />
+        <target state="translated">未打开项目</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -4119,7 +4130,7 @@ Database not initialized.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Open_a_project_first___term_extraction_reads_the_source_segm">
         <source>Open a project first – term extraction reads the source segments of the current project.</source>
-        <target state="needs-translation" />
+        <target state="translated">请先打开项目 – 术语提取会读取当前项目的源句段。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -4128,7 +4139,7 @@ Database not initialized.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Extract_Terms_with_AI">
         <source>Extract Terms with AI</source>
-        <target state="needs-translation" />
+        <target state="translated">使用 AI 提取术语</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -4137,7 +4148,7 @@ Database not initialized.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.The_configured_AI_model_reads_your_source_text_and_proposes_">
         <source>The configured AI model reads your source text and proposes a bilingual project glossary. Review and edit the pairs, then create the project termbase.</source>
-        <target state="needs-translation" />
+        <target state="translated">已配置的 AI 模型会读取您的源文本并生成双语项目术语表。请审阅并编辑术语对，然后创建项目术语库。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -4182,7 +4193,7 @@ Database not initialized.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Extraction_Settings">
         <source>Extraction Settings</source>
-        <target state="needs-translation" />
+        <target state="translated">提取设置</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -4221,7 +4232,7 @@ Database not initialized.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Optional___e.g.__mechanical_engineering_._Leave_blank_to_let">
         <source>Optional – e.g. 'mechanical engineering'. Leave blank to let the AI infer.</source>
-        <target state="needs-translation" />
+        <target state="translated">可选 – 例如“机械工程”。留空则由 AI 推断。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -4230,7 +4241,7 @@ Database not initialized.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Domain___Subject">
         <source>Domain / Subject:</source>
-        <target state="needs-translation" />
+        <target state="translated">领域 / 主题：</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -4239,7 +4250,7 @@ Database not initialized.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Extract_Terms_with_AI">
         <source>🤖 Extract Terms with AI</source>
-        <target state="needs-translation" />
+        <target state="translated">🤖 使用 AI 提取术语</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -4248,7 +4259,7 @@ Database not initialized.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Asking_the_AI_model__large_projects_can_take_a_minute_or_mor">
         <source>Asking the AI model… large projects can take a minute or more.</source>
-        <target state="needs-translation" />
+        <target state="translated">正在询问 AI 模型… 大型项目可能需要一分钟或更长时间。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -4257,7 +4268,7 @@ Database not initialized.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Select">
         <source>Select</source>
-        <target state="needs-translation" />
+        <target state="translated">选择</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -4288,7 +4299,7 @@ Database not initialized.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Note">
         <source>Note</source>
-        <target state="needs-translation" />
+        <target state="translated">备注</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -4297,7 +4308,7 @@ Database not initialized.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Untick_selected___0">
         <source>Untick selected ({0})</source>
-        <target state="needs-translation" />
+        <target state="translated">取消勾选所选项（{0}）</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -4306,7 +4317,7 @@ Database not initialized.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Tick_selected___0">
         <source>Tick selected ({0})</source>
-        <target state="needs-translation" />
+        <target state="translated">勾选所选项（{0}）</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -4324,7 +4335,7 @@ Database not initialized.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Extracted__0__term_pairs__edit_cells_to_correct__untick_to_s">
         <source>Extracted {0} term pairs (edit cells to correct, untick to skip):</source>
-        <target state="needs-translation" />
+        <target state="translated">已提取 {0} 个术语对（编辑单元格可更正，取消勾选可跳过）：</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -4333,7 +4344,7 @@ Database not initialized.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Project_is_large___only_the_first___0_k_characters_were_anal">
         <source> ⚠️ Project is large – only the first ~{0}k characters were analysed.</source>
-        <target state="needs-translation" />
+        <target state="translated"> ⚠️ 项目较大 – 仅分析了前约 {0}k 个字符。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -4342,7 +4353,7 @@ Database not initialized.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Extraction_Failed">
         <source>Extraction Failed</source>
-        <target state="needs-translation" />
+        <target state="translated">提取失败</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -4351,7 +4362,7 @@ Database not initialized.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.AI_term_extraction_failed___0__1">
         <source>AI term extraction failed: {0}{1}</source>
-        <target state="needs-translation" />
+        <target state="translated">AI 术语提取失败：{0}{1}</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -4378,7 +4389,7 @@ Database not initialized.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Project_Termbase_Exists">
         <source>Project Termbase Exists</source>
-        <target state="needs-translation" />
+        <target state="translated">项目术语库已存在</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -4393,7 +4404,13 @@ Make the new termbase '{1}' the project termbase instead?
 • Yes – '{1}' becomes the project termbase; '{0}' is kept as a regular termbase
 • No – save '{1}' as a regular termbase; '{0}' stays the project termbase
 • Cancel – go back (nothing is saved)</source>
-        <target state="needs-translation" />
+        <target state="translated">此项目当前的项目术语库为“{0}”。
+
+是否改为将新术语库“{1}”设为项目术语库？
+
+• 是 – “{1}”成为项目术语库；“{0}”保留为普通术语库
+• 否 – 将“{1}”保存为普通术语库；“{0}”仍为项目术语库
+• 取消 – 返回（不保存任何内容）</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -4402,7 +4419,7 @@ Make the new termbase '{1}' the project termbase instead?
       </trans-unit>
       <trans-unit id="SupervertalerQt.0____1___created_with__2__term_pairs">
         <source>{0} '{1}' created with {2} term pairs!</source>
-        <target state="needs-translation" />
+        <target state="translated">{0} “{1}” 已创建，包含 {2} 个术语对！</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -4823,7 +4840,7 @@ Make the new termbase '{1}' the project termbase instead?
       </trans-unit>
       <trans-unit id="SupervertalerQt.Backup">
         <source>💾 Backup</source>
-        <target state="needs-translation" />
+        <target state="translated">💾 备份</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -4859,7 +4876,7 @@ Make the new termbase '{1}' the project termbase instead?
       </trans-unit>
       <trans-unit id="SupervertalerQt.Clipboard">
         <source>📋 Clipboard</source>
-        <target state="needs-translation" />
+        <target state="translated">📋 剪贴板</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -4931,7 +4948,7 @@ Make the new termbase '{1}' the project termbase instead?
       </trans-unit>
       <trans-unit id="SupervertalerQt.Inline_Codes">
         <source>🏷️ Inline Codes</source>
-        <target state="needs-translation" />
+        <target state="translated">🏷️ 内联代码</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -5409,7 +5426,7 @@ Make the new termbase '{1}' the project termbase instead?
       </trans-unit>
       <trans-unit id="SupervertalerQt.Request_timeout">
         <source>Request timeout:</source>
-        <target state="needs-translation" />
+        <target state="translated">请求超时：</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -5418,7 +5435,7 @@ Make the new termbase '{1}' the project termbase instead?
       </trans-unit>
       <trans-unit id="SupervertalerQt.min">
         <source> min</source>
-        <target state="needs-translation" />
+        <target state="translated"> 分钟</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -5427,7 +5444,7 @@ Make the new termbase '{1}' the project termbase instead?
       </trans-unit>
       <trans-unit id="SupervertalerQt.Automatic">
         <source>Automatic</source>
-        <target state="needs-translation" />
+        <target state="translated">自动</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -5544,7 +5561,7 @@ Make the new termbase '{1}' the project termbase instead?
       </trans-unit>
       <trans-unit id="SupervertalerQt.b_AI_Cost_Monitoring___b">
         <source>&lt;b&gt;AI Cost Monitoring:&lt;/b&gt;</source>
-        <target state="needs-translation" />
+        <target state="translated">&lt;b&gt;AI 费用监控：&lt;/b&gt;</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -5553,7 +5570,7 @@ Make the new termbase '{1}' the project termbase instead?
       </trans-unit>
       <trans-unit id="SupervertalerQt.Keep_a_persistent_token-usage_log__for_cost_monitoring">
         <source>Keep a persistent token-usage log (for cost monitoring)</source>
-        <target state="needs-translation" />
+        <target state="translated">保留持久的 Token 用量日志（用于费用监控）</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -5564,7 +5581,9 @@ Make the new termbase '{1}' the project termbase instead?
         <source>Append every AI call's tokens and cost to a monthly log file under your
 workbench/usage folder. Metadata only — never the prompt or response text.
 View it via Tools → Token Usage &amp; Costs.</source>
-        <target state="needs-translation" />
+        <target state="translated">将每次 AI 调用的 Token 数和费用追加到 workbench/usage 文件夹下的
+月度日志文件中。仅记录元数据 — 绝不记录提示词或回复文本。
+可通过“工具 → Token 用量和费用”查看。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -5573,7 +5592,7 @@ View it via Tools → Token Usage &amp; Costs.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Monthly_budget__USD__0___none">
         <source>  Monthly budget (USD, 0 = none):</source>
-        <target state="needs-translation" />
+        <target state="translated">  每月预算（USD，0 = 无）：</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -5583,7 +5602,8 @@ View it via Tools → Token Usage &amp; Costs.</source>
       <trans-unit id="SupervertalerQt.A_soft_monthly_spend_limit._When_this_month_s_logged_AI_cost">
         <source>A soft monthly spend limit. When this month's logged AI cost reaches it,
 starting a batch translation warns you (it never blocks). 0 disables it.</source>
-        <target state="needs-translation" />
+        <target state="translated">软性的每月支出上限。当本月记录的 AI 费用达到此上限时，
+开始批量翻译会向您发出警告（但绝不会阻止）。0 表示禁用。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -5718,7 +5738,7 @@ starting a batch translation warns you (it never blocks). 0 disables it.</source
       </trans-unit>
       <trans-unit id="SupervertalerQt.b___FuzzyFixer___b__AI_adapts_fuzzy_TM_matches_to_the_curren">
         <source>&lt;b&gt;🔧 FuzzyFixer:&lt;/b&gt; AI adapts fuzzy TM matches to the current source</source>
-        <target state="needs-translation" />
+        <target state="translated">&lt;b&gt;🔧 FuzzyFixer：&lt;/b&gt;AI 根据当前源文本调整 TM 模糊匹配</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -5727,7 +5747,7 @@ starting a batch translation warns you (it never blocks). 0 disables it.</source
       </trans-unit>
       <trans-unit id="SupervertalerQt.Open_FuzzyFixer_help__online">
         <source>Open FuzzyFixer help (online)</source>
-        <target state="needs-translation" />
+        <target state="translated">打开 FuzzyFixer 帮助（在线）</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -5736,7 +5756,7 @@ starting a batch translation warns you (it never blocks). 0 disables it.</source
       </trans-unit>
       <trans-unit id="SupervertalerQt.Act_on_matches_between">
         <source>Act on matches between</source>
-        <target state="needs-translation" />
+        <target state="translated">处理的匹配率范围：</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -5745,7 +5765,7 @@ starting a batch translation warns you (it never blocks). 0 disables it.</source
       </trans-unit>
       <trans-unit id="SupervertalerQt.Minimum_match___the_FuzzyFixer_will_repair__below_this__noth">
         <source>Minimum match % the FuzzyFixer will repair (below this, nothing is offered).</source>
-        <target state="needs-translation" />
+        <target state="translated">FuzzyFixer 修复的最低匹配百分比（低于此值时不提供修复）。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -5754,7 +5774,7 @@ starting a batch translation warns you (it never blocks). 0 disables it.</source
       </trans-unit>
       <trans-unit id="SupervertalerQt.and">
         <source>and</source>
-        <target state="needs-translation" />
+        <target state="translated">至</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -5763,7 +5783,7 @@ starting a batch translation warns you (it never blocks). 0 disables it.</source
       </trans-unit>
       <trans-unit id="SupervertalerQt.Maximum_match___the_FuzzyFixer_will_repair__100__exact_match">
         <source>Maximum match % the FuzzyFixer will repair (100% exact matches are never altered).</source>
-        <target state="needs-translation" />
+        <target state="translated">FuzzyFixer 修复的最高匹配百分比（100% 精确匹配永远不会被修改）。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -6042,7 +6062,7 @@ starting a batch translation warns you (it never blocks). 0 disables it.</source
       </trans-unit>
       <trans-unit id="SupervertalerQt.Open_Backup_help__online">
         <source>Open Backup help (online)</source>
-        <target state="needs-translation" />
+        <target state="translated">打开备份帮助（在线）</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -6078,7 +6098,7 @@ starting a batch translation warns you (it never blocks). 0 disables it.</source
       </trans-unit>
       <trans-unit id="SupervertalerQt.Timestamped_project_backups">
         <source>🕑 Timestamped project backups</source>
-        <target state="needs-translation" />
+        <target state="translated">🕑 带时间戳的项目备份</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -6087,7 +6107,7 @@ starting a batch translation warns you (it never blocks). 0 disables it.</source
       </trans-unit>
       <trans-unit id="SupervertalerQt.Keep_timestamped_project_backups">
         <source>Keep timestamped project backups</source>
-        <target state="needs-translation" />
+        <target state="translated">保留带时间戳的项目备份</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -6096,7 +6116,7 @@ starting a batch translation warns you (it never blocks). 0 disables it.</source
       </trans-unit>
       <trans-unit id="SupervertalerQt.Back_up_every">
         <source>Back up every</source>
-        <target state="needs-translation" />
+        <target state="translated">每保存</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -6105,7 +6125,7 @@ starting a batch translation warns you (it never blocks). 0 disables it.</source
       </trans-unit>
       <trans-unit id="SupervertalerQt.save_s">
         <source> save(s)</source>
-        <target state="needs-translation" />
+        <target state="translated"> 次备份一次</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -6114,7 +6134,7 @@ starting a batch translation warns you (it never blocks). 0 disables it.</source
       </trans-unit>
       <trans-unit id="SupervertalerQt.keep_the_last">
         <source>keep the last</source>
-        <target state="needs-translation" />
+        <target state="translated">保留最近</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -6123,7 +6143,7 @@ starting a batch translation warns you (it never blocks). 0 disables it.</source
       </trans-unit>
       <trans-unit id="SupervertalerQt.backups">
         <source> backups</source>
-        <target state="needs-translation" />
+        <target state="translated"> 个备份</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -6132,7 +6152,7 @@ starting a batch translation warns you (it never blocks). 0 disables it.</source
       </trans-unit>
       <trans-unit id="SupervertalerQt.Open_folder">
         <source>Open folder…</source>
-        <target state="needs-translation" />
+        <target state="translated">打开文件夹…</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -6645,7 +6665,7 @@ starting a batch translation warns you (it never blocks). 0 disables it.</source
       </trans-unit>
       <trans-unit id="SupervertalerQt.Clipboard_history">
         <source>📋 Clipboard history</source>
-        <target state="needs-translation" />
+        <target state="translated">📋 剪贴板历史记录</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -6656,7 +6676,9 @@ starting a batch translation warns you (it never blocks). 0 disables it.</source
         <source>The Clipboard tab keeps a history of everything you copy while Supervertaler is running, so you can paste it again later. That includes anything you copy from other programs — passwords and licence keys among them.
 
 Changes apply immediately — there's no Save button on this tab.</source>
-        <target state="needs-translation" />
+        <target state="translated">“剪贴板”选项卡会记录 Supervertaler 运行期间您复制的所有内容，以便日后再次粘贴。其中包括您从其他程序复制的任何内容 — 包括密码和许可证密钥。
+
+更改会立即生效 — 此选项卡上没有“保存”按钮。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -6665,7 +6687,7 @@ Changes apply immediately — there's no Save button on this tab.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Capture_clipboard_history">
         <source>Capture clipboard history</source>
-        <target state="needs-translation" />
+        <target state="translated">捕获剪贴板历史记录</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -6674,7 +6696,7 @@ Changes apply immediately — there's no Save button on this tab.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Automatic_deletion">
         <source>⏱ Automatic deletion</source>
-        <target state="needs-translation" />
+        <target state="translated">⏱ 自动删除</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -6683,7 +6705,7 @@ Changes apply immediately — there's no Save button on this tab.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Forget_clipboard_entries_after_a_set_time">
         <source>Forget clipboard entries after a set time</source>
-        <target state="needs-translation" />
+        <target state="translated">在设定时间后清除剪贴板条目</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -6692,7 +6714,7 @@ Changes apply immediately — there's no Save button on this tab.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Delete_entries_older_than">
         <source>Delete entries older than</source>
-        <target state="needs-translation" />
+        <target state="translated">删除超过此时长的条目：</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -6701,7 +6723,7 @@ Changes apply immediately — there's no Save button on this tab.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.minutes">
         <source> minutes</source>
-        <target state="needs-translation" />
+        <target state="translated"> 分钟</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -6710,7 +6732,7 @@ Changes apply immediately — there's no Save button on this tab.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Never_capture_from_these_applications">
         <source>🚫 Never capture from these applications</source>
-        <target state="needs-translation" />
+        <target state="translated">🚫 从不捕获以下应用程序的内容</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -6719,7 +6741,7 @@ Changes apply immediately — there's no Save button on this tab.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.While_one_of_these_programs_has_the_focus__copying_is_ignore">
         <source>While one of these programs has the focus, copying is ignored entirely — the text is never read, so it never reaches the history or the database. Enter the process name as it appears in Task Manager, for example &lt;code&gt;keepass.exe&lt;/code&gt;.</source>
-        <target state="needs-translation" />
+        <target state="translated">当其中某个程序拥有焦点时，复制操作将被完全忽略 — 文本不会被读取，因此永远不会进入历史记录或数据库。请输入任务管理器中显示的进程名称，例如 &lt;code&gt;keepass.exe&lt;/code&gt;。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -6728,7 +6750,7 @@ Changes apply immediately — there's no Save button on this tab.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Detecting_which_application_has_the_focus_is_only_supported_">
         <source>⚠ Detecting which application has the focus is only supported on Windows. On this system the list below is saved but has no effect — use the master switch or automatic deletion instead.</source>
-        <target state="needs-translation" />
+        <target state="translated">⚠ 仅在 Windows 上支持检测哪个应用程序拥有焦点。在此系统上，下方列表会被保存但不起作用 — 请改用总开关或自动删除。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -6737,7 +6759,7 @@ Changes apply immediately — there's no Save button on this tab.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.e.g._keepass.exe">
         <source>e.g. keepass.exe</source>
-        <target state="needs-translation" />
+        <target state="translated">例如：keepass.exe</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -6746,7 +6768,7 @@ Changes apply immediately — there's no Save button on this tab.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Add">
         <source>Add</source>
-        <target state="needs-translation" />
+        <target state="translated">添加</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -6755,7 +6777,7 @@ Changes apply immediately — there's no Save button on this tab.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Remove_selected">
         <source>Remove selected</source>
-        <target state="needs-translation" />
+        <target state="translated">移除所选</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -6764,7 +6786,7 @@ Changes apply immediately — there's no Save button on this tab.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Add_common_password_managers">
         <source>Add common password managers</source>
-        <target state="needs-translation" />
+        <target state="translated">添加常用密码管理器</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -6907,7 +6929,7 @@ Changes apply immediately — there's no Save button on this tab.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Status_Bar">
         <source>📊 Status Bar</source>
-        <target state="needs-translation" />
+        <target state="translated">📊 状态栏</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -6916,7 +6938,7 @@ Changes apply immediately — there's no Save button on this tab.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Configure_the_progress_indicators_shown_in_the_bottom_status">
         <source>Configure the progress indicators shown in the bottom status bar.</source>
-        <target state="needs-translation" />
+        <target state="translated">配置底部状态栏中显示的进度指示器。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -6925,7 +6947,7 @@ Changes apply immediately — there's no Save button on this tab.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Show_confirmed_progress_by_word_count__instead_of_segment_co">
         <source>Show confirmed progress by word count (instead of segment count)</source>
-        <target state="needs-translation" />
+        <target state="translated">按字数显示确认进度（而非按句段数）</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -6939,7 +6961,12 @@ steadier on short documents, where confirming one long segment would
 otherwise swing the segment-count percentage a lot.
 When disabled, it is the share of confirmed segments.
 You can also switch this by clicking the Confirmed label in the status bar.</source>
-        <target state="needs-translation" />
+        <target state="translated">启用时（默认），状态栏中的“已确认”百分比为已确认句段中
+源文本字数所占的比例。对于短文档，按字数计算的进度
+更加平稳，否则确认一个长句段就会使按句段数计算的
+百分比大幅波动。
+禁用时，该值为已确认句段所占的比例。
+您也可以单击状态栏中的“已确认”标签来切换此选项。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -7720,7 +7747,7 @@ Click to stop</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Open_help_for_the_selected_system_prompt__online">
         <source>Open help for the selected system prompt (online)</source>
-        <target state="needs-translation" />
+        <target state="translated">打开所选系统提示词的帮助（在线）</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -7738,7 +7765,7 @@ Click to stop</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Edit_the_system_prompt_below._Use___SOURCE_LANGUAGE______TAR">
         <source>Edit the system prompt below. Use {{SOURCE_LANGUAGE}}, {{TARGET_LANGUAGE}}, and {{SOURCE_TEXT}} as placeholders. The FuzzyFixer Instruction additionally supports {{TM_SOURCE}}, {{TM_TARGET}}, {{MATCH_PCT}} and {{TM_NAME}}. The AutoTagger Instruction supports {{SOURCE_TEXT}}, {{TARGET_TEXT}} and {{TAG_LIST}}.</source>
-        <target state="needs-translation" />
+        <target state="translated">在下方编辑系统提示词。使用 {{SOURCE_LANGUAGE}}、{{TARGET_LANGUAGE}} 和 {{SOURCE_TEXT}} 作为占位符。“FuzzyFixer Instruction”还支持 {{TM_SOURCE}}、{{TM_TARGET}}、{{MATCH_PCT}} 和 {{TM_NAME}}。“AutoTagger Instruction”支持 {{SOURCE_TEXT}}、{{TARGET_TEXT}} 和 {{TAG_LIST}}。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -8150,7 +8177,7 @@ Shortens verbose tags like &lt;bmk id="0" ...&gt; to {1}</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.AutoTagger">
         <source>🏷️ AutoTagger</source>
-        <target state="needs-translation" />
+        <target state="translated">🏷️ AutoTagger</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -8327,7 +8354,7 @@ No need to press the dictation shortcut</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Load_a_plain-text_or_Markdown__.txt___.md__file">
         <source>Load a plain-text or Markdown (.txt / .md) file:</source>
-        <target state="needs-translation" />
+        <target state="translated">加载纯文本或 Markdown（.txt / .md）文件：</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -8356,7 +8383,7 @@ No need to press the dictation shortcut</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Loads_a_plain-text_or_Markdown_file_as_source_text__segmente">
         <source>Loads a plain-text or Markdown file as source text, segmented into sentences. For Word, IDML, or bilingual CAT files (memoQ, Trados, CafeTran, Phrase, Déjà Vu), use Project → Import instead.</source>
-        <target state="needs-translation" />
+        <target state="translated">将纯文本或 Markdown 文件作为源文本加载，并拆分为句子。对于 Word、IDML 或双语 CAT 文件（memoQ、Trados、CafeTran、Phrase、Déjà Vu），请改用“项目 → 导入”。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -8383,7 +8410,7 @@ No need to press the dictation shortcut</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Create_a_dedicated_folder_for_this_project">
         <source>📁 Create a dedicated folder for this project</source>
-        <target state="needs-translation" />
+        <target state="translated">📁 为此项目创建专用文件夹</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -8392,7 +8419,7 @@ No need to press the dictation shortcut</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.When_you_first_save__place_the_.svproj_in_its_own_folder_so_">
         <source>When you first save, place the .svproj in its own folder so its source/ and target/ subfolders stay self-contained.</source>
-        <target state="needs-translation" />
+        <target state="translated">首次保存时，将 .svproj 放入其独立的文件夹中，使其 source/ 和 target/ 子文件夹自成一体。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -8472,7 +8499,7 @@ No need to press the dictation shortcut</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Updating_Okapi_sidecar">
         <source>Updating Okapi sidecar</source>
-        <target state="needs-translation" />
+        <target state="translated">正在更新 Okapi sidecar</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -8995,7 +9022,7 @@ Use this if formatting causes issues or isn't needed.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.File">
         <source>File: {}</source>
-        <target state="needs-translation" />
+        <target state="translated">文件：{}</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -9008,7 +9035,7 @@ Use this if formatting causes issues or isn't needed.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Auto-detected_from_file___b_____b_____b_____b_._br_Confirm_o">
         <source>Auto-detected from file: &lt;b&gt;{}&lt;/b&gt; → &lt;b&gt;{}&lt;/b&gt;.&lt;br&gt;Confirm or change below.</source>
-        <target state="needs-translation" />
+        <target state="translated">已从文件自动检测：&lt;b&gt;{}&lt;/b&gt; → &lt;b&gt;{}&lt;/b&gt;。&lt;br&gt;请在下方确认或更改。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -9017,7 +9044,7 @@ Use this if formatting causes issues or isn't needed.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.source____b_____b">
         <source>source = &lt;b&gt;{}&lt;/b&gt;</source>
-        <target state="needs-translation" />
+        <target state="translated">源语言 = &lt;b&gt;{}&lt;/b&gt;</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -9026,7 +9053,7 @@ Use this if formatting causes issues or isn't needed.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.target____b_____b">
         <source>target = &lt;b&gt;{}&lt;/b&gt;</source>
-        <target state="needs-translation" />
+        <target state="translated">目标语言 = &lt;b&gt;{}&lt;/b&gt;</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -9035,7 +9062,7 @@ Use this if formatting causes issues or isn't needed.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Auto-detected_from_file____._br_Please_pick_the_remaining_si">
         <source>Auto-detected from file: {}.&lt;br&gt;Please pick the remaining side and confirm.</source>
-        <target state="needs-translation" />
+        <target state="translated">已从文件自动检测：{}。&lt;br&gt;请选择另一种语言并确认。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -9044,7 +9071,7 @@ Use this if formatting causes issues or isn't needed.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Couldn_t_auto-detect_the_language_pair___please_pick_the_sou">
         <source>Couldn't auto-detect the language pair – please pick the source and target language for this project:</source>
-        <target state="needs-translation" />
+        <target state="translated">无法自动检测语言对 – 请为此项目选择源语言和目标语言：</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -9053,7 +9080,7 @@ Use this if formatting causes issues or isn't needed.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Confirm_language_pair">
         <source>Confirm language pair</source>
-        <target state="needs-translation" />
+        <target state="translated">确认语言对</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -9064,7 +9091,9 @@ Use this if formatting causes issues or isn't needed.</source>
         <source>Supervertaler could not read the language pair from this file.
 
 Please set it now. If this is wrong, the TM is searched for the wrong languages and no matches are ever shown, even though the TM itself looks fine in TM Edit/Maintain.</source>
-        <target state="needs-translation" />
+        <target state="translated">Supervertaler 无法从此文件中读取语言对。
+
+请立即设置。如果设置错误，将按错误的语言搜索 TM，因此永远不会显示任何匹配，即使 TM 本身在“编辑/维护 TM”中看起来一切正常。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -9073,7 +9102,7 @@ Please set it now. If this is wrong, the TM is searched for the wrong languages 
       </trans-unit>
       <trans-unit id="SupervertalerQt.Source_language">
         <source>Source language:</source>
-        <target state="needs-translation" />
+        <target state="translated">源语言：</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -9082,7 +9111,7 @@ Please set it now. If this is wrong, the TM is searched for the wrong languages 
       </trans-unit>
       <trans-unit id="SupervertalerQt.Target_language">
         <source>Target language:</source>
-        <target state="needs-translation" />
+        <target state="translated">目标语言：</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -9472,7 +9501,7 @@ File: {name}</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Save_to_File...">
         <source>Save to File...</source>
-        <target state="needs-translation" />
+        <target state="translated">保存到文件...</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -9481,7 +9510,7 @@ File: {name}</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Copy_to_Clipboard">
         <source>📋 Copy to Clipboard</source>
-        <target state="needs-translation" />
+        <target state="translated">📋 复制到剪贴板</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -9490,7 +9519,7 @@ File: {name}</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Copy_the_text_instead_of_saving_a_file._Paste_it_into_an_AI_">
         <source>Copy the text instead of saving a file. Paste it into an AI chat, then bring the edited reply back with Update from Pasted Text.</source>
-        <target state="needs-translation" />
+        <target state="translated">复制文本而不保存文件。将其粘贴到 AI 聊天中，然后通过“从粘贴的文本更新”导回编辑后的回复。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -9499,7 +9528,7 @@ File: {name}</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Update_from_Pasted_Text">
         <source>Update from Pasted Text</source>
-        <target state="needs-translation" />
+        <target state="translated">从粘贴的文本更新</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -9508,7 +9537,7 @@ File: {name}</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Paste_the_edited_bilingual_text__the__b__SEGMENT_NNNN___b__f">
         <source>Paste the edited bilingual text (the &lt;b&gt;[SEGMENT NNNN]&lt;/b&gt; format) below, for example an AI chat's reply. Segments are matched to this project by their source text, so the source lines must be left as they were.</source>
-        <target state="needs-translation" />
+        <target state="translated">在下方粘贴已编辑的双语文本（&lt;b&gt;[SEGMENT NNNN]&lt;/b&gt; 格式），例如 AI 聊天的回复。句段通过源文本与此项目匹配，因此源文本行必须保持原样。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -9517,7 +9546,7 @@ File: {name}</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Preview_Changes...">
         <source>Preview Changes...</source>
-        <target state="needs-translation" />
+        <target state="translated">预览更改...</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -9589,7 +9618,7 @@ File: {name}</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Smaller_text__Ctrl_mouse_wheel_also_zooms">
         <source>Smaller text (Ctrl+mouse wheel also zooms)</source>
-        <target state="needs-translation" />
+        <target state="translated">缩小文字（也可使用 Ctrl+鼠标滚轮缩放）</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -9598,7 +9627,7 @@ File: {name}</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Text_size___click_to_reset_to_100">
         <source>Text size – click to reset to 100%</source>
-        <target state="needs-translation" />
+        <target state="translated">文字大小 – 单击可重置为 100%</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -9607,7 +9636,7 @@ File: {name}</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Larger_text__Ctrl_mouse_wheel_also_zooms">
         <source>Larger text (Ctrl+mouse wheel also zooms)</source>
-        <target state="needs-translation" />
+        <target state="translated">放大文字（也可使用 Ctrl+鼠标滚轮缩放）</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -9616,7 +9645,7 @@ File: {name}</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Pop_out">
         <source>⧉ Pop out</source>
-        <target state="needs-translation" />
+        <target state="translated">⧉ 弹出</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -9625,7 +9654,7 @@ File: {name}</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Open_the_preview_in_a_separate__resizable_window">
         <source>Open the preview in a separate, resizable window</source>
-        <target state="needs-translation" />
+        <target state="translated">在单独的可调整大小的窗口中打开预览</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -9634,7 +9663,7 @@ File: {name}</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Supervertaler___Document_Preview">
         <source>Supervertaler — Document Preview</source>
-        <target state="needs-translation" />
+        <target state="translated">Supervertaler — 文档预览</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -9643,7 +9672,7 @@ File: {name}</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.span_style__font-size_14px__line-height_1.25______span">
         <source>&lt;span style="font-size:14px; line-height:1.25;"&gt;🔒&lt;/span&gt;</source>
-        <target state="needs-translation" />
+        <target state="translated">&lt;span style="font-size:14px; line-height:1.25;"&gt;🔒&lt;/span&gt;</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -9868,7 +9897,7 @@ File: {name}</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Target_Translation_Memories">
         <source>Target Translation Memories</source>
-        <target state="needs-translation" />
+        <target state="translated">目标翻译记忆库</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -9933,7 +9962,7 @@ File: {name}</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.No_TM_selected">
         <source>No TM selected</source>
-        <target state="needs-translation" />
+        <target state="translated">未选择 TM</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -9942,7 +9971,7 @@ File: {name}</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Tick_at_least_one_Translation_Memory_to_send_segments_to.">
         <source>Tick at least one Translation Memory to send segments to.</source>
-        <target state="needs-translation" />
+        <target state="translated">请至少勾选一个要接收句段的翻译记忆库。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -9951,7 +9980,7 @@ File: {name}</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Updating_TMs">
         <source>Updating TMs…</source>
-        <target state="needs-translation" />
+        <target state="translated">正在更新 TM…</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -9969,7 +9998,7 @@ File: {name}</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Sending_segments_to__d_TM_s">
         <source>Sending segments to %d TM(s)…</source>
-        <target state="needs-translation" />
+        <target state="translated">正在将句段发送到 %d 个 TM…</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -9978,7 +10007,7 @@ File: {name}</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Updating___s_____d__d">
         <source>Updating '%s'… (%d/%d)</source>
-        <target state="needs-translation" />
+        <target state="translated">正在更新“%s”…（%d/%d）</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -9987,7 +10016,7 @@ File: {name}</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Send_to_TM___Cancelled">
         <source>Send to TM – Cancelled</source>
-        <target state="needs-translation" />
+        <target state="translated">发送到 TM – 已取消</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -9996,7 +10025,7 @@ File: {name}</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Send_to_TM_Complete">
         <source>Send to TM Complete</source>
-        <target state="needs-translation" />
+        <target state="translated">发送到 TM 已完成</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -10007,7 +10036,9 @@ File: {name}</source>
         <source>Operation cancelled before finishing.
 
 </source>
-        <target state="needs-translation" />
+        <target state="translated">操作在完成前已取消。
+
+</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -10126,7 +10157,7 @@ File: {name}</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Reset_edited_to_Draft">
         <source>Reset edited to Draft</source>
-        <target state="needs-translation" />
+        <target state="translated">将编辑过的句段重置为草稿</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -10139,7 +10170,11 @@ was Confirmed, Proofread or Approved. This makes the segments that Find &amp;
 Replace touched easy to spot and re-check. Undo (Ctrl+Z) restores the
 original text and status together.
 Applies to Replace this, Replace all and F&amp;R Sets batch runs.</source>
-        <target state="needs-translation" />
+        <target state="translated">当替换操作更改了目标句段时，如果该句段为“已确认”、“已校对”
+或“已批准”状态，则将其状态重置为“草稿”。这样便于发现并重新检查
+查找和替换修改过的句段。撤销（Ctrl+Z）会同时恢复原始文本
+和状态。
+适用于“替换此项”、“替换全部”以及“查找和替换集”批量运行。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -10148,7 +10183,7 @@ Applies to Replace this, Replace all and F&amp;R Sets batch runs.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Also_in_writable_TMs">
         <source>Also in writable TMs</source>
-        <target state="needs-translation" />
+        <target state="translated">同时应用于可写 TM</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -10161,7 +10196,11 @@ project writes to (the TMs with Write ticked), so the old wording stops
 coming back as TM matches. You are shown how many TM entries will change
 before anything is done. TM changes cannot be undone with Ctrl+Z.
 Only Replace all does this, not Replace this.</source>
-        <target state="needs-translation" />
+        <target state="translated">“替换全部”还会在此项目写入的翻译记忆库
+（勾选了“写入”的 TM）中进行相同的更改，使旧措辞不再作为
+TM 匹配出现。执行任何操作之前，会先显示将更改多少个 TM 条目。
+TM 的更改无法通过 Ctrl+Z 撤销。
+只有“替换全部”会这样做，“替换此项”不会。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -10296,7 +10335,7 @@ Only Replace all does this, not Replace this.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.over______AI_call_s_________tokens_in________out">
         <source>{} over {:,} AI call(s) · {:,} tokens in / {:,} out</source>
-        <target state="needs-translation" />
+        <target state="translated">{}，共 {:,} 次 AI 调用 · 输入 {:,} Token / 输出 {:,}</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -10305,7 +10344,7 @@ Only Replace all does this, not Replace this.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.call_s__with_a_model_not_in_the_price_list">
         <source> · {:,} call(s) with a model not in the price list</source>
-        <target state="needs-translation" />
+        <target state="translated"> · {:,} 次调用使用了价格表中没有的模型</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -10314,7 +10353,7 @@ Only Replace all does this, not Replace this.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.none_recorded_yet">
         <source>none recorded yet</source>
-        <target state="needs-translation" />
+        <target state="translated">尚无记录</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -10323,7 +10362,7 @@ Only Replace all does this, not Replace this.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.AI_cost_so_far">
         <source>AI cost so far:</source>
-        <target state="needs-translation" />
+        <target state="translated">目前的 AI 费用：</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -10333,7 +10372,8 @@ Only Replace all does this, not Replace this.</source>
       <trans-unit id="SupervertalerQt.From_the_token-usage_log__Tools___Token_Usage___Costs___matc">
         <source>From the token-usage log (Tools → Token Usage &amp; Costs), matched on the
 project name. Calls made while the log was switched off are not counted.</source>
-        <target state="needs-translation" />
+        <target state="translated">来自 Token 用量日志（工具 → Token 用量和费用），按项目名称
+匹配。日志关闭期间进行的调用不计入。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -10342,7 +10382,7 @@ project name. Calls made while the log was switched off are not counted.</source
       </trans-unit>
       <trans-unit id="SupervertalerQt.free__local_model">
         <source>free (local model)</source>
-        <target state="needs-translation" />
+        <target state="translated">免费（本地模型）</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -10353,7 +10393,7 @@ project name. Calls made while the log was switched off are not counted.</source
       </trans-unit>
       <trans-unit id="SupervertalerQt.unknown___this_model_is_not_in_the_price_list">
         <source>unknown – this model is not in the price list</source>
-        <target state="needs-translation" />
+        <target state="translated">未知 – 此模型不在价格表中</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -10364,7 +10404,7 @@ project name. Calls made while the log was switched off are not counted.</source
       </trans-unit>
       <trans-unit id="SupervertalerQt.Estimated_cost_to_AI-translate_the_rest">
         <source>Estimated cost to AI-translate the rest:</source>
-        <target state="needs-translation" />
+        <target state="translated">用 AI 翻译剩余部分的预估费用：</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -10373,7 +10413,7 @@ project name. Calls made while the log was switched off are not counted.</source
       </trans-unit>
       <trans-unit id="SupervertalerQt.for______empty_segment_s">
         <source>{} for {:,} empty segment(s)</source>
-        <target state="needs-translation" />
+        <target state="translated">{}（{:,} 个空句段）</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -10582,7 +10622,7 @@ project name. Calls made while the log was switched off are not counted.</source
       </trans-unit>
       <trans-unit id="SupervertalerQt.Words_in_the_custom_dictionary_are_never_marked_as_spelling_">
         <source>Words in the custom dictionary are never marked as spelling errors. One word per line; case does not matter. Click Save to keep your changes.</source>
-        <target state="needs-translation" />
+        <target state="translated">自定义词典中的单词永远不会被标记为拼写错误。每行一个单词；不区分大小写。单击“保存”以保留更改。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -10591,7 +10631,7 @@ project name. Calls made while the log was switched off are not counted.</source
       </trans-unit>
       <trans-unit id="SupervertalerQt.Import...">
         <source>📥 Import...</source>
-        <target state="needs-translation" />
+        <target state="translated">📥 导入...</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -10600,7 +10640,7 @@ project name. Calls made while the log was switched off are not counted.</source
       </trans-unit>
       <trans-unit id="SupervertalerQt.Add_words_from_a_text_file__one_per_line__or_a_Hunspell_.dic">
         <source>Add words from a text file (one per line) or a Hunspell .dic file</source>
-        <target state="needs-translation" />
+        <target state="translated">从文本文件（每行一个）或 Hunspell .dic 文件添加单词</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -10609,7 +10649,7 @@ project name. Calls made while the log was switched off are not counted.</source
       </trans-unit>
       <trans-unit id="SupervertalerQt.Export...">
         <source>📤 Export...</source>
-        <target state="needs-translation" />
+        <target state="translated">📤 导出...</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -10618,7 +10658,7 @@ project name. Calls made while the log was switched off are not counted.</source
       </trans-unit>
       <trans-unit id="SupervertalerQt.Save_the_word_list_as_a_text_file">
         <source>Save the word list as a text file</source>
-        <target state="needs-translation" />
+        <target state="translated">将单词列表保存为文本文件</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -10627,7 +10667,7 @@ project name. Calls made while the log was switched off are not counted.</source
       </trans-unit>
       <trans-unit id="SupervertalerQt.Sort____remove_duplicates">
         <source>🔤 Sort &amp;&amp; remove duplicates</source>
-        <target state="needs-translation" />
+        <target state="translated">🔤 排序并删除重复项</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -10636,7 +10676,7 @@ project name. Calls made while the log was switched off are not counted.</source
       </trans-unit>
       <trans-unit id="SupervertalerQt.Open_folder">
         <source>📂 Open folder</source>
-        <target state="needs-translation" />
+        <target state="translated">📂 打开文件夹</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -10654,7 +10694,7 @@ project name. Calls made while the log was switched off are not counted.</source
       </trans-unit>
       <trans-unit id="SupervertalerQt.Import_Words">
         <source>Import Words</source>
-        <target state="needs-translation" />
+        <target state="translated">导入单词</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -10667,7 +10707,7 @@ project name. Calls made while the log was switched off are not counted.</source
       </trans-unit>
       <trans-unit id="SupervertalerQt.Export_Words">
         <source>Export Words</source>
-        <target state="needs-translation" />
+        <target state="translated">导出单词</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -11133,7 +11173,10 @@ project name. Calls made while the log was switched off are not counted.</source
 your current prompt and glossary, and the batch size, priced with the
 shared price list (pricing.json). Actual costs are logged per call –
 see Tools → Token Usage &amp; Costs.</source>
-        <target state="needs-translation" />
+        <target state="translated">根据源文本长度（约每 4 个字符 1 个 Token）、
+当前提示词和术语表以及批次大小估算，并按共享价格表
+（pricing.json）计价。实际费用按每次调用记录 –
+请参阅“工具 → Token 用量和费用”。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -11160,7 +11203,7 @@ see Tools → Token Usage &amp; Costs.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Use_FuzzyFixer__adapt_fuzzy_TM_matches_with_AI">
         <source>🔧 Use FuzzyFixer (adapt fuzzy TM matches with AI)</source>
-        <target state="needs-translation" />
+        <target state="translated">🔧 使用 FuzzyFixer（用 AI 调整 TM 模糊匹配）</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -11169,7 +11212,7 @@ see Tools → Token Usage &amp; Costs.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Estimated_cost_____________tokens_in_________out_in______cal">
         <source>💰 Estimated cost: {} · ~{:,} tokens in / ~{:,} out in {:,} call(s)</source>
-        <target state="needs-translation" />
+        <target state="translated">💰 预估费用：{} · 输入约 {:,} Token / 输出约 {:,}，共 {:,} 次调用</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -11196,7 +11239,7 @@ see Tools → Token Usage &amp; Costs.</source>
       </trans-unit>
       <trans-unit id="SupervertalerQt.Monthly_budget_reached">
         <source>Monthly budget reached</source>
-        <target state="needs-translation" />
+        <target state="translated">已达到每月预算</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -11207,7 +11250,9 @@ see Tools → Token Usage &amp; Costs.</source>
         <source>You have used ${:.2f} of your ${:.2f} monthly AI budget.
 
 Start this batch of {} segment(s) anyway?</source>
-        <target state="needs-translation" />
+        <target state="translated">您已使用 ${:.2f}，每月 AI 预算为 ${:.2f}。
+
+仍要开始这批 {} 个句段的翻译吗？</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SupervertalerQt</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -11396,7 +11441,7 @@ Start this batch of {} segment(s) anyway?</source>
       </trans-unit>
       <trans-unit id="SuperlookupTab.Text_size">
         <source>Text size:</source>
-        <target state="needs-translation" />
+        <target state="translated">文字大小：</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SuperlookupTab</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -11405,7 +11450,7 @@ Start this batch of {} segment(s) anyway?</source>
       </trans-unit>
       <trans-unit id="SuperlookupTab.Font_size_of_the_TM_results__both_views">
         <source>Font size of the TM results (both views)</source>
-        <target state="needs-translation" />
+        <target state="translated">TM 结果的字体大小（两种视图）</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SuperlookupTab</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -11414,7 +11459,7 @@ Start this batch of {} segment(s) anyway?</source>
       </trans-unit>
       <trans-unit id="SuperlookupTab.Export_Results">
         <source>💾 Export Results…</source>
-        <target state="needs-translation" />
+        <target state="translated">💾 导出结果…</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SuperlookupTab</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -11423,7 +11468,7 @@ Start this batch of {} segment(s) anyway?</source>
       </trans-unit>
       <trans-unit id="SuperlookupTab.Save_all_TM_hits_for_the_current_search_to_Excel__.xlsx__or_">
         <source>Save all TM hits for the current search to Excel (.xlsx) or CSV</source>
-        <target state="needs-translation" />
+        <target state="translated">将当前搜索的所有 TM 命中结果保存为 Excel（.xlsx）或 CSV 文件</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SuperlookupTab</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -11531,7 +11576,7 @@ Start this batch of {} segment(s) anyway?</source>
       </trans-unit>
       <trans-unit id="SuperlookupTab.Custom_Resources">
         <source>⚙ Custom Resources…</source>
-        <target state="needs-translation" />
+        <target state="translated">⚙ 自定义资源…</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SuperlookupTab</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -11540,7 +11585,7 @@ Start this batch of {} segment(s) anyway?</source>
       </trans-unit>
       <trans-unit id="SuperlookupTab.Add_your_own_lookup_sites_to_this_list">
         <source>Add your own lookup sites to this list</source>
-        <target state="needs-translation" />
+        <target state="translated">将您自己的查询网站添加到此列表</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SuperlookupTab</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -11878,7 +11923,7 @@ Coming soon:
       </trans-unit>
       <trans-unit id="SuperlookupTab.Export_Results">
         <source>Export Results</source>
-        <target state="needs-translation" />
+        <target state="translated">导出结果</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SuperlookupTab</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -11889,7 +11934,7 @@ Coming soon:
       </trans-unit>
       <trans-unit id="SuperlookupTab.There_are_no_TM_results_to_export._Run_a_search_first.">
         <source>There are no TM results to export. Run a search first.</source>
-        <target state="needs-translation" />
+        <target state="translated">没有可导出的 TM 结果。请先运行搜索。</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SuperlookupTab</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -11898,7 +11943,7 @@ Coming soon:
       </trans-unit>
       <trans-unit id="SuperlookupTab.Export_Concordance_Results">
         <source>Export Concordance Results</source>
-        <target state="needs-translation" />
+        <target state="translated">导出相关搜索结果</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SuperlookupTab</context>
           <context context-type="sourcefile">Supervertaler.py</context>
@@ -11907,7 +11952,7 @@ Coming soon:
       </trans-unit>
       <trans-unit id="SuperlookupTab.Could_not_export_the_results">
         <source>Could not export the results:</source>
-        <target state="needs-translation" />
+        <target state="translated">无法导出结果：</target>
         <context-group purpose="location">
           <context context-type="x-qt-context">SuperlookupTab</context>
           <context context-type="sourcefile">Supervertaler.py</context>

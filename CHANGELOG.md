@@ -21,6 +21,8 @@ The translation was produced by Claude Code and checked mechanically: every menu
 
 Message boxes and some labels are still English everywhere; they are not yet wrapped for translation in any language. The list of translatable strings was also refreshed (1,102 → 1,286). The Dutch and Chinese files were updated to it, keeping all their existing translations.
 
+**Chinese is complete again too** (issue #208). The refresh left 236 new strings untranslated in both Chinese files, such as the new Settings pages and the recent dialogs. They are now translated in Simplified Chinese (简体中文) and Traditional Chinese (繁體中文, Taiwan usage), following each file's existing terminology. All 1,286 strings are translated in both.
+
 ### Fixed (Projects · a failed save could destroy the project file)
 
 Saving wrote the project straight over the existing `.svproj`. If anything went wrong halfway (a full disk, a crash, a value that could not be saved), the file was left cut off and could no longer be opened. Now (issue #228):
