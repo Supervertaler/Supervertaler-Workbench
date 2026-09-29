@@ -7,6 +7,16 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ## Unreleased
 
+### Added (QA · check the translation with LanguageTool)
+
+**QA → 📝 Check with LanguageTool…** checks the target text of every segment for grammar, spelling and style mistakes with LanguageTool (issue #233). LanguageTool is particularly good at German and Dutch grammar.
+
+- **Online or on your own computer.** By default it uses LanguageTool's free public API. That needs no setup, but your text goes to their servers and it allows about 20 checks a minute; large projects are spaced out automatically. For confidential work, or no limits at all, run the free LanguageTool server yourself and enter its address, for example `http://localhost:8081`. The address you use is remembered.
+- **Findings** are listed with the segment, LanguageTool's message, the flagged words, its suggestions and the surrounding text. Double-click a finding to go to the segment. Right-click to replace the words with any of the suggestions, or use **Apply first suggestion**; Ctrl+Z undoes it. **Ignore** removes a finding from the list. The window stays open while you work, and **Cancel** stops a long check.
+- The language is the project's target language (for example `nl`, `de-DE` or `en-GB`), and you can change it for one check.
+
+This is a first step. It checks on request and lists what it finds; it does not underline mistakes as you type, and it does not start a LanguageTool server for you.
+
 ### Added (QA · saved checks that only find, never replace)
 
 The new **QA → 🔎 Run QA Checks…** runs a set of saved checks over the whole project and lists everything they find (issue #209). Typical checks are double spaces, doubled words, a space before a full stop, or any pattern of your own, such as a deprecated term or the wrong decimal separator. Nothing in the project is changed.
