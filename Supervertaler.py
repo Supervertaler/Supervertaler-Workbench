@@ -46532,66 +46532,29 @@ class SupervertalerQt(QMainWindow):
         add_format.setForeground(QColor("#cc0000"))  # Red text
         add_format.setFontUnderline(True)
 
-        # Tokenize preserving \n as explicit tokens so they survive the diff
-        def tokenize(text):
-            """Split text into words while preserving \\n as separate tokens."""
-            tokens = []
-            # Split on \n first, keeping \n as tokens
-            parts = re.split(r'(\n)', text)
-            for part in parts:
-                if part == '\n':
-                    tokens.append('\n')
-                elif part:
-                    tokens.extend(part.split())
-            return tokens
-
-        current_words = tokenize(current)
-        tm_words = tokenize(tm_source)
-
-        matcher = difflib.SequenceMatcher(None, current_words, tm_words)
-
-        result_parts = []  # list of (type, token_list) tuples
-        for tag, i1, i2, j1, j2 in matcher.get_opcodes():
-            if tag == 'equal':
-                result_parts.append(('normal', tm_words[j1:j2]))
-            elif tag == 'replace':
-                result_parts.append(('delete', tm_words[j1:j2]))
-                result_parts.append(('add', current_words[i1:i2]))
-            elif tag == 'insert':
-                # Text in TM but not in current - strikethrough
-                result_parts.append(('delete', tm_words[j1:j2]))
-            elif tag == 'delete':
-                # Text in current but not in TM - underline
-                result_parts.append(('add', current_words[i1:i2]))
-
-        # Helper to insert tokens, using insertBlock() for \n
-        def insert_tokens(cursor, tokens, fmt):
-            first = True
-            for token in tokens:
-                if token == '\n':
+        # Word-level diff in which inline tags are tokens of their own and the
+        # original spacing is kept (modules/tm_diff.py, issue #117). Before,
+        # "<b>tap</b>" → "<b>valve</b>" marked the tags as changed too.
+        from modules.tm_diff import word_diff
+        show_linebreaks = (hasattr(self, 'invisible_display_settings')
+                           and self.invisible_display_settings.get('linebreaks', False))
+        formats = {'normal': normal_format, 'delete': delete_format, 'add': add_format}
+        previous = None
+        for kind, text in word_diff(current, tm_source):
+            fmt = formats[kind]
+            # Keep a struck-through word and its replacement apart
+            if (previous is not None and previous[0] == 'delete' and kind == 'add'
+                    and not previous[1][-1:].isspace() and not text[:1].isspace()):
+                cursor.insertText(' ', normal_format)
+            for n, line in enumerate(text.split('\n')):
+                if n:
                     # Show ↵ marker if linebreaks invisibles are enabled
-                    if hasattr(self, 'invisible_display_settings') and self.invisible_display_settings.get('linebreaks', False):
+                    if show_linebreaks:
                         cursor.insertText('↵', fmt)
                     cursor.insertBlock()
-                    first = True  # no leading space after newline
-                else:
-                    if not first:
-                        cursor.insertText(' ', fmt)
-                    cursor.insertText(token, fmt)
-                    first = False
-
-        # Render the parts with proper spacing
-        need_space = False  # track whether we need a space before next non-newline token
-        for part_type, tokens in result_parts:
-            if not tokens:
-                continue
-            fmt = normal_format if part_type == 'normal' else (delete_format if part_type == 'delete' else add_format)
-            # Add space between parts (unless after a newline or at start)
-            if need_space and tokens[0] != '\n':
-                cursor.insertText(' ', normal_format)
-            insert_tokens(cursor, tokens, fmt)
-            # After rendering, check if last token was a newline
-            need_space = tokens[-1] != '\n'
+                if line:
+                    cursor.insertText(line, fmt)
+            previous = (kind, text)
 
         text_edit.setTextCursor(cursor)
     

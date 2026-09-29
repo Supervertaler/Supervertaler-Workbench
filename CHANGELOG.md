@@ -7,6 +7,10 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ## Unreleased
 
+### Improved (Match Panel · TM differences around inline tags)
+
+In the Match Panel's **TM Source** box, the differences from the current segment are shown as struck-through and underlined words (issue #117). The comparison worked word by word, where a word was anything between spaces. A tag glued to a word, as in `<b>tap</b>` → `<b>valve</b>`, therefore marked the whole thing as changed, tags included. Inline tags (`<1>`, `</b>`, `<x id="3"/>`, `{1}` and so on) are now compared as items of their own, so only the word that actually changed is marked. Spacing is also reproduced exactly as in the TM entry, rather than rebuilt with one space between every word.
+
 ### Added (Help · a sample project to try things out on)
 
 **Help → 🎓 Open Sample Project** opens a small English → Dutch project, the quick-start guide for a pump, with its own TM and glossary (issue #147). It is meant for new users to see at a glance what Supervertaler does:
