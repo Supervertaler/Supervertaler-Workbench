@@ -54144,6 +54144,18 @@ class SupervertalerQt(QMainWindow):
         self.fr_demote_cb.toggled.connect(lambda checked: self._set_fr_demote_to_draft(checked))
         options_layout.addWidget(self.fr_demote_cb)
 
+        # Also change the project's writable TMs (issue #68). Deliberately not
+        # remembered: it edits TMs, which Ctrl+Z cannot undo.
+        self.fr_also_tm_cb = CheckmarkCheckBox(self.tr("Also in writable TMs"))
+        self.fr_also_tm_cb.setToolTip(self.tr(
+            "Replace all also makes the same change in the translation memories this\n"
+            "project writes to (the TMs with Write ticked), so the old wording stops\n"
+            "coming back as TM matches. You are shown how many TM entries will change\n"
+            "before anything is done. TM changes cannot be undone with Ctrl+Z.\n"
+            "Only Replace all does this, not Replace this."
+        ))
+        options_layout.addWidget(self.fr_also_tm_cb)
+
         options_layout.addStretch()
         main_v_layout.addLayout(options_layout)
         
@@ -54857,29 +54869,16 @@ class SupervertalerQt(QMainWindow):
             field_text = segment.target
 
         import re
-        if use_regex:
-            try:
-                new_text = re.sub(find_text, replace_text, field_text, count=1,
-                                  flags=0 if case_sensitive else re.IGNORECASE)
-            except re.error as _e:
-                QMessageBox.warning(
-                    self.find_replace_dialog, "Invalid regular expression",
-                    f"The pattern or replacement is not valid:\n\n{_e}")
-                return
-        elif match_mode == 2:  # Entire segment
-            new_text = replace_text
-        else:
-            # Replace using the appropriate method
-            if case_sensitive:
-                new_text = field_text.replace(find_text, replace_text, 1)
-            elif auto_case:
-                pattern = re.escape(find_text)
-                def _case_replacer_single(m):
-                    return self._apply_case_pattern(m.group(0), replace_text)
-                new_text = re.sub(pattern, _case_replacer_single, field_text, count=1, flags=re.IGNORECASE)
-            else:
-                pattern = re.escape(find_text)
-                new_text = re.sub(pattern, replace_text, field_text, count=1, flags=re.IGNORECASE)
+        from modules.tm_replace import make_replacer
+        try:
+            new_text = make_replacer(find_text, replace_text, case_sensitive=case_sensitive,
+                                     auto_case=auto_case, match_mode=match_mode,
+                                     use_regex=use_regex, count=1)(field_text)
+        except re.error as _e:
+            QMessageBox.warning(
+                self.find_replace_dialog, "Invalid regular expression",
+                f"The pattern or replacement is not valid:\n\n{_e}")
+            return
 
         # Update the appropriate field
         if col == 2:
@@ -54947,8 +54946,26 @@ class SupervertalerQt(QMainWindow):
         # Find all matches
         self.find_all_matches_internal(find_text, search_source, search_target, case_sensitive, match_mode, use_regex)
 
-        if not self.find_matches:
-            QMessageBox.information(self.find_replace_dialog, "Replace All", "No matches found.")
+        import re
+        from modules.tm_replace import make_replacer, replace_in_tms
+        replacer = make_replacer(find_text, replace_text, case_sensitive=case_sensitive,
+                                 auto_case=auto_case, match_mode=match_mode, use_regex=use_regex)
+
+        # The writable TMs too, if asked (#68): counted now, changed after the
+        # project, and only once the user has seen the numbers.
+        try:
+            tm_plan = self._fr_plan_tm_replace(replacer, search_source, search_target)
+        except re.error as _e:  # e.g. a backreference to a group the pattern lacks
+            QMessageBox.warning(
+                self.find_replace_dialog, "Invalid regular expression",
+                f"The pattern or replacement is not valid:\n\n{_e}")
+            return
+        tm_changes = tm_plan['result']['changed'] if tm_plan else 0
+
+        if not self.find_matches and not tm_changes:
+            QMessageBox.information(
+                self.find_replace_dialog, "Replace All",
+                "No matches found." + (" (None in the writable TMs either.)" if tm_plan else ""))
             return
         
         # Count matches by column
@@ -54958,7 +54975,7 @@ class SupervertalerQt(QMainWindow):
         # Filter out source matches if not allowed
         if not self.allow_replace_in_source:
             self.find_matches = [(row, col) for row, col in self.find_matches if col == 3]
-            if not self.find_matches:
+            if not self.find_matches and not tm_changes:
                 QMessageBox.information(self.find_replace_dialog, "Replace All", "No matches found in Target column.")
                 return
         
@@ -54969,13 +54986,26 @@ class SupervertalerQt(QMainWindow):
         if target_count > 0:
             msg_parts.append(f"{target_count} in target")
         
-        confirmation_msg = f"Replace {len(self.find_matches)} occurrence(s) of '{find_text}' with '{replace_text}'?\n\n"
+        if self.find_matches:
+            confirmation_msg = f"Replace {len(self.find_matches)} occurrence(s) of '{find_text}' with '{replace_text}'?\n\n"
+        else:
+            confirmation_msg = f"Replace '{find_text}' with '{replace_text}'?\n\nThere are no matches in the project itself."
         if msg_parts:
             confirmation_msg += f"({', '.join(msg_parts)})"
         
         # Extra warning if replacing in source
         if source_count > 0 and self.allow_replace_in_source:
             confirmation_msg += "\n\n⚠️ WARNING: This will modify source text!"
+
+        if tm_plan:
+            if tm_changes:
+                examples = "\n".join(f"   {old}  →  {new}" for old, new in tm_plan['result']['examples'][:3])
+                confirmation_msg += (
+                    f"\n\nAlso in the writable TMs ({', '.join(tm_plan['names'])}): "
+                    f"{tm_changes} entr{'y' if tm_changes == 1 else 'ies'} will change, e.g.:\n{examples}\n\n"
+                    "⚠️ TM changes cannot be undone with Ctrl+Z.")
+            else:
+                confirmation_msg += "\n\n(No matching entries in the writable TMs.)"
         
         # Confirm
         reply = QMessageBox.question(
@@ -54991,7 +55021,7 @@ class SupervertalerQt(QMainWindow):
         # For regex, validate the replacement template against a real match
         # before mutating anything (catches bad backreferences like \9 with no
         # group 9, which only error during substitution, not at compile time).
-        if use_regex:
+        if use_regex and self.find_matches:
             import re as _re
             try:
                 _r0, _c0 = self.find_matches[0]
@@ -55010,7 +55040,6 @@ class SupervertalerQt(QMainWindow):
         
         try:
             # Perform replacements
-            import re
             replaced_count = 0
             updated_rows = set()  # Track which rows need UI updates
             
@@ -55023,23 +55052,9 @@ class SupervertalerQt(QMainWindow):
                 else:  # col == 3, Target
                     old_text = segment.target
                 
-                # Perform replacement
-                if use_regex:
-                    new_text = re.sub(find_text, replace_text, old_text,
-                                      flags=0 if case_sensitive else re.IGNORECASE)
-                elif match_mode == 2:  # Entire segment
-                    new_text = replace_text
-                else:
-                    if case_sensitive:
-                        new_text = old_text.replace(find_text, replace_text)
-                    elif auto_case:
-                        pattern = re.escape(find_text)
-                        def _case_repl(m, _rt=replace_text):
-                            return self._apply_case_pattern(m.group(0), _rt)
-                        new_text = re.sub(pattern, _case_repl, old_text, flags=re.IGNORECASE)
-                    else:
-                        pattern = re.escape(find_text)
-                        new_text = re.sub(pattern, replace_text, old_text, flags=re.IGNORECASE)
+                # Perform replacement (whole words now stay whole words:
+                # this used to replace inside longer words as well)
+                new_text = replacer(old_text)
 
                 if new_text != old_text:
                     replaced_count += 1
@@ -55087,8 +55102,47 @@ class SupervertalerQt(QMainWindow):
             for row in updated_rows:
                 self.table.viewport().update()
         
-        QMessageBox.information(self.find_replace_dialog, "Replace All", f"Replaced {replaced_count} occurrence(s).")
+        summary = f"Replaced {replaced_count} occurrence(s)."
+        if tm_changes:
+            try:
+                applied = replace_in_tms(self.db_manager, tm_plan['tm_ids'], replacer,
+                                         in_source=tm_plan['in_source'],
+                                         in_target=tm_plan['in_target'], apply=True)
+                summary += f"\n\nTM entries changed: {applied['changed']}"
+                if applied['merged']:
+                    summary += (f" ({applied['merged']} became identical to an existing "
+                                f"entry and were merged into it)")
+                self.log(f"✓ Replaced '{find_text}' in {applied['changed']} TM entr"
+                         f"{'y' if applied['changed'] == 1 else 'ies'} ({', '.join(tm_plan['names'])})")
+                self._clear_caches_after_import()  # stale matches would still show the old text
+            except Exception as e:
+                summary += f"\n\n⚠️ The TMs could not be changed: {e}"
+                self.log(f"✗ TM replace failed: {e}")
+        QMessageBox.information(self.find_replace_dialog, "Replace All", summary)
         self.log(f"✓ Replaced {replaced_count} occurrence(s) of '{find_text}'")
+
+    def _fr_plan_tm_replace(self, replacer, search_source, search_target):
+        """Dry run of Replace all on the project's writable TMs (#68), or None
+        when "Also in writable TMs" is off."""
+        cb = getattr(self, 'fr_also_tm_cb', None)
+        if cb is None or not cb.isChecked():
+            return None
+        from modules.tm_replace import replace_in_tms
+        mgr = getattr(self, 'tm_metadata_mgr', None)
+        project_id = getattr(self.current_project, 'id', None) if self.current_project else None
+        tm_ids = mgr.get_writable_tm_ids(project_id) if (mgr and project_id) else []
+        names = []
+        for tm_id in tm_ids:
+            info = mgr.get_tm_by_tm_id(tm_id) or {}
+            names.append(info.get('name') or tm_id)
+        in_source = bool(search_source and self.allow_replace_in_source)
+        result = replace_in_tms(self.db_manager, tm_ids, replacer,
+                                in_source=in_source, in_target=bool(search_target))
+        if not tm_ids:
+            self.log("ℹ️ Also in writable TMs: this project has no TM with Write ticked")
+        return {'tm_ids': tm_ids, 'names': names or ["none"], 'result': result,
+                'in_source': in_source, 'in_target': bool(search_target)}
+
     
     def highlight_all_matches(self):
         """Highlight all matches in the grid (without filtering rows)"""
