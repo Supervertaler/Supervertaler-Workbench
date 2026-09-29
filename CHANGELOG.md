@@ -7,6 +7,17 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ## Unreleased
 
+### Added (Help · a sample project to try things out on)
+
+**Help → 🎓 Open Sample Project** opens a small English → Dutch project, the quick-start guide for a pump, with its own TM and glossary (issue #147). It is meant for new users to see at a glance what Supervertaler does:
+- glossary terms highlighted in the grid and listed in TermLens, including a forbidden term next to the preferred one and a non-translatable brand name;
+- a 100% TM match;
+- several fuzzy matches with the differences highlighted in the match panel;
+- already confirmed segments next to untranslated ones;
+- an inline tag to insert with Ctrl+,.
+
+A short note lists what to try. The sample TM and glossary appear in the TMs and Termbases tabs. They are created the first time and reused afterwards, and they are switched on only for the sample project. Nothing else in your data is changed. If the project you have open has unsaved changes, you are asked first.
+
 ### Fixed (Dark theme · no more white panels or unreadable light-on-light text)
 
 The Dark theme left bright areas in many places, and some had light text on a light background (issue #78). The theme colours the application as a whole, but many panels carry colours of their own that were chosen for a light background. Examples:

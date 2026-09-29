@@ -12446,6 +12446,14 @@ class SupervertalerQt(QMainWindow):
         setup_wizard_action.triggered.connect(lambda: self._show_setup_wizard(is_first_run=False))
         help_menu.addAction(setup_wizard_action)
 
+        # A ready-made project to try things out on (#147)
+        sample_project_action = QAction(self.tr("🎓 Open Sample Project"), self)
+        sample_project_action.setToolTip(self.tr(
+            "Open a small English → Dutch project with a sample TM and glossary, to see "
+            "TermLens, TM matches and the other panels in action"))
+        sample_project_action.triggered.connect(self.open_sample_project)
+        help_menu.addAction(sample_project_action)
+
         help_menu.addSeparator()
 
         shortcuts_action = QAction(self.tr("⌨️ Keyboard Shortcuts"), self)
@@ -33042,6 +33050,81 @@ class SupervertalerQt(QMainWindow):
     # PROJECT MANAGEMENT
     # ========================================================================
     
+    def open_sample_project(self):
+        """Help → Open Sample Project (issue #147): a small English → Dutch
+        project with a sample TM and glossary that show TermLens, exact and
+        fuzzy TM matches (with the differences highlighted), a forbidden term,
+        a non-translatable and an inline tag. The TM and glossary are created
+        once and reused; nothing else in the user's data is touched."""
+        from modules import sample_project as sp
+
+        if self.current_project and self.project_modified:
+            reply = QMessageBox.question(
+                self, "Unsaved Changes",
+                "Save the current project before opening the sample project?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                | QMessageBox.StandardButton.Cancel)
+            if reply == QMessageBox.StandardButton.Cancel:
+                return
+            if reply == QMessageBox.StandardButton.Yes:
+                self.save_project()
+                if self.project_modified:
+                    return
+
+        try:
+            sp.ensure_resources(self.db_manager, self.tm_metadata_mgr, self.termbase_mgr)
+        except Exception as e:
+            self.log(f"⚠ Sample project: could not set up the sample TM/glossary: {e}")
+
+        segments = [Segment(id=i, source=source, target=target, status=status)
+                    for i, (source, target, status) in enumerate(sp.SEGMENTS, start=1)]
+        self.current_project = Project(name=sp.PROJECT_NAME, source_lang=sp.SOURCE_LANG,
+                                       target_lang=sp.TARGET_LANG, segments=segments,
+                                       id=sp.PROJECT_ID)
+        # No source document behind it (same reset as New Project)
+        self.original_docx = None
+        self.current_document_path = None
+        self.source_language = sp.SOURCE_LANG
+        self.target_language = sp.TARGET_LANG
+        self.project_file_path = None
+        self.project_modified = False
+        self._original_segment_order = self.current_project.segments.copy()
+
+        self.update_window_title()
+        self.load_segments_to_grid()
+        self.initialize_tm_database()
+        self._clear_caches_after_import()
+        for refresh in ('_update_scratchpad_for_project', '_refresh_segment_comments_list',
+                        '_refresh_proofreading_comments_list', 'tm_tab_refresh_callback',
+                        'termbase_tab_refresh_callback', '_finalise_import_with_indexes'):
+            fn = getattr(self, refresh, None)
+            if callable(fn):
+                try:
+                    fn()
+                except Exception as e:
+                    self.log(f"⚠ Sample project: {refresh} failed: {e}")
+        self.log(f"🎓 Opened the sample project ({len(segments)} segments, "
+                 f"with \u201c{sp.TM_NAME}\u201d and \u201c{sp.GLOSSARY_NAME}\u201d)")
+
+        # Start on a segment with a fuzzy match and glossary terms
+        self._navigate_to_segment_by_id(4)
+        QMessageBox.information(
+            self, "Sample project",
+            "This is a small English → Dutch sample project with its own TM and glossary.\n\n"
+            "Things to try:\n"
+            "• Segment 4 is selected. The match panel shows a fuzzy TM match with the "
+            "differences highlighted, and TermLens shows the glossary terms in it.\n"
+            "• Segment 3 has a 100% TM match. Segment 5 has a forbidden term "
+            "(“pompbehuizing”) next to the preferred one.\n"
+            "• Segment 9 has an inline tag: press Ctrl+, to insert it into the target.\n"
+            "• Segment 13 has a non-translatable brand name (HydroFlow).\n"
+            "• Press Ctrl+Enter to confirm a segment and move on, or Ctrl+T to translate "
+            "one with AI (needs an API key in Settings).\n"
+            "• Try the Preview, Comments and Scratchpad tabs on the right.\n\n"
+            "The sample TM and glossary are listed in the TMs and Termbases tabs, and are "
+            "only switched on for this project. Save the project with Ctrl+S if you want "
+            "to keep your changes.")
+
     def new_project(self):
         """Create a new project"""
         from PyQt6.QtWidgets import (
