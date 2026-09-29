@@ -7,6 +7,22 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ## Unreleased
 
+### Added (SuperLookup · add your own web resources)
+
+The **Web Resources** sidebar in SuperLookup has a new **⚙ Custom Resources…** button, so you can add lookup sites of your own below the built-in ones (IATE, Linguee, ProZ and so on). This was one of the requests collected in issue #208.
+
+To add a site:
+1. Search for something on the site in your browser.
+2. Copy the address of the results page.
+3. Replace the search term in it with `{query}`, for example `https://www.dwds.de/?q={query}`.
+
+The language placeholders the built-in resources use also work, so a dictionary can follow your language pair:
+- `{sl}` / `{tl}` for the codes (en, nl);
+- `{sl_upper}` / `{tl_upper}` for capitals (EN, NL);
+- `{sl_full}` / `{tl_full}` for names (english, dutch).
+
+Your sites work like the built-in ones: embedded or in your browser, and in **Search All**. You can rename, reorder and remove them, and they are remembered. Only `https://` and `http://` addresses are accepted.
+
 ### Added (AI cost · per-job cost, an estimate before you start, and euros)
 
 Supervertaler has logged the tokens and cost of every AI call since v1.9.461, and **Tools → 💰 Token Usage & Costs** can already total them by project, model or task. What was missing was the cost of a job at a glance, a figure before you spend anything, and euros (issue #8):

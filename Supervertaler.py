@@ -69025,41 +69025,33 @@ class SuperlookupTab(QWidget):
         self.web_resource_button_group = QButtonGroup(self)
         self.web_resource_button_group.setExclusive(True)
 
-        for i, resource in enumerate(self.web_resources):
-            btn = QPushButton(f"{resource['icon']} {resource['name']}")
-            btn.setCheckable(True)
-            btn.setToolTip(resource['description'])
-            btn.setStyleSheet(f"""
-                QPushButton {{
-                    text-align: left;
-                    padding: 5px 8px;
-                    border: none;
-                    border-radius: 4px;
-                    background-color: transparent;
-                    font-size: {scaled_pt(9):.1f}pt;
-                    outline: none;
-                }}
-                QPushButton:hover {{
-                    background-color: #e3e3e3;
-                }}
-                QPushButton:checked {{
-                    background-color: #2196F3;
-                    color: white;
-                    font-weight: bold;
-                }}
-                QPushButton:focus {{
-                    outline: none;
-                    border: none;
-                }}
-            """)
-            btn.clicked.connect(lambda checked, idx=i: self._on_web_resource_selected(idx))
-            self.web_resource_button_group.addButton(btn, i)
-            self.web_resource_buttons.append(btn)
-            scroll_layout.addWidget(btn)
+        # The user's own lookup sites go below the built-in ones (#208)
+        self._builtin_web_resource_count = len(self.web_resources)
+        self.web_resources.extend(self._load_custom_web_resources())
+        self._web_resource_scroll_layout = scroll_layout
+        self._rebuild_web_resource_buttons()
 
-        scroll_layout.addStretch()
         scroll_area.setWidget(scroll_content)
         sidebar_layout.addWidget(scroll_area, stretch=1)
+
+        custom_btn = QPushButton(self.tr("⚙ Custom Resources…"))
+        custom_btn.setToolTip(self.tr("Add your own lookup sites to this list"))
+        custom_btn.setStyleSheet(f"""
+            QPushButton {{
+                text-align: left;
+                padding: 4px 8px;
+                border: 1px dashed #bbb;
+                border-radius: 4px;
+                background-color: transparent;
+                color: #555;
+                font-size: {scaled_pt(8.5):.1f}pt;
+            }}
+            QPushButton:hover {{
+                background-color: #e3e3e3;
+            }}
+        """)
+        custom_btn.clicked.connect(self._manage_custom_web_resources)
+        sidebar_layout.addWidget(custom_btn)
         
         # "Search All" button - pre-loads all resources
         search_all_btn = QPushButton(self.tr("🔎 Search All"))
@@ -69232,6 +69224,120 @@ class SuperlookupTab(QWidget):
         
         return tab
     
+    def _web_resource_button(self, resource, index):
+        btn = QPushButton(f"{resource['icon']} {resource['name']}")
+        btn.setCheckable(True)
+        btn.setToolTip(resource['description'])
+        btn.setStyleSheet(f"""
+            QPushButton {{
+                text-align: left;
+                padding: 5px 8px;
+                border: none;
+                border-radius: 4px;
+                background-color: transparent;
+                font-size: {scaled_pt(9):.1f}pt;
+                outline: none;
+            }}
+            QPushButton:hover {{
+                background-color: #e3e3e3;
+            }}
+            QPushButton:checked {{
+                background-color: #2196F3;
+                color: white;
+                font-weight: bold;
+            }}
+            QPushButton:focus {{
+                outline: none;
+                border: none;
+            }}
+        """)
+        btn.clicked.connect(lambda checked, idx=index: self._on_web_resource_selected(idx))
+        return btn
+
+    def _rebuild_web_resource_buttons(self):
+        """(Re)create the sidebar buttons from self.web_resources."""
+        layout = self._web_resource_scroll_layout
+        for btn in self.web_resource_buttons:
+            self.web_resource_button_group.removeButton(btn)
+            btn.deleteLater()
+        self.web_resource_buttons = []
+        while layout.count():
+            item = layout.takeAt(0)
+            if item.widget() is not None:
+                item.widget().deleteLater()
+        for i, resource in enumerate(self.web_resources):
+            btn = self._web_resource_button(resource, i)
+            self.web_resource_button_group.addButton(btn, i)
+            self.web_resource_buttons.append(btn)
+            layout.addWidget(btn)
+        layout.addStretch()
+
+    def _settings_window(self):
+        """The main window, which owns the settings – also from the detached
+        SuperLookup window, whose direct parent is that window."""
+        w = self.main_window
+        while w is not None and not hasattr(w, 'save_general_settings'):
+            w = w.parent() if hasattr(w, 'parent') else None
+        return w
+
+    def _load_custom_web_resources(self):
+        from modules import custom_web_resources as cwr
+        try:
+            mw = self._settings_window()
+            if mw and hasattr(mw, 'load_general_settings'):
+                return cwr.to_resources((mw.load_general_settings() or {}).get(cwr.SETTINGS_KEY))
+        except Exception as e:
+            print(f"[Superlookup] Could not load custom web resources: {e}")
+        return []
+
+    def _manage_custom_web_resources(self):
+        """Add, edit or remove the user's own web resources (#208)."""
+        from modules import custom_web_resources as cwr
+        mw = self._settings_window()
+        if not (mw and hasattr(mw, 'load_general_settings') and hasattr(mw, 'save_general_settings')):
+            return
+        settings = mw.load_general_settings() or {}
+        dialog = cwr.CustomWebResourcesDialog(settings.get(cwr.SETTINGS_KEY), self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        entries = dialog.entries()
+        settings = mw.load_general_settings() or {}
+        settings[cwr.SETTINGS_KEY] = entries
+        mw.save_general_settings(settings)
+
+        # Every open SuperLookup (docked tab, top-level tab, detached window)
+        custom = cwr.to_resources(entries)
+        tabs = [t for t in mw.findChildren(SuperlookupTab) if hasattr(t, 'web_resource_buttons')]
+        if self not in tabs:
+            tabs.append(self)
+        for tab in tabs:
+            tab._apply_custom_web_resources(custom)
+        if hasattr(mw, 'log'):
+            mw.log(f"🌐 Custom web resources saved: {len(custom)}")
+
+    def _apply_custom_web_resources(self, custom):
+        """Replace the custom part of the resource list and rebuild the sidebar."""
+        current = self.web_resources[self.current_web_resource_index]['id'] \
+            if 0 <= self.current_web_resource_index < len(self.web_resources) else None
+        # Drop the browser views of resources that were removed
+        keep = {r['id'] for r in custom}
+        for old in self.web_resources[self._builtin_web_resource_count:]:
+            if old['id'] not in keep and old['id'] in self.web_views:
+                container = self.web_view_containers.pop(old['id'], None)
+                self.web_views.pop(old['id'], None)
+                if container is not None:
+                    self.web_view_stack.removeWidget(container)
+                    container.deleteLater()
+        del self.web_resources[self._builtin_web_resource_count:]
+        self.web_resources.extend(custom)
+        self._rebuild_web_resource_buttons()
+
+        ids = [r['id'] for r in self.web_resources]
+        index = ids.index(current) if current in ids else 0
+        if self.web_resource_buttons:
+            self.web_resource_buttons[index].setChecked(True)
+            self._on_web_resource_selected(index)
+
     def _show_web_welcome_message(self):
         """Show welcome message in the web results view"""
         mode_info = "embedded browser" if self.web_browser_mode == 'embedded' else "your default web browser"
@@ -69490,10 +69596,11 @@ class SuperlookupTab(QWidget):
                         self.web_views[resource['id']].setUrl(QUrl(url))
         else:
             # External mode - show info
+            import html as _html
             self.web_results_view.setHtml(f"""
                 <div style="text-align: center; padding: 40px;">
-                    <h2>{resource['icon']} {resource['name']}</h2>
-                    <p style="color: #666;">{resource['description']}</p>
+                    <h2>{resource['icon']} {_html.escape(resource['name'])}</h2>
+                    <p style="color: #666;">{_html.escape(resource['description'])}</p>
                     <p style="margin-top: 20px;">Enter a search term above and press Search.</p>
                     <p style="font-size: 9pt; color: #aaa;">Results will open in your default browser.</p>
                 </div>
