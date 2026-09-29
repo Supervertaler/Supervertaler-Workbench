@@ -1793,6 +1793,34 @@ class TranslationResultsPanel(QWidget):
 
         return filtered_matches
 
+    def _with_adapted_codes(self, matches_dict: Dict[str, List[TranslationMatch]]):
+        """TM matches that differ from the current segment only in the
+        user's inline codes get the current source's codes (issue #194):
+        ``{PK}{MN} muszą być różne.`` becomes ``{PKMN} muszą być różne.``
+        when the segment says ``{PKMN}``."""
+        try:
+            from dataclasses import replace
+            from modules import inline_codes
+            if inline_codes.active_pattern() is None or not matches_dict.get("TM"):
+                return matches_dict
+            getter = getattr(self.parent_app, '_current_segment_source', None)
+            current = getter() if getter else None
+            if not current:
+                return matches_dict
+            adapted = []
+            for match in matches_dict["TM"]:
+                new_target = inline_codes.adapt_codes(match.source, match.target, current)
+                if new_target is not None:
+                    metadata = dict(match.metadata or {})
+                    metadata["codes_adapted_from"] = match.target
+                    match = replace(match, target=new_target, metadata=metadata)
+                adapted.append(match)
+            result = dict(matches_dict)
+            result["TM"] = adapted
+            return result
+        except Exception:
+            return matches_dict
+
     def set_matches(self, matches_dict: Dict[str, List[TranslationMatch]]):
         """
         Set matches from different sources in unified flat list with GLOBAL consecutive numbering
@@ -1804,7 +1832,9 @@ class TranslationResultsPanel(QWidget):
         # Ensure CompactMatchItem has current theme_manager
         if self.theme_manager:
             CompactMatchItem.theme_manager = self.theme_manager
-        
+
+        matches_dict = self._with_adapted_codes(matches_dict)
+
         # Store current matches for delayed search access
         self._current_matches = matches_dict.copy()
         self.matches_by_type = matches_dict

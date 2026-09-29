@@ -297,6 +297,7 @@ from modules.pseudo_translate_dialog import run_pseudo_translation  # Pseudo-tra
 from modules.project_assets import bundle_source, resolve_source_path, ensure_target_dir, nest_in_own_folder  # Project-folder model (issue #228)
 from modules.voice_dictation_lite import QuickDictationThread  # Voice dictation
 from modules.voice_commands import VoiceCommandManager, VoiceCommand, ContinuousVoiceListener  # Voice commands (Talon-style)
+from modules import inline_codes as _inline_codes  # User-defined inline codes / placeholders (issue #194)
 from modules.voice_command_dialog import VoiceCommandEditDialog  # Voice command edit dialog
 from modules.styled_widgets import CheckmarkCheckBox, PurpleCheckmarkCheckBox, TealCheckmarkCheckBox, CheckmarkRadioButton
 from modules.statuses import (
@@ -1180,7 +1181,8 @@ _ALL_TAGS_PATTERN = r'(\[\d+\}|\{\d+\]|\[\d+\]|</?[a-zA-Z][a-zA-Z0-9-]*(?:\s+[^>
 
 def extract_all_tags(text: str) -> list:
     """
-    Extract all tags (memoQ, HTML, and Trados numeric) from text in order of appearance.
+    Extract all tags (memoQ, HTML, and Trados numeric) from text in order of appearance,
+    plus the user's own inline codes from Settings → Inline Codes (issue #194).
 
     Args:
         text: Source text containing tags
@@ -1189,7 +1191,11 @@ def extract_all_tags(text: str) -> list:
         List of all tag strings in order of appearance
     """
     import re
-    return re.findall(_ALL_TAGS_PATTERN, text or '')
+    found = [(m.start(), m.end(), m.group(0)) for m in re.finditer(_ALL_TAGS_PATTERN, text or '')]
+    for start, end, code in _inline_codes.find_codes(text):
+        if not any(s < end and start < e for s, e, _ in found):
+            found.append((start, end, code))
+    return [tag for _, _, tag in sorted(found)]
 
 
 # AutoTagger uses its own, more complete pattern than extract_all_tags: it also
@@ -2851,7 +2857,7 @@ class GridTextEditor(QTextEdit):
         # Check what type of tags are in the source
         has_memoq_tags = bool(extract_memoq_tags(source_text))
         has_html_tags = bool(extract_html_tags(source_text))
-        has_any_tags = has_memoq_tags or has_html_tags
+        has_any_tags = has_memoq_tags or has_html_tags or bool(_inline_codes.find_codes(source_text))
         has_pipe_symbols = '|' in source_text
 
         # Check if there's a selection
@@ -4794,6 +4800,10 @@ class TagHighlighter(QSyntaxHighlighter):
             length = match.end() - start
             self.setFormat(start, length, self.tag_format)
 
+        # The user's own inline codes ({playerName}, %s, \n …) look like tags too
+        for start, end, _code in _inline_codes.find_codes(text):
+            self.setFormat(start, end - start, self.tag_format)
+
         # Match invisible character symbols (light blue)
         for i, char in enumerate(text):
             if char in '·→↵':  # Invisible character replacement symbols
@@ -6319,7 +6329,7 @@ class EditableGridTextEditor(QTextEdit):
         # Check what type of tags are in the source
         has_memoq_tags = bool(extract_memoq_tags(source_text))
         has_html_tags = bool(extract_html_tags(source_text))
-        has_any_tags = has_memoq_tags or has_html_tags
+        has_any_tags = has_memoq_tags or has_html_tags or bool(_inline_codes.find_codes(source_text))
         has_pipe_symbols = '|' in source_text
         
         # Check if there's a selection
@@ -8212,6 +8222,11 @@ class PreTranslationWorker(QThread):
                     "tag MUST wrap the translated word(s) it wrapped in the source; NEVER output "
                     "an empty pair like <1></1> with the text left outside it. Tags may be "
                     "reordered to fit natural target-language word order.")
+                _next_rule += 1
+            # The user's own inline codes (Settings → Inline Codes, issue #194)
+            _codes_note = _inline_codes.prompt_note([seg.source or '' for _, seg in batch_segments])
+            if _codes_note:
+                batch_prompt_parts.append(f"{_next_rule}. {_codes_note}")
                 _next_rule += 1
             batch_prompt_parts.append(f"{_next_rule}. NO explanations, NO commentary, ONLY the numbered translations\n")
 
@@ -18838,6 +18853,37 @@ class SupervertalerQt(QMainWindow):
         settings[SETTINGS_KEY] = rules.to_dict()
         self.save_general_settings(settings)
 
+    def _create_inline_codes_tab(self):
+        """Settings → Inline Codes (issue #194): user-defined placeholder
+        patterns treated like inline tags. Also activates the saved patterns,
+        as the Settings pages are built at start-up."""
+        from modules.inline_codes_widget import InlineCodesWidget
+        entries = self._load_inline_codes()
+        _inline_codes.set_active(entries)
+        return InlineCodesWidget(lambda: entries, self._save_inline_codes)
+
+    def _load_inline_codes(self) -> list:
+        try:
+            return _inline_codes.normalise(self.load_general_settings().get(_inline_codes.SETTINGS_KEY))
+        except Exception as e:
+            self.log(f"⚠ Could not read the inline code patterns: {e}")
+            return []
+
+    def _save_inline_codes(self, entries: list):
+        settings = self.load_general_settings()
+        settings[_inline_codes.SETTINGS_KEY] = entries
+        self.save_general_settings(settings)
+        _inline_codes.set_active(entries)
+        # Re-colour the grid with the new patterns (source column 2, target column 3)
+        table = getattr(self, 'table', None)
+        if table is not None:
+            for row in range(table.rowCount()):
+                for col in (2, 3):
+                    widget = table.cellWidget(row, col)
+                    highlighter = getattr(widget, 'highlighter', None)
+                    if highlighter is not None:
+                        highlighter.rehighlight()
+
     def _make_sentence_segmenter(self, markdown: bool = False):
         """The sentence segmenter for text Supervertaler splits itself, with
         the user's rules from Settings → Segmentation Rules."""
@@ -24060,6 +24106,10 @@ class SupervertalerQt(QMainWindow):
         # ===== TAB 11: Segmentation Rules =====
         seg_tab = self.create_segmentation_rules_tab()
         settings_tabs.addTab(scroll_area_wrapper(seg_tab), self.tr("📏 Segmentation Rules"))
+
+        # ===== Inline Codes (issue #194) =====
+        codes_tab = self._create_inline_codes_tab()
+        settings_tabs.addTab(scroll_area_wrapper(codes_tab), self.tr("🏷️ Inline Codes"))
 
         # ===== File Types (Okapi import options) =====
         file_types_tab = self._create_file_types_settings_tab()
@@ -45716,6 +45766,13 @@ class SupervertalerQt(QMainWindow):
                 tm_src_display = self.apply_invisible_replacements(tm_src_display)
             self.match_panel_tm_source.setPlainText(tm_src_display)
 
+        # A match that differs only in its inline codes gets the current
+        # source's codes ({PK}{MN} → {PKMN}; issue #194)
+        if target_text and current_source and tm_source_text:
+            adapted = _inline_codes.adapt_codes(tm_source_text, target_text, current_source)
+            if adapted is not None:
+                target_text = adapted
+
         # Update TM Target text (no diff highlighting needed for target)
         # Strip any stale invisible markers first (in case TM data was saved with markers),
         # then re-apply current invisible display settings for clean rendering
@@ -46764,6 +46821,21 @@ class SupervertalerQt(QMainWindow):
                         return
                 except (ValueError, AttributeError):
                     continue
+
+    def _current_segment_source(self) -> Optional[str]:
+        """Source text of the segment selected in the grid (used by the
+        results panel to adapt inline codes in TM matches, issue #194)."""
+        seg_id = self._get_current_segment_id()
+        if seg_id is None:
+            return None
+        segments = self.current_project.segments
+        row = self.table.currentRow()
+        if 0 <= row < len(segments) and segments[row].id == seg_id:
+            return segments[row].source
+        for seg in segments:
+            if seg.id == seg_id:
+                return seg.source
+        return None
 
     def _get_current_segment_id(self) -> Optional[int]:
         """Get the ID of the currently selected segment in the grid"""
@@ -54378,7 +54450,8 @@ class SupervertalerQt(QMainWindow):
                 self, Path(self.user_data_path) / "find_replace_sets",
                 get_segments=lambda: self.current_project.segments if self.current_project else [],
                 navigate=self._navigate_to_segment_by_id,
-                on_sets_changed=_reload_fr_sets)
+                on_sets_changed=_reload_fr_sets,
+                extract_tags=extract_all_tags)
             self._qa_checks_dialog = dlg
         else:
             dlg.refresh_sets()
@@ -64092,6 +64165,9 @@ class SupervertalerQt(QMainWindow):
                         "written, with the same numbers. A paired tag MUST wrap the translated "
                         "word(s) it wrapped in the source – never output an empty pair like <1></1> "
                         "with the text left outside it.")
+                _codes_note = _inline_codes.prompt_note([segment.source or ''])
+                if _codes_note:
+                    prompt_parts.append(_codes_note)
                 # FuzzyFixer reference for local LLMs (rendered from the same
                 # editable template used for cloud providers).
                 if fuzzy_match and fuzzy_match.get('source') and fuzzy_match.get('target') \
@@ -64175,6 +64251,15 @@ class SupervertalerQt(QMainWindow):
                             )
                         else:
                             custom_prompt += surrounding_context
+
+                    # The user's own inline codes (Settings → Inline Codes, issue #194)
+                    _codes_note = _inline_codes.prompt_note([segment.source or ''])
+                    if _codes_note:
+                        if "**YOUR TRANSLATION" in custom_prompt:
+                            custom_prompt = custom_prompt.replace(
+                                "**YOUR TRANSLATION", _codes_note + "\n\n**YOUR TRANSLATION", 1)
+                        else:
+                            custom_prompt += "\n\n" + _codes_note
                             
                 except Exception as e:
                     self.log(f"⚠ Could not build prompt from manager: {e}")

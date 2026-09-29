@@ -99,6 +99,35 @@ def run_checks(segments, checks: Iterable[FindReplaceOperation]):
     return findings, problems
 
 
+TAG_CHECK_MISSING = "Tag/code missing from the target"
+TAG_CHECK_EXTRA = "Tag/code not in the source"
+
+
+def tag_findings(segments, extract_tags: Callable[[str], List[str]]) -> List[Finding]:
+    """Inline tags and the user's inline codes (issue #194) that a translated
+    segment lost or gained compared with its source. ``extract_tags(text)``
+    lists them in order; untranslated segments are skipped."""
+    from collections import Counter
+
+    findings: List[Finding] = []
+    for index, seg in enumerate(segments):
+        source, target = getattr(seg, "source", "") or "", getattr(seg, "target", "") or ""
+        if not target.strip():
+            continue
+        src, tgt = Counter(extract_tags(source)), Counter(extract_tags(target))
+        seg_id = getattr(seg, "id", index + 1)
+        for check, side, text, surplus in ((TAG_CHECK_MISSING, "source", source, src - tgt),
+                                           (TAG_CHECK_EXTRA, "target", target, tgt - src)):
+            for tag, count in surplus.items():
+                start = -1
+                for _ in range(count):
+                    start = text.find(tag, start + 1)
+                    begin = max(start, 0)
+                    findings.append(Finding(index, seg_id, check, side, tag, begin,
+                                            begin + len(tag), _context(text, begin, begin + len(tag))))
+    return findings
+
+
 def basic_qa_set() -> FindReplaceSet:
     """A starter set of common checks, all on the target side."""
     def check(pattern, note, enabled=True):

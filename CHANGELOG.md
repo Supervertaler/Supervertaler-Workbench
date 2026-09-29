@@ -7,6 +7,27 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ## Unreleased
 
+### Added (Settings · inline codes and placeholders treated like tags)
+
+Software strings and game files are full of placeholders that must reach the translation unchanged, such as `{playerName}`, `%s`, `%1$d`, `\n` and `<color=#ff0000>`. No upstream CAT tool has tagged them. The new **Settings → 🏷️ Inline Codes** page lets you describe them with regular expressions (issue #194). **➕ Common patterns** adds ready-made ones in one click:
+- `{…}`
+- printf `%s`/`%d`
+- `%NAME%`
+- escaped `\n`
+- `<color=…>` game tags
+- `$VAR$`
+- `${…}` / `{{…}}`
+- `[[…]]`
+
+A test box shows what the patterns find.
+
+Anything that matches is then handled like an inline tag:
+- **The grid** colours the codes like tags, in source and target.
+- **Insert next tag (Ctrl+,)** inserts the next code the target is still missing.
+- **QA → Run QA Checks** has a new **Tags & codes match the source** option. It lists codes (and ordinary inline tags) that a translation lost or has but its source doesn't. It can run on its own, without a check set.
+- **AI translation**, single segments and batches, lists the segment's codes in the prompt with the instruction to keep them exactly as written.
+- **TM matches that differ only in their codes are adapted.** If the TM has `{PK}{MN} can't be the same.` → `{PK}{MN} muszą być różne.`, and your segment says `{PKMN} can't be the same.`, the match you are offered is `{PKMN} muszą być różne.`. The Match Panel's TM Source comparison also shows `{PK}{MN}` → `{PKMN}` as one code replaced, rather than as broken fragments.
+
 ### Improved (Settings · every page saves itself)
 
 The Settings pages no longer have a **💾 Save** button (issue #214). A change is written a moment after you make it, and a short "✓ Settings saved" appears in the status bar. Before, a change was lost if you left the page without clicking Save. The newer pages (AutoCorrect, Backup, Clipboard, Segmentation Rules) already saved on every change. The rest now do too:

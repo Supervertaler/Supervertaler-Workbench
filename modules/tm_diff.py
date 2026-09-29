@@ -28,7 +28,23 @@ _TOKEN = re.compile(
 
 
 def tokenize(text: str) -> List[str]:
-    return _TOKEN.findall(text or "")
+    """Tokens of ``text``; the user's own inline codes (Settings → Inline
+    Codes, issue #194) are single tokens too, so ``{PKMN}`` against
+    ``{PK}{MN}`` shows as one code replaced by two."""
+    text = text or ""
+    try:
+        from modules import inline_codes
+        codes = inline_codes.find_codes(text)
+    except Exception:
+        codes = []
+    tokens: List[str] = []
+    pos = 0
+    for start, end, code in codes:
+        tokens += _TOKEN.findall(text[pos:start])
+        tokens.append(code)
+        pos = end
+    tokens += _TOKEN.findall(text[pos:])
+    return tokens
 
 
 def word_diff(current: str, tm_source: str) -> List[Tuple[str, str]]:
