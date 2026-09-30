@@ -60,6 +60,10 @@ Saving now puts a copy of each of these in `source/` as well:
 - **Nothing is copied twice.** A file is copied again only after it has changed.
 - **Two different files with the same name get separate copies** (`doc.sdlxliff`, `doc_2.sdlxliff`), so one never replaces the other.
 
+### Changed (Projects · the backup TMX has its own tm/ folder)
+
+The automatic backup wrote `<project>_backup.tmx` next to the `.svproj`. It now goes into a `tm/` folder inside the project folder, as OmegaT keeps its TMs in `tm/` (issue #228). A backup left next to the project file by an older version is moved there.
+
 ### Fixed (Projects · an export could use the file of the project you had open before)
 
 Opening a project kept the memoQ, Trados, CafeTran, Phrase, PO, Déjà Vu or SDLPPX file of the project that was open before. The export preferred that file over the one saved with the project you had just opened. Exporting the second project in the same format then built the exported file from the first project's file. Opening a project now clears all of that.

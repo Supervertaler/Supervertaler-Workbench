@@ -294,7 +294,7 @@ if sys.platform == 'win32':
 import pyperclip  # For clipboard operations in Superlookup
 from modules.superlookup import SuperlookupEngine  # Superlookup engine
 from modules.pseudo_translate_dialog import run_pseudo_translation  # Pseudo-translation export test (dialog + apply)
-from modules.project_assets import bundle_source, resolve_source_path, ensure_target_dir, nest_in_own_folder, write_project_file, read_backup, bundle_round_trip_sources, restore_round_trip_sources, is_in_source_dir  # Project-folder model (issue #228)
+from modules.project_assets import bundle_source, resolve_source_path, ensure_target_dir, nest_in_own_folder, write_project_file, read_backup, bundle_round_trip_sources, restore_round_trip_sources, is_in_source_dir, TM_SUBDIR  # Project-folder model (issue #228)
 from modules.voice_dictation_lite import QuickDictationThread  # Voice dictation
 from modules.voice_commands import VoiceCommandManager, VoiceCommand, ContinuousVoiceListener  # Voice commands (Talon-style)
 from modules import inline_codes as _inline_codes  # User-defined inline codes / placeholders (issue #194)
@@ -36266,10 +36266,19 @@ class SupervertalerQt(QMainWindow):
             # Save project.json
             self.save_project_to_file(self.project_file_path)
 
-            # Export TMX to same folder as project
+            # Export the TMX into the project's tm/ folder (issue #228). A
+            # backup left in the project folder itself by an older version is
+            # moved there first.
             project_dir = Path(self.project_file_path).parent
             project_name = Path(self.project_file_path).stem
-            tmx_file_path = project_dir / f"{project_name}_backup.tmx"
+            tmx_file_path = project_dir / TM_SUBDIR / f"{project_name}_backup.tmx"
+            tmx_file_path.parent.mkdir(parents=True, exist_ok=True)
+            legacy_tmx = project_dir / f"{project_name}_backup.tmx"
+            if legacy_tmx.exists() and not tmx_file_path.exists():
+                try:
+                    os.replace(legacy_tmx, tmx_file_path)
+                except OSError:
+                    pass
 
             # Prepare segments for TMX export
             source_segments = []
