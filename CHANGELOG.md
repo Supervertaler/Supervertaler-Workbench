@@ -23,6 +23,14 @@ Both recognise every self-closing tag now, as AutoTagger already did. Pseudo-tra
 
 **SuperLookup → ⚙️ SuperLookup Settings** said SuperLookup searches the TMs and termbases ticked **Read**. Since v1.10.247 it searches the ones ticked in the **🔍 SuperLookup** column of the TMs and Termbases tabs, whether or not they are ticked Read. The note now says so.
 
+### Fixed (Messages · menu and tab names that no longer exist)
+
+A few messages sent you to places that have been renamed:
+- **Bilingual text export:** after exporting AI-friendly bilingual text, the message said to re-import through "File → Import". That menu has been called **Project** since v1.10.182.
+- **No TM matches:** when no TM was switched on, the log line and the Match Panel said "Resources → TM". It is the **💾 TMs** tab.
+
+They now name the menu items and tabs as they appear. The TM diagnostic script (`scripts/sv_tm_diagnose.py`) says the same.
+
 ### Improved (Projects · every kind of project travels with its source files)
 
 Supervertaler already copied a project's source document into the project's `source/` folder, but only the main document (issue #228). The files a project exports back into stayed outside it, so a project moved to another computer could no longer produce its return file:

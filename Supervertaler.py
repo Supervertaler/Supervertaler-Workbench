@@ -44360,8 +44360,8 @@ class SupervertalerQt(QMainWindow):
                 "<b>[SEGMENT NNNN]</b> format, with a <code>.svexport.json</code> "
                 "sidecar written alongside it.<br><br>"
                 "Edit the target lines in any text editor or with an LLM, then "
-                "re-import via <b>File → Import → 🔁 Supervertaler Re-importable → "
-                "Bilingual Text (AI-friendly)</b> to update this project."
+                "re-import via <b>Project → Import → 🔁 Supervertaler Re-importable → "
+                "Bilingual Text (AI-friendly) - Update Project…</b> to update this project."
             )
             info.setTextFormat(Qt.TextFormat.RichText)
             info.setWordWrap(True)
@@ -44509,9 +44509,9 @@ class SupervertalerQt(QMainWindow):
                     self, "Copied to Clipboard",
                     f"Copied {len(export_segs)} segment(s) to the clipboard.\n\n"
                     "Paste them into your AI chat. When you have the edited reply, "
-                    "copy it and press " + paste_key + " (File → Import → "
+                    "copy it and press " + paste_key + " (Project → Import → "
                     "🔁 Supervertaler Re-importable → Bilingual Text (AI-friendly) - "
-                    "Update from Pasted Text) to update this project.")
+                    "Update from Pasted Text…) to update this project.")
                 return
 
             side_path = write_export(file_path, md_text, sidecar)
@@ -44522,9 +44522,9 @@ class SupervertalerQt(QMainWindow):
                 self, "Export Complete",
                 f"Exported {len(export_segs)} segment(s) to:\n{os.path.basename(file_path)}\n\n"
                 f"Sidecar: {os.path.basename(side_path)}\n\n"
-                "Edit the target lines, then re-import via File → Import → "
-                "🔁 Supervertaler Re-importable → Bilingual Text (AI-friendly) to "
-                "update this project.")
+                "Edit the target lines, then re-import via Project → Import → "
+                "🔁 Supervertaler Re-importable → Bilingual Text (AI-friendly) - "
+                "Update Project… to update this project.")
 
         except Exception as e:
             QMessageBox.critical(self, "Export Error",
@@ -53424,7 +53424,7 @@ class SupervertalerQt(QMainWindow):
                         self.tm_display.setHtml(
                             f"<p style='color: #666;'><b>Source:</b> {source_text}</p>"
                             f"<p style='color: #E65100;'><i>No TMs activated for this project.</i></p>"
-                            f"<p style='color: #999; font-size: 9pt;'>Go to <b>Resources → TM</b> to activate translation memories.</p>"
+                            f"<p style='color: #999; font-size: 9pt;'>Go to the <b>💾 TMs</b> tab and tick <b>Read</b> to activate translation memories.</p>"
                         )
                     elif tms_wrong_language:
                         # Show message when TMs are activated but don't match project language pair
@@ -53432,7 +53432,7 @@ class SupervertalerQt(QMainWindow):
                         self.tm_display.setHtml(
                             f"<p style='color: #666;'><b>Source:</b> {source_text}</p>"
                             f"<p style='color: #E65100;'><i>Activated TMs don't match project language ({project_lang_pair}).</i></p>"
-                            f"<p style='color: #999; font-size: 9pt;'>Go to <b>Resources → TM</b> to activate TMs for this language pair.</p>"
+                            f"<p style='color: #999; font-size: 9pt;'>Go to the <b>💾 TMs</b> tab and tick <b>Read</b> to activate TMs for this language pair.</p>"
                         )
                     else:
                         self.tm_display.setHtml(
@@ -67474,8 +67474,8 @@ class SupervertalerQt(QMainWindow):
                             self._warned_no_active_tm_for_project = project_id
                             self.log(
                                 "ℹ️ No TM is switched on for this project, so no TM "
-                                "matches can be shown. Tick 'Read' for the TM you want in "
-                                "Resources → TM. (A new project starts with every TM off.)"
+                                "matches can be shown. Tick 'Read' for the TM you want on "
+                                "the 💾 TMs tab. (A new project starts with every TM off.)"
                             )
                     else:
                         # Strip outer structural tags if setting is enabled (for cleaner TM matching)
