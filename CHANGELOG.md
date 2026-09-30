@@ -7,6 +7,22 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ## Unreleased
 
+### Improved (Projects · every kind of project travels with its source files)
+
+Supervertaler already copied a project's source document into the project's `source/` folder, but only the main document (issue #228). The files a project exports back into stayed outside it, so a project moved to another computer could no longer produce its return file:
+- memoQ bilingual DOCX and memoQ XLIFF;
+- Trados review DOCX, SDLPPX packages and SDLXLIFF files;
+- CafeTran, Déjà Vu, PO and plain text/Markdown files.
+
+Saving now puts a copy of each of these in `source/` as well:
+- **Your original is still the file Supervertaler uses**, so exports are offered next to it as before. The copy is only used when the original can no longer be found, for example after you moved the project folder or opened it on another computer. An export from the copy is offered in the project's `target/` folder.
+- **Nothing is copied twice.** A file is copied again only after it has changed.
+- **Two different files with the same name get separate copies** (`doc.sdlxliff`, `doc_2.sdlxliff`), so one never replaces the other.
+
+### Fixed (Projects · an export could use the file of the project you had open before)
+
+Opening a project kept the memoQ, Trados, CafeTran, Phrase, PO, Déjà Vu or SDLPPX file of the project that was open before. The export preferred that file over the one saved with the project you had just opened. Exporting the second project in the same format then built the exported file from the first project's file. Opening a project now clears all of that.
+
 ### Fixed (Performance · big projects no longer freeze on import)
 
 A Trados package of 300 files and 17,000 segments (about 200,000 words) froze Supervertaler for over ten minutes on import. It now imports in about 11 seconds (issues #185 and #203). Most of the wait came from work nobody could see:

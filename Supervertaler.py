@@ -294,7 +294,7 @@ if sys.platform == 'win32':
 import pyperclip  # For clipboard operations in Superlookup
 from modules.superlookup import SuperlookupEngine  # Superlookup engine
 from modules.pseudo_translate_dialog import run_pseudo_translation  # Pseudo-translation export test (dialog + apply)
-from modules.project_assets import bundle_source, resolve_source_path, ensure_target_dir, nest_in_own_folder, write_project_file, read_backup  # Project-folder model (issue #228)
+from modules.project_assets import bundle_source, resolve_source_path, ensure_target_dir, nest_in_own_folder, write_project_file, read_backup, bundle_round_trip_sources, restore_round_trip_sources, is_in_source_dir  # Project-folder model (issue #228)
 from modules.voice_dictation_lite import QuickDictationThread  # Voice dictation
 from modules.voice_commands import VoiceCommandManager, VoiceCommand, ContinuousVoiceListener  # Voice commands (Talon-style)
 from modules import inline_codes as _inline_codes  # User-defined inline codes / placeholders (issue #194)
@@ -2022,6 +2022,7 @@ class Project:
     original_txt_path: str = None  # Path to original simple text file for round-trip export
     dejavu_source_path: str = None  # Path to original Déjà Vu bilingual RTF for round-trip export
     po_source_path: str = None  # Path to original GNU gettext .po / .pot for round-trip export
+    bundled_sources: Dict[str, Any] = None  # {field: "source/<name>"} copies of the round-trip sources above (#228)
     concordance_geometry: Dict[str, int] = None  # Window geometry for Concordance Search {x, y, width, height}
     # Multi-file project support
     files: List[Dict[str, Any]] = None  # List of files in project: [{id, name, path, type, segment_count, ...}]
@@ -2119,6 +2120,8 @@ class Project:
             result['dejavu_source_path'] = self.dejavu_source_path
         if self.po_source_path:
             result['po_source_path'] = self.po_source_path
+        if self.bundled_sources:
+            result['bundled_sources'] = self.bundled_sources
         
         # Add UI state
         if self.concordance_geometry:
@@ -2216,6 +2219,8 @@ class Project:
         # Store .po / .pot source path if it exists
         if 'po_source_path' in data:
             project.po_source_path = data['po_source_path']
+        if isinstance(data.get('bundled_sources'), dict):
+            project.bundled_sources = data['bundled_sources']
         # Store concordance window geometry if it exists
         if 'concordance_geometry' in data:
             project.concordance_geometry = data['concordance_geometry']
@@ -16667,6 +16672,21 @@ class SupervertalerQt(QMainWindow):
             self.export_okapi_merge()
         else:
             self.export_target_only_docx()
+
+    def _export_dir_beside(self, source_path) -> Path:
+        """Where a round-trip export is offered by default: next to the file it
+        came from – or in the project's target/ folder when that file is the
+        copy in source/ (#228), which is no place for a translation."""
+        source_path = Path(source_path)
+        project_path = getattr(self, 'project_file_path', None)
+        if project_path:
+            project_dir = os.path.dirname(os.path.abspath(project_path))
+            if is_in_source_dir(str(source_path), project_dir):
+                try:
+                    return Path(ensure_target_dir(project_dir))
+                except Exception:
+                    pass
+        return source_path.parent
 
     def _project_export_path(self, filename):
         """Default save path for a generated translation: the project's target/
@@ -34007,6 +34027,17 @@ class SupervertalerQt(QMainWindow):
             
             self.current_project = Project.from_dict(data)
             self.project_file_path = file_path
+            # Forget the round-trip state of any project opened before this one.
+            # Exports prefer these over the paths stored in the project, so a
+            # memoQ/Trados/… file loaded for an earlier project was used to
+            # export this one – its structure, filled with these segments.
+            for _attr in ('trados_source_file', 'trados_handler', 'memoq_source_file',
+                          'memoq_rtf_source_file', 'memoq_rtf_handler', 'mqxliff_source_file',
+                          'mqxliff_handler', 'cafetran_source_file', 'cafetran_handler',
+                          'phrase_source_file', 'phrase_handler', 'po_source_file', 'po_handler',
+                          'dejavu_source_file', 'dejavu_handler', 'sdlppx_source_file',
+                          'sdlppx_handler', 'sdlxliff_source_files', 'sdlxliff_handler'):
+                setattr(self, _attr, None)
             # Opened from the backup: mark it modified so the next save repairs
             # the damaged file
             self.project_modified = recovered_from_backup
@@ -34150,6 +34181,18 @@ class SupervertalerQt(QMainWindow):
                 else:
                     self.log(f"⚠️ Original DOCX not found (export will rebuild from segments): {stored_source}")
             
+            # Round-trip sources (memoQ, Trados, CafeTran, SDLPPX, …) whose
+            # original is gone – the project folder was moved, or opened on
+            # another computer – are taken from their copies in source/ (#228).
+            try:
+                switched = restore_round_trip_sources(
+                    self.current_project, os.path.dirname(os.path.abspath(file_path)),
+                    self.current_project.bundled_sources)
+                if switched:
+                    self.log(f"✓ Using the copies in the project's source/ folder for: {', '.join(switched)}")
+            except Exception as restore_exc:
+                self.log(f"⚠ Could not check the project's source/ copies: {restore_exc}")
+
             # Restore SDLPPX handler for Trados package projects
             if hasattr(self.current_project, 'sdlppx_source_path') and self.current_project.sdlppx_source_path:
                 sdlppx_path = self.current_project.sdlppx_source_path
@@ -36075,6 +36118,18 @@ class SupervertalerQt(QMainWindow):
                 else:
                     # Directory source (multi-file / folder project): legacy path.
                     self.current_project.original_docx_path = original_path
+
+            # The bilingual files and packages the project exports back into
+            # (memoQ, Trados, CafeTran, SDLPPX, …) get a copy in source/ as
+            # well. The project keeps using the originals; the copies stand in
+            # when the originals are gone, e.g. after the folder was moved.
+            try:
+                self.current_project.bundled_sources = bundle_round_trip_sources(
+                    self.current_project, os.path.dirname(os.path.abspath(file_path)),
+                    previous=self.current_project.bundled_sources,
+                    main_copy=getattr(self, 'original_docx', None)) or None
+            except Exception as bundle_exc:
+                self.log(f"⚠ Could not copy the round-trip source files into the project folder: {bundle_exc}")
 
             # IMPORTANT: Always save segments in original document order, not sorted order
             # Store current sort state and temporarily restore original order
@@ -40345,7 +40400,7 @@ class SupervertalerQt(QMainWindow):
             # Prompt user to save the updated bilingual file
             # Use the same directory as the original import file
             source_path = Path(self.memoq_source_file)
-            default_name = str(source_path.parent / (source_path.stem + "_translated.docx"))
+            default_name = str(self._export_dir_beside(source_path) / (source_path.stem + "_translated.docx"))
             save_path, _ = QFileDialog.getSaveFileName(
                 self,
                 "Save memoQ Bilingual DOCX",
@@ -41866,7 +41921,7 @@ class SupervertalerQt(QMainWindow):
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "Export Trados Bilingual DOCX",
-            str(source_path.parent / suggested_name),
+            str(self._export_dir_beside(source_path) / suggested_name),
             "Word Documents (*.docx);;All Files (*.*)"
         )
         
@@ -42397,7 +42452,7 @@ class SupervertalerQt(QMainWindow):
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "Export Trados Return Package (SDLRPX)",
-            str(source_path.parent / suggested_name),
+            str(self._export_dir_beside(source_path) / suggested_name),
             "Trados Return Packages (*.sdlrpx);;All Files (*.*)"
         )
         
@@ -43070,7 +43125,7 @@ class SupervertalerQt(QMainWindow):
             if len(handler.xliff_files) == 1:
                 # Single file – use Save As dialog
                 default_name = Path(source_files[0]).stem + "_translated.sdlxliff"
-                default_dir = str(Path(source_files[0]).parent / default_name)
+                default_dir = str(self._export_dir_beside(source_files[0]) / default_name)
 
                 output_path, _ = QFileDialog.getSaveFileName(
                     self,
@@ -43520,7 +43575,7 @@ class SupervertalerQt(QMainWindow):
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "Export Phrase Bilingual DOCX",
-            str(source_path.parent / suggested_name),
+            str(self._export_dir_beside(source_path) / suggested_name),
             "Word Documents (*.docx);;All Files (*.*)"
         )
 
@@ -43878,7 +43933,7 @@ class SupervertalerQt(QMainWindow):
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "Export Déjà Vu Bilingual RTF",
-            str(source_path.parent / suggested_name),
+            str(self._export_dir_beside(source_path) / suggested_name),
             "RTF Files (*.rtf);;All Files (*.*)"
         )
 
@@ -44905,7 +44960,7 @@ class SupervertalerQt(QMainWindow):
             
             # Prompt user to save the file
             source_path = Path(self.cafetran_source_file)
-            default_name = str(source_path.parent / (source_path.stem + "_translated.docx"))
+            default_name = str(self._export_dir_beside(source_path) / (source_path.stem + "_translated.docx"))
             save_path, _ = QFileDialog.getSaveFileName(
                 self,
                 "Save CafeTran Bilingual DOCX",
