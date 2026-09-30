@@ -72194,13 +72194,21 @@ class SuperlookupTab(QWidget):
         if self.main_window and hasattr(self.main_window, 'user_data_path'):
             from pathlib import Path
             user_data = Path(self.main_window.user_data_path)
-            self._search_history_file = user_data / "settings" / "superlookup_history.json"
-            
+            # Beside the other settings files in workbench/settings/. It used to
+            # be read and written in <data>/settings/, the folder those files
+            # were moved out of; a history still there is read once and then
+            # saved in the right place.
+            self._search_history_file = user_data / "workbench" / "settings" / "superlookup_history.json"
+            history_file = self._search_history_file
+            legacy_file = user_data / "settings" / "superlookup_history.json"
+            if not history_file.exists() and legacy_file.exists():
+                history_file = legacy_file
+
             # Load existing history
-            if self._search_history_file.exists():
+            if history_file.exists():
                 try:
                     import json
-                    with open(self._search_history_file, 'r', encoding='utf-8') as f:
+                    with open(history_file, 'r', encoding='utf-8') as f:
                         data = json.load(f)
                         self.search_history = data.get('searches', [])[:20]
                 except Exception:

@@ -27,6 +27,10 @@ Both recognise every self-closing tag now, as AutoTagger already did. Pseudo-tra
 
 **SuperLookup → ⚙️ SuperLookup Settings** said SuperLookup searches the TMs and termbases ticked **Read**. Since v1.10.247 it searches the ones ticked in the **🔍 SuperLookup** column of the TMs and Termbases tabs, whether or not they are ticked Read. The note now says so.
 
+### Fixed (SuperLookup · search history kept in the old settings folder)
+
+SuperLookup's search history was still saved in `settings/` directly in your data folder. All the other settings files moved from there to `workbench/settings/` long ago. It now lives with them, and a history in the old place is picked up the first time.
+
 ### Fixed (Messages · menu and tab names that no longer exist)
 
 A few messages sent you to places that have been renamed:
