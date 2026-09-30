@@ -19017,7 +19017,9 @@ class SupervertalerQt(QMainWindow):
         rule switches, extra abbreviations, and SRX-style custom break /
         exception rules with SRX import/export and a live test box."""
         from modules.segmentation_rules_widget import SegmentationRulesWidget
-        return SegmentationRulesWidget(self._load_segmentation_rules, self._save_segmentation_rules)
+        widget = SegmentationRulesWidget(self._load_segmentation_rules, self._save_segmentation_rules)
+        set_help_topic(widget, HelpTopics.SETTINGS_SEGMENTATION)  # F1 opens its help page
+        return widget
 
     def _load_segmentation_rules(self):
         from modules.segmentation_rules import SETTINGS_KEY, SegmentationRules
@@ -19046,9 +19048,11 @@ class SupervertalerQt(QMainWindow):
                 self.load_general_settings().get(_tag_protection.SETTINGS_KEY, True))
         except Exception:
             self.protect_tags_in_target = True
-        return InlineCodesWidget(lambda: entries, self._save_inline_codes,
-                                 protect_tags=self.protect_tags_in_target,
-                                 on_protect_tags=self._save_tag_protection)
+        widget = InlineCodesWidget(lambda: entries, self._save_inline_codes,
+                                   protect_tags=self.protect_tags_in_target,
+                                   on_protect_tags=self._save_tag_protection)
+        set_help_topic(widget, HelpTopics.SETTINGS_INLINE_CODES)  # F1 opens its help page
+        return widget
 
     def _save_tag_protection(self, enabled: bool):
         self.protect_tags_in_target = bool(enabled)
@@ -54741,6 +54745,7 @@ class SupervertalerQt(QMainWindow):
                 navigate=self._navigate_to_segment_by_id,
                 on_sets_changed=_reload_fr_sets,
                 extract_tags=extract_all_tags)
+            set_help_topic(dlg, HelpTopics.QA_CHECKS)  # F1 opens its help page
             self._qa_checks_dialog = dlg
         else:
             dlg.refresh_sets()
@@ -54765,6 +54770,7 @@ class SupervertalerQt(QMainWindow):
                 load_settings=self.load_general_settings,
                 save_settings=self.save_general_settings,
                 get_proxies=_proxies)
+            set_help_topic(dlg, HelpTopics.QA_LANGUAGETOOL)  # F1 opens its help page
             self._languagetool_dialog = dlg
         else:
             from modules.languagetool_client import lt_language

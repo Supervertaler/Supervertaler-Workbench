@@ -7,6 +7,10 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ## Unreleased
 
+### Added (Help · F1 on the newer pages)
+
+**F1** now opens the help page for **Settings → 📏 Segmentation Rules**, **Settings → 🏷️ Inline Codes**, **QA → Run QA Checks** and **QA → Check with LanguageTool**. These pages are new on [docs.supervertaler.com](https://docs.supervertaler.com/workbench/), together with *TM Matches Not Appearing* under Troubleshooting.
+
 ### Fixed (Keyboard · Ctrl+O did nothing)
 
 **Ctrl+O** was the shortcut of both **Project → Open Project…** and **Project → Import → Import Document…**. Qt cannot choose between two menu items on the same key, so pressing it did nothing at all. Ctrl+O opens a project again, as Settings → Keyboard Shortcuts says, and **Import Document…** is now **Ctrl+Shift+O**.
