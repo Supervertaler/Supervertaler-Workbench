@@ -7,6 +7,24 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ## Unreleased
 
+### Added (TM · fragment matches when the document is segmented differently)
+
+A fuzzy match compares whole segments, so the TM had nothing to offer when it was segmented differently from the document (issue #193). For example, the TM holds *Which heading do you want to read?*, but the document has it as two segments, *Which heading* and *do you want to read?*. The Match Panel now also shows **fragment matches**:
+- **A TM sentence that contains the whole segment.** On *Which heading*, you see the TM's *Which heading do you want to read?* → *Który nagłówek chcesz przeczytać?*, and the TM Source box shows which part is yours. Use the part of the translation you need, or let FuzzyFixer do that.
+- **A TM sentence that is part of the segment.** On *Close the valve. Then open the tap.*, you see the TM's *Close the valve.* with its translation.
+
+A fragment match is marked **✂ fragment**, and its percentage says how much of the longer text the shorter one covers. The words must match in an unbroken run, ignoring case, punctuation and tags, and a fragment has at least two words; single words are what glossaries are for. Fragments appear only where fuzzy matches leave room, never fill a segment automatically, and don't play the fuzzy-match sound. Switch them off with **Show fragment matches from the TM** on **Settings → ⚙️ General**, in the **📂 TM settings** box.
+
+### Changed (Projects · reports, glossaries and TMX exports have their own folders)
+
+The last conventions of the project folder (issue #228), next to `source/`, `target/` and `tm/`. When the project has been saved, these save dialogs now open in the project folder:
+- **`reports/`:** **Statistics → Export** and **QA → Run QA Checks → Export**.
+- **`glossary/`:** exporting a termbase from the **Termbases** tab.
+- **`tm/`:** exporting a TM, the TM database or selected segments as TMX.
+- **`target/`:** the bilingual review table, like the other exports.
+
+You can still save anywhere else. Before a project is saved, the dialogs open where they did before.
+
 ### Fixed (Export · sorting the grid scrambled the exported translations)
 
 Sorting the grid, for example by source text or by length, rearranges the project's segments, and several exports read them in that order. Every export that puts translations back into the original file by position then wrote them into the wrong segments: the translation of "Apple" ended up under "Zebra". This affected:

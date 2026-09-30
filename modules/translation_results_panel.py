@@ -104,6 +104,13 @@ class CompactMatchItem(QFrame):
         
         # Middle: Relevance % (vertical)
         rel_label = QLabel(f"{match.relevance}%")
+        fragment = match.metadata.get('fragment') if isinstance(match.metadata, dict) else None
+        if fragment:
+            # A fragment match (issue #193): the percentage is how much of
+            # the longer text the shorter one covers, not a fuzzy score
+            from modules import tm_fragments
+            rel_label.setText(f"✂{match.relevance}%")
+            rel_label.setToolTip(tm_fragments.tooltip_html(fragment))
         rel_label.setStyleSheet(f"font-size: 7px; color: {secondary_text_color}; padding: 0px; margin: 0px;")
         rel_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         rel_label.setFixedWidth(32)

@@ -294,7 +294,7 @@ if sys.platform == 'win32':
 import pyperclip  # For clipboard operations in Superlookup
 from modules.superlookup import SuperlookupEngine  # Superlookup engine
 from modules.pseudo_translate_dialog import run_pseudo_translation  # Pseudo-translation export test (dialog + apply)
-from modules.project_assets import bundle_source, resolve_source_path, ensure_target_dir, nest_in_own_folder, write_project_file, read_backup, bundle_round_trip_sources, restore_round_trip_sources, is_in_source_dir, TM_SUBDIR  # Project-folder model (issue #228)
+from modules.project_assets import bundle_source, resolve_source_path, ensure_target_dir, nest_in_own_folder, write_project_file, read_backup, bundle_round_trip_sources, restore_round_trip_sources, is_in_source_dir, TM_SUBDIR, REPORTS_SUBDIR, GLOSSARY_SUBDIR  # Project-folder model (issue #228)
 from modules.voice_dictation_lite import QuickDictationThread  # Voice dictation
 from modules.voice_commands import VoiceCommandManager, VoiceCommand, ContinuousVoiceListener  # Voice commands (Talon-style)
 from modules import inline_codes as _inline_codes  # User-defined inline codes / placeholders (issue #194)
@@ -7801,8 +7801,9 @@ class TMSearchWorker(QThread):
     def __init__(self, db_path: str, source_text: str, segment_id: int,
                  tm_ids: list = None, source_lang: str = None, target_lang: str = None,
                  fuzzy_threshold: float = 0.75, max_matches: int = 10,
-                 tm_metadata: dict = None):
+                 tm_metadata: dict = None, fragment_matches: bool = True):
         super().__init__()
+        self.fragment_matches = fragment_matches  # issue #193
         self.db_path = db_path
         self.source_text = source_text
         self.segment_id = segment_id
@@ -7889,6 +7890,27 @@ class TMSearchWorker(QThread):
                     'tm_id': match['tm_id'],
                     'reverse_match': match.get('reverse_match', False),
                 })
+
+            # Fragment matches (issue #193): TM sentences that contain this
+            # whole segment, or that are part of it, when fuzzy matching
+            # leaves room – a document cut up differently from the TM
+            if self.fragment_matches and len(results) < self.max_matches and not self._cancelled:
+                fragments = db.search_fragment_matches(
+                    self.source_text, tm_ids=self.tm_ids,
+                    source_lang=self.source_lang, target_lang=self.target_lang,
+                    max_results=min(3, self.max_matches - len(results)),
+                    exclude_sources={m['source_text'] for m in fuzzy_matches})
+                for match in fragments:
+                    results.append({
+                        'source': match['source_text'],
+                        'target': match['target_text'],
+                        'similarity': match['similarity'],
+                        'match_pct': match['match_pct'],
+                        'tm_name': self.tm_metadata.get(match['tm_id'], {}).get('name', match['tm_id']),
+                        'tm_id': match['tm_id'],
+                        'reverse_match': False,
+                        'fragment': match['fragment'],
+                    })
 
             if not self._cancelled:
                 self.results_ready.emit(self.segment_id, results)
@@ -9223,6 +9245,7 @@ class SupervertalerQt(QMainWindow):
         # + auto_insert_100_percent_matches pair). When you select an empty segment
         # that has a 100% TM match, its translation is filled in automatically.
         self.auto_fill_100_matches = True  # Auto-fill empty segments with 100% TM matches
+        self.tm_fragment_matches = True  # Fragment matches in the Match Panel (issue #193)
         self.auto_fill_confirm = False  # Mark auto-filled segments as confirmed (else draft)
         # Old attrs kept for back-compat with any lingering references; the live
         # code paths now read self.auto_fill_100_matches.
@@ -13903,6 +13926,7 @@ class SupervertalerQt(QMainWindow):
                 tm_choices=tm_choices,
                 preselected_tm_ids=preselected,
                 project_name=getattr(self.current_project, 'name', '') or '',
+                export_dir=self._project_subdir(REPORTS_SUBDIR),
             )
             dialog.exec()
         except Exception as e:
@@ -16717,9 +16741,10 @@ class SupervertalerQt(QMainWindow):
         except (TypeError, ValueError):
             return list(getattr(self, '_original_segment_order', None) or segments)
 
-    def _project_export_path(self, filename):
-        """Default save path for a generated translation: the project's target/
-        folder (project-folder model, #228).
+    def _project_export_path(self, filename, subdir="target"):
+        """Default save path for something the project produces: a translation
+        in target/, or a report (reports/), glossary (glossary/) or TMX (tm/)
+        in its own subfolder – the project-folder model (#228).
 
         Falls back to the bare filename — so Qt opens the last-used directory —
         when the project hasn't been saved yet (no folder exists to write into).
@@ -16728,10 +16753,17 @@ class SupervertalerQt(QMainWindow):
         if project_path:
             try:
                 return os.path.join(
-                    ensure_target_dir(os.path.dirname(project_path)), filename)
+                    ensure_target_dir(os.path.dirname(project_path), subdir), filename)
             except Exception as exc:
-                self.log(f"⚠ Could not prepare the project's target/ folder: {exc}")
+                self.log(f"⚠ Could not prepare the project's {subdir}/ folder: {exc}")
         return filename
+
+    def _project_subdir(self, subdir):
+        """``<project folder>/<subdir>`` of the saved project (not created), or None."""
+        project_path = getattr(self, 'project_file_path', None)
+        if not project_path:
+            return None
+        return os.path.join(os.path.dirname(os.path.abspath(project_path)), subdir)
 
     def _prompt_for_original_source(self, stored_hint=None):
         """The formatting-preserving export needs the project's original source
@@ -18228,7 +18260,7 @@ class SupervertalerQt(QMainWindow):
             project_name = Path(self.current_project_path).stem
         
         format_suffix = "_bilingual_formatted" if apply_formatting else "_bilingual"
-        default_name = f"{project_name}{format_suffix}.docx"
+        default_name = self._project_export_path(f"{project_name}{format_suffix}.docx")
         
         # Get save path
         file_path, _ = QFileDialog.getSaveFileName(
@@ -18789,7 +18821,7 @@ class SupervertalerQt(QMainWindow):
             file_path, _ = QFileDialog.getSaveFileName(
                 self, 
                 "Export Selected Segments as TMX", 
-                "supervertaler_selected.tmx", 
+                self._project_export_path("supervertaler_selected.tmx", TM_SUBDIR), 
                 "TMX Files (*.tmx);;All Files (*.*)"
             )
             
@@ -18878,7 +18910,7 @@ class SupervertalerQt(QMainWindow):
             file_path, _ = QFileDialog.getSaveFileName(
                 self, 
                 "Export TM Database as TMX", 
-                "supervertaler_tm_database.tmx", 
+                self._project_export_path("supervertaler_tm_database.tmx", TM_SUBDIR), 
                 "TMX Files (*.tmx);;All Files (*.*)"
             )
             
@@ -22831,7 +22863,7 @@ class SupervertalerQt(QMainWindow):
         
         # File dialog
         from PyQt6.QtWidgets import QFileDialog
-        default_filename = f"{tb_name.replace(' ', '_')}.tsv"
+        default_filename = self._project_export_path(f"{tb_name.replace(' ', '_')}.tsv", GLOSSARY_SUBDIR)
         filepath, _ = QFileDialog.getSaveFileName(
             self,
             "Export Termbase",
@@ -24141,7 +24173,7 @@ class SupervertalerQt(QMainWindow):
         
         # File dialog
         from PyQt6.QtWidgets import QFileDialog
-        default_filename = f"{tm_name.replace(' ', '_')}.tmx"
+        default_filename = self._project_export_path(f"{tm_name.replace(' ', '_')}.tmx", TM_SUBDIR)
         filepath, _ = QFileDialog.getSaveFileName(
             self,
             "Export TM to TMX",
@@ -26840,6 +26872,24 @@ class SupervertalerQt(QMainWindow):
         auto_fill_confirm_cb.setEnabled(auto_propagate_cb.isChecked())
         auto_propagate_cb.toggled.connect(auto_fill_confirm_cb.setEnabled)
         tm_termbase_layout.addWidget(auto_fill_confirm_cb)
+
+        # --- Fragment matches (issue #193) ---
+        fragment_cb = CheckmarkCheckBox(self.tr("Show fragment matches from the TM"))
+        fragment_cb.setChecked(general_settings.get('tm_fragment_matches', True))
+        fragment_cb.setToolTip(self.tr(
+            "Also show a TM sentence that contains the whole segment, or that is part of it, "
+            "marked ✂ fragment in the Match Panel. For documents segmented differently from the TM."))
+
+        def _save_fragment_setting(checked):
+            self.tm_fragment_matches = bool(checked)
+            settings = self._load_general_settings_from_file() or {}
+            settings['tm_fragment_matches'] = self.tm_fragment_matches
+            self.save_general_settings(settings)
+            # Matches already looked up were cached with (or without) them
+            with self.translation_matches_cache_lock:
+                self.translation_matches_cache.clear()
+        fragment_cb.toggled.connect(_save_fragment_setting)
+        tm_termbase_layout.addWidget(fragment_cb)
 
         # --- Auto-propagate confirmed translations to identical segments ---
         auto_propagate_confirm_parent_cb = CheckmarkCheckBox(self.tr("Auto-propagate confirmed translations to identical segments"))
@@ -46027,6 +46077,7 @@ class SupervertalerQt(QMainWindow):
             tm_name = match.get('tm_name', 'Unknown TM')
             match_pct = match.get('match_pct', 0)
             reverse_match = match.get('reverse_match', False)
+            fragment = match.get('fragment', '')
         else:
             tm_source_text = getattr(match, 'compare_source', '') or getattr(match, 'source', '')
             target_text = getattr(match, 'target', '')
@@ -46034,6 +46085,7 @@ class SupervertalerQt(QMainWindow):
             tm_name = md.get('tm_name', 'Unknown TM')
             match_pct = getattr(match, 'relevance', 0)
             reverse_match = bool(md.get('reverse_match', False))
+            fragment = md.get('fragment', '')
 
         # Update navigation label
         if hasattr(self, 'match_panel_tm_nav_label') and self.match_panel_tm_nav_label:
@@ -46105,10 +46157,17 @@ class SupervertalerQt(QMainWindow):
                 )
             else:
                 self.match_panel_tm_target_label.setToolTip("")
+            # "✂ fragment": the segment is part of this TM entry, or the
+            # other way round (issue #193)
+            fragment_chip = ""
+            if fragment:
+                from modules import tm_fragments
+                fragment_chip = " " + tm_fragments.CHIP_HTML
+                self.match_panel_tm_target_label.setToolTip(tm_fragments.tooltip_html(fragment))
             metadata_html = (
                 f"<span style='font-size:10px'>{tm_name}</span> "
                 f"(<span style='font-size:8px'>{match_pct}%</span>)"
-                f"{reverse_chip}"
+                f"{reverse_chip}{fragment_chip}"
             )
             self.match_panel_tm_target_label.setText(metadata_html)
     
@@ -46584,6 +46643,7 @@ class SupervertalerQt(QMainWindow):
         tm_name = match.get('tm_name', 'TM')
         match_pct = match.get('match_pct', 0)
         reverse_match = bool(match.get('reverse_match', False))
+        fragment = match.get('fragment', '')
 
         # Update metadata labels with emphasis:
         # - TM name: larger
@@ -46610,12 +46670,18 @@ class SupervertalerQt(QMainWindow):
                 "padding:1px 5px; border-radius:6px;'>⇄ reversed</span>"
             )
 
+        # "✂ fragment" chip for a fragment match (issue #193)
+        fragment_chip = ""
+        if fragment:
+            from modules import tm_fragments
+            fragment_chip = " " + tm_fragments.CHIP_HTML
+
         nav_html = (
             f"(<span style='font-size:8px'>{idx}/{total}</span>) "
             f"<span style='font-size:10px'>{tm_name_escaped}</span> "
             f"<span style='font-size:8px'>•</span> "
             f"<span style='font-size:10px; font-weight:700'>{match_pct_display}%</span>"
-            f"{reverse_chip}"
+            f"{reverse_chip}{fragment_chip}"
         )
 
         # Tooltip on both labels (set whether or not chip is present so we
@@ -46632,6 +46698,9 @@ class SupervertalerQt(QMainWindow):
             "normally."
             "</div>"
         ) if reverse_match else ""
+        if fragment:
+            from modules import tm_fragments
+            reverse_tooltip = tm_fragments.tooltip_html(fragment)
 
         if hasattr(self, 'compare_panel_tm_nav_label') and self.compare_panel_tm_nav_label:
             # Avoid a fixed font-size stylesheet overriding rich text emphasis, but keep theme color
@@ -49115,6 +49184,7 @@ class SupervertalerQt(QMainWindow):
         self.auto_insert_100_percent_matches = self.auto_fill_100_matches
         if 'auto_fill_confirm' in settings:
             self.auto_fill_confirm = settings['auto_fill_confirm']
+        self.tm_fragment_matches = bool(settings.get('tm_fragment_matches', True))
         # Auto-propagate-on-confirm settings.
         if 'auto_propagate_on_confirm' in settings:
             self.auto_propagate_on_confirm = settings['auto_propagate_on_confirm']
@@ -50797,6 +50867,7 @@ class SupervertalerQt(QMainWindow):
                                 'tm_id': tm_id,
                                 'match_pct': int(tm.relevance),
                                 'reverse_match': rev,
+                                'fragment': (tm.metadata or {}).get('fragment', ''),
                             })
                         self.set_compare_panel_matches(
                             segment_id,
@@ -54791,7 +54862,8 @@ class SupervertalerQt(QMainWindow):
                 get_segments=lambda: self.current_project.segments if self.current_project else [],
                 navigate=self._navigate_to_segment_by_id,
                 on_sets_changed=_reload_fr_sets,
-                extract_tags=extract_all_tags)
+                extract_tags=extract_all_tags,
+                export_dir=self._project_subdir(REPORTS_SUBDIR))
             set_help_topic(dlg, HelpTopics.QA_CHECKS)  # F1 opens its help page
             self._qa_checks_dialog = dlg
         else:
@@ -67581,7 +67653,8 @@ class SupervertalerQt(QMainWindow):
                             target_lang=self.tm_database.target_lang,
                             fuzzy_threshold=self.tm_database.fuzzy_threshold,
                             max_matches=10,
-                            tm_metadata=self.tm_database.tm_metadata
+                            tm_metadata=self.tm_database.tm_metadata,
+                            fragment_matches=getattr(self, 'tm_fragment_matches', True),
                         )
                         # Store segment reference for result handler
                         self._tm_search_pending_segment = segment
@@ -67652,6 +67725,8 @@ class SupervertalerQt(QMainWindow):
                         # Explicit flag for the Match Panel chip renderer
                         # (md.get('reverse_match', False) in the renderer).
                         'reverse_match': reverse_match,
+                        # 'in_tm' / 'in_segment' for a fragment match (#193)
+                        'fragment': match.get('fragment', ''),
                     },
                     match_type='TM',
                     compare_source=match.get('source', ''),
@@ -67702,6 +67777,7 @@ class SupervertalerQt(QMainWindow):
                         'tm_id': tm_id,
                         'match_pct': int(tm.relevance),
                         'reverse_match': rev,
+                        'fragment': (tm.metadata or {}).get('fragment', ''),
                     })
                 self._compare_panel_tm_matches = tm_matches_for_panel
                 self.set_compare_panel_matches(
@@ -67725,9 +67801,11 @@ class SupervertalerQt(QMainWindow):
                             self._auto_insert_tm_match(segment, best_match.target, None)
                             self._play_sound_effect('tm_100_percent_match')
 
-                # Play fuzzy match sound
+                # Play fuzzy match sound (a fragment match is not a fuzzy match)
                 has_100_match = any(float(tm.relevance) >= 99.5 for tm in tm_match_objects)
-                has_fuzzy_match = any(float(tm.relevance) < 99.5 and float(tm.relevance) >= 50 for tm in tm_match_objects)
+                has_fuzzy_match = any(float(tm.relevance) < 99.5 and float(tm.relevance) >= 50
+                                      and not (tm.metadata or {}).get('fragment')
+                                      for tm in tm_match_objects)
                 if has_fuzzy_match and not has_100_match:
                     self._play_sound_effect('tm_fuzzy_match')
 

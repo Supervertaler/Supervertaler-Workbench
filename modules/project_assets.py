@@ -28,6 +28,8 @@ import shutil
 SOURCE_SUBDIR = "source"
 TARGET_SUBDIR = "target"
 TM_SUBDIR = "tm"  # the project's own TMX backup (OmegaT keeps its TMs in tm/ too)
+REPORTS_SUBDIR = "reports"  # statistics, QA findings and other reports
+GLOSSARY_SUBDIR = "glossary"  # glossaries exported from the project (OmegaT: glossary/)
 
 
 def resolve_source_path(stored_path, project_dir):
