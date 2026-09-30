@@ -1175,9 +1175,13 @@ def expand_compact_tags(text: str, tag_map: dict) -> str:
 
 # Combined pattern for memoQ tags, HTML tags, and Trados/SDLXLIFF numeric tags
 # memoQ: [N}, {N], [N]
-# HTML: <tag>, </tag>, <tag/>, <tag attr="value"> - includes hyphenated tags like li-o, li-b
-# Trados/SDLXLIFF: <N>, </N> (numeric tags from SDLXLIFF paired elements)
-_ALL_TAGS_PATTERN = r'(\[\d+\}|\{\d+\]|\[\d+\]|</?[a-zA-Z][a-zA-Z0-9-]*(?:\s+[^>]*)?>|</?\d+>)'
+# HTML/XML: <tag>, </tag>, <tag/>, <tag attr="value"> - includes hyphenated tags
+#   like li-o, li-b, and namespaced ones like memoQ's <mq:ch val="→" />
+# Trados/SDLXLIFF: <N>, </N>, and standalone <N/>
+# Self-closing forms without a space (<2/>, <br/>) used to be missed, so the
+# standalone tags of every SDLXLIFF/Trados import were never offered by Insert
+# next tag (Ctrl+,) and a lost one went unreported by the QA tag check.
+_ALL_TAGS_PATTERN = r'(\[\d+\}|\{\d+\]|\[\d+\]|</?\d+/?>|</?[a-zA-Z][a-zA-Z0-9._:-]*(?:\s+[^>]*)?/?>)'
 
 
 def extract_all_tags(text: str) -> list:
@@ -1199,10 +1203,9 @@ def extract_all_tags(text: str) -> list:
     return [tag for _, _, tag in sorted(found)]
 
 
-# AutoTagger uses its own, more complete pattern than extract_all_tags: it also
-# matches self-closing forms (numbered <2/> and HTML <x1/>) which the SDLXLIFF/
-# Trados standalone tags use. Kept separate so extract_all_tags' behaviour (used
-# by other features) is unchanged.
+# AutoTagger's pattern – now the same as extract_all_tags'. It matches
+# self-closing forms (numbered <2/> and HTML <x1/>) which the SDLXLIFF/Trados
+# standalone tags use.
 # The name part allows XML QName characters — letters, digits, '.', '_', '-'
 # and ':'. The colon matters: memoQ bilingual files carry NAMESPACED tags such
 # as <mq:ch val="→" />, and a name class of [a-zA-Z0-9-] stopped at the colon,
@@ -11798,7 +11801,9 @@ class SupervertalerQt(QMainWindow):
             "on export."
         ))
         import_document_action.triggered.connect(self.import_document)
-        import_document_action.setShortcut("Ctrl+O")
+        # Not Ctrl+O: that is Open Project (QKeySequence.StandardKey.Open), and
+        # two menu actions on one key are ambiguous to Qt, so neither fired.
+        import_document_action.setShortcut("Ctrl+Shift+O")
         import_menu.addAction(import_document_action)
 
         import_txt_action = QAction(self.tr("&Text / Markdown File (TXT, MD)..."), self)
@@ -70545,15 +70550,15 @@ class SuperlookupTab(QWidget):
 
         # v1.10.168: Removed the per-SuperLookup Termbase + TM checkbox
         # sub-tabs. Selection now lives in one place per resource: the
-        # main TMs tab's Read column for translation memories, and the
-        # main Termbases tab's Read column for termbases. A short note
-        # below explains where users should go.
+        # 🔍 SuperLookup column of the main TMs and Termbases tabs (since
+        # v1.10.247 independent of Read). A short note below explains
+        # where users should go.
         resource_info = QLabel(
             "<b>Translation Memories &amp; Termbases:</b> SuperLookup searches every TM and "
-            "termbase that has its <b>Read</b> flag enabled on the main <b>TMs</b> and "
-            "<b>Termbases</b> tabs. To include or exclude a resource from SuperLookup, "
-            "toggle its Read flag there. There used to be a second set of checkboxes here "
-            "in SuperLookup Settings — they were redundant and confusing, so they're gone."
+            "termbase ticked in the <b>🔍 SuperLookup</b> column of the main <b>TMs</b> and "
+            "<b>Termbases</b> tabs – whether or not it is also ticked <b>Read</b> for the "
+            "current project. To include or exclude a resource from SuperLookup, tick or "
+            "untick it in that column."
         )
         resource_info.setWordWrap(True)
         resource_info.setTextFormat(Qt.TextFormat.RichText)

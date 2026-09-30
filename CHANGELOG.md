@@ -7,6 +7,22 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ## Unreleased
 
+### Fixed (Keyboard · Ctrl+O did nothing)
+
+**Ctrl+O** was the shortcut of both **Project → Open Project…** and **Project → Import → Import Document…**. Qt cannot choose between two menu items on the same key, so pressing it did nothing at all. Ctrl+O opens a project again, as Settings → Keyboard Shortcuts says, and **Import Document…** is now **Ctrl+Shift+O**.
+
+### Fixed (Tags · standalone tags like `<2/>` were not recognised)
+
+Supervertaler writes a Trados or SDLXLIFF standalone tag as `<2/>`, but two features did not recognise that form, nor `<br/>` or memoQ's `<mq:ch …/>`:
+- **Insert next tag (Ctrl+,)** never offered them.
+- **QA → Run QA Checks** did not report one missing from a translation.
+
+Both recognise every self-closing tag now, as AutoTagger already did. Pseudo-translation now keeps them intact too.
+
+### Fixed (SuperLookup · the settings page pointed to the wrong column)
+
+**SuperLookup → ⚙️ SuperLookup Settings** said SuperLookup searches the TMs and termbases ticked **Read**. Since v1.10.247 it searches the ones ticked in the **🔍 SuperLookup** column of the TMs and Termbases tabs, whether or not they are ticked Read. The note now says so.
+
 ### Improved (Projects · every kind of project travels with its source files)
 
 Supervertaler already copied a project's source document into the project's `source/` folder, but only the main document (issue #228). The files a project exports back into stayed outside it, so a project moved to another computer could no longer produce its return file:

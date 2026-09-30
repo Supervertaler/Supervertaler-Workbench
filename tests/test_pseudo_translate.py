@@ -49,6 +49,16 @@ def test_trados_numeric_tags_preserved():
     assert _tags(out) == ["<410>", "</410>"]
 
 
+def test_self_closing_tags_preserved():
+    # Standalone tags as SDLXLIFF/Trados imports write them, and memoQ's
+    # namespaced ones. They used to be read as ordinary text, so an expanded
+    # pseudo-translation could split them.
+    src = "Line one<2/>line two<br/>and <mq:ch val=\"x\"/> end."
+    assert _tags(src) == ["<2/>", "<br/>", '<mq:ch val="x"/>']
+    out = pseudo_translate_text(src, expansion=0.5, mode=MODE_ACCENTS)
+    assert _tags(out) == ["<2/>", "<br/>", '<mq:ch val="x"/>']
+
+
 def test_memoq_tags_preserved():
     src = "Press [1}OK{1] to continue."
     out = pseudo_translate_text(src, expansion=0.4, mode=MODE_PLAIN)
