@@ -3088,6 +3088,43 @@ def is_triple_click(widget, event) -> bool:
         return False
 
 
+class _GridStyleBatch:
+    """Coalesces grid-cell stylesheet rebuilds while a row is built (issue #185).
+
+    setStyleSheet re-polishes the widget, and building a row used to rebuild
+    each editor's sheet three times (constructor, font size, row colour) –
+    a third of the time it takes to fill a page of the grid. Inside
+    ``with _GridStyleBatch():`` a rebuild is only noted, and each editor gets
+    its final sheet once, on exit.
+    """
+    depth = 0
+    pending = {}  # id(widget) → widget
+
+    def __enter__(self):
+        _GridStyleBatch.depth += 1
+        return self
+
+    def __exit__(self, *exc):
+        _GridStyleBatch.depth -= 1
+        if _GridStyleBatch.depth == 0:
+            widgets = list(_GridStyleBatch.pending.values())
+            _GridStyleBatch.pending.clear()
+            for widget in widgets:
+                try:
+                    widget._rebuild_grid_stylesheet()
+                except RuntimeError:
+                    pass  # deleted before the row was finished
+        return False
+
+    @classmethod
+    def defer(cls, widget) -> bool:
+        """True (and the rebuild noted) while a batch is open."""
+        if cls.depth:
+            cls.pending[id(widget)] = widget
+            return True
+        return False
+
+
 class ReadOnlyGridTextEditor(QTextEdit):
     """Read-only QTextEdit for source cells - allows easy text selection"""
     
@@ -4552,6 +4589,8 @@ class ReadOnlyGridTextEditor(QTextEdit):
 
     def _rebuild_grid_stylesheet(self):
         """Compose this cell's stylesheet from current bg colour + font size."""
+        if _GridStyleBatch.defer(self):
+            return
         # v1.10.229: When "Allow Replace in Source Text" is on, override the
         # cell background with a soft amber so the user can see at a glance
         # which cells are dangerous to touch. Mirrors the inline-editor
@@ -6677,6 +6716,8 @@ class EditableGridTextEditor(QTextEdit):
 
     def _rebuild_grid_stylesheet(self):
         """Compose this cell's stylesheet from current bg colour + font size."""
+        if _GridStyleBatch.defer(self):
+            return
         border_color = EditableGridTextEditor.focus_border_color
         border_thickness = EditableGridTextEditor.focus_border_thickness
         bg_rule = f"background-color: {self._grid_bg_color};" if self._grid_bg_color else ""
@@ -9023,6 +9064,12 @@ class _ImportProgressDialog:
             return
         if self.cancelled():
             return
+        # Repaint at most ten times a second (issue #185): each repaint pumps
+        # the event loop, and doing it every few rows added seconds to a big load.
+        now = time.monotonic()
+        if rows_done < total and now - getattr(self, '_last_grid_repaint', 0.0) < 0.1:
+            return
+        self._last_grid_repaint = now
         self._dialog.setValue(int(rows_done))
         self._dialog.setLabelText(
             f"Loading segments into grid… ({rows_done:,}/{total:,})"
@@ -9478,16 +9525,20 @@ class SupervertalerQt(QMainWindow):
         self.theme_manager = None  # Will be initialized after UI setup
         
         self.recent_projects_file = self.user_data_path / "workbench" / "settings" / "recent_projects.json"
-        
+
+        # Apply the theme's application stylesheet BEFORE building the UI, so
+        # each widget is styled once as it is created. Applied afterwards it
+        # re-styled every widget in the window – three seconds of a cold start
+        # (issue #203). self.theme_manager stays None during init_ui, as before.
+        theme_manager = ThemeManager(self.user_data_path)
+        # Apply saved global UI font scale
+        theme_manager.font_scale = self._get_global_ui_font_scale()
+        theme_manager.apply_theme(QApplication.instance())
+
         # Initialize UI
         self.init_ui()
         
-        # Initialize theme manager and apply theme
-        self.theme_manager = ThemeManager(self.user_data_path)
-        # Apply saved global UI font scale
-        saved_font_scale = self._get_global_ui_font_scale()
-        self.theme_manager.font_scale = saved_font_scale
-        self.theme_manager.apply_theme(QApplication.instance())
+        self.theme_manager = theme_manager
 
         # Dark themes: rewrite the fixed light colours in widgets' own
         # stylesheets – now, and for dialogs and lazily built tabs as they
@@ -11591,15 +11642,19 @@ class SupervertalerQt(QMainWindow):
                 files = getattr(self.current_project, 'files', [])
                 
                 if is_multifile and files:
-                    # Count completed files
+                    # Count completed files – one pass over the segments, not
+                    # one per file (300 files × 17,000 segments, issue #185).
+                    per_file = {}  # file_id → [segments, confirmed]
+                    for s in segments:
+                        counts = per_file.setdefault(getattr(s, 'file_id', None), [0, 0])
+                        counts[0] += 1
+                        if s.status in confirmed_statuses:
+                            counts[1] += 1
                     completed_files = 0
                     for file_info in files:
-                        file_id = file_info['id']
-                        file_segs = [s for s in segments if getattr(s, 'file_id', None) == file_id]
-                        if file_segs:
-                            conf_count = sum(1 for s in file_segs if s.status in confirmed_statuses)
-                            if conf_count == len(file_segs):
-                                completed_files += 1
+                        total, confirmed = per_file.get(file_info['id'], (0, 0))
+                        if total and confirmed == total:
+                            completed_files += 1
                     
                     self.progress_files_label.setText(f"📁 Files: {completed_files}/{len(files)}")
                     self.progress_files_label.setToolTip(
@@ -44921,6 +44976,13 @@ class SupervertalerQt(QMainWindow):
         return set(range(start_row, end_row))
 
     def _populate_single_row(self, row, segment):
+        """Install full source/target editor widgets and metadata for one row
+        (see _populate_single_row_widgets); each editor's stylesheet is applied
+        once, when the row is complete."""
+        with _GridStyleBatch():
+            self._populate_single_row_widgets(row, segment)
+
+    def _populate_single_row_widgets(self, row, segment):
         """Install full source/target editor widgets and metadata for one row.
 
         Extracted from the per-row body of load_segments_to_grid as part of
@@ -46792,6 +46854,18 @@ class SupervertalerQt(QMainWindow):
         # Track current highlighted segment
         widget.current_highlighted_segment_id = None
 
+        # Hidden previews are not re-rendered on every change (issue #185), so
+        # catch up when this one is shown – tab switch, pop-out window, or the
+        # main window appearing with a project already loaded.
+        widget.preview_sig = None
+
+        def _showEvent(event, _w=widget, _base=widget.showEvent):
+            _base(event)
+            if getattr(_w, 'preview_sig', None) is None:
+                from PyQt6.QtCore import QTimer
+                QTimer.singleShot(0, self._refresh_preview_on_show)
+        widget.showEvent = _showEvent
+
         # Store reference in instance for easy access
         if not hasattr(self, 'preview_widgets'):
             self.preview_widgets = []
@@ -46838,6 +46912,7 @@ class SupervertalerQt(QMainWindow):
 
         try:
             self._render_preview(pv)
+            pv.preview_sig = self._preview_content_signature()
         except Exception:
             pass
         win.show()
@@ -47172,21 +47247,29 @@ class SupervertalerQt(QMainWindow):
                     if hasattr(widget, 'preview_text'):
                         widget.preview_text.clear()
                         widget.segment_positions = {}
-            self._preview_rendered_sig = None
+                        widget.preview_sig = None
             return
 
         if not hasattr(self, 'preview_widgets') or not self.preview_widgets:
             return
 
         sig = self._preview_content_signature()
-        widgets = [w for w in self.preview_widgets if hasattr(w, 'preview_text')]
-        all_populated = all(getattr(w, 'segment_positions', None) for w in widgets)
-        if not force and all_populated and sig == getattr(self, '_preview_rendered_sig', None):
-            return  # already current — caller re-applies the current-segment highlight
-
-        for widget in self.preview_widgets:
+        for widget in [w for w in self.preview_widgets if hasattr(w, 'preview_text')]:
+            try:
+                visible = widget.isVisible()
+            except RuntimeError:
+                continue
+            if not visible:
+                # Issue #185: a hidden preview (the usual case – the Match Panel
+                # is in front) is not rendered on every grid load; it renders
+                # when it is shown (see showEvent in _create_preview_tab). On a
+                # 17,000-segment import this render was most of the wait.
+                widget.preview_sig = None
+                continue
+            if not force and widget.segment_positions and getattr(widget, 'preview_sig', None) == sig:
+                continue  # already current – caller re-applies the current-segment highlight
             self._render_preview(widget)
-        self._preview_rendered_sig = sig
+            widget.preview_sig = sig
 
     def _preview_content_signature(self) -> str:
         """A cheap digest of everything the preview render depends on (segment
@@ -47236,7 +47319,31 @@ class SupervertalerQt(QMainWindow):
 
         cursor = preview_text.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.Start)
+        # One edit block for the whole render: the document is laid out once at
+        # the end instead of after every insert (issue #185).
+        cursor.beginEditBlock()
+        try:
+            self._render_preview_segments(widget, preview_text, cursor, zoom)
+        finally:
+            cursor.endEditBlock()
 
+        # Scroll to current segment if we have one
+        if hasattr(widget, 'current_segment_start_pos') and widget.current_segment_start_pos is not None:
+            # Create cursor at the current segment position
+            scroll_cursor = preview_text.textCursor()
+            scroll_cursor.setPosition(widget.current_segment_start_pos)
+            preview_text.setTextCursor(scroll_cursor)
+            # Center the segment in the viewport
+            # Use QTimer to delay centering until after layout is complete
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(0, lambda pt=preview_text: self._center_cursor_in_preview(pt))
+        else:
+            # Set cursor to beginning if no current segment
+            cursor.movePosition(QTextCursor.MoveOperation.Start)
+            preview_text.setTextCursor(cursor)
+
+    def _render_preview_segments(self, widget, preview_text, cursor, zoom):
+        """Insert every segment into the preview at ``cursor`` (see _render_preview)."""
         # Pre-calculate list numbers for numbered list items
         import re
         list_numbers = {}  # {segment_id: list_number}
@@ -47447,21 +47554,6 @@ class SupervertalerQt(QMainWindow):
 
         # Add final newline at end of document
         cursor.insertText("\n")
-
-        # Scroll to current segment if we have one
-        if hasattr(widget, 'current_segment_start_pos') and widget.current_segment_start_pos is not None:
-            # Create cursor at the current segment position
-            scroll_cursor = preview_text.textCursor()
-            scroll_cursor.setPosition(widget.current_segment_start_pos)
-            preview_text.setTextCursor(scroll_cursor)
-            # Center the segment in the viewport
-            # Use QTimer to delay centering until after layout is complete
-            from PyQt6.QtCore import QTimer
-            QTimer.singleShot(0, lambda pt=preview_text: self._center_cursor_in_preview(pt))
-        else:
-            # Set cursor to beginning if no current segment
-            cursor.movePosition(QTextCursor.MoveOperation.Start)
-            preview_text.setTextCursor(cursor)
 
     def _render_formatted_text(self, cursor, text: str, base_format: QTextCharFormat,
                                 list_number: Optional[int] = None):
@@ -48033,9 +48125,19 @@ class SupervertalerQt(QMainWindow):
         viewport = self.table.viewport()
         viewport_width = viewport.width()
 
-        for row, segment in enumerate(segments):
-            if row == 0:
-                continue  # First file has no preceding banner
+        # Only rows on screen get a banner: this runs on every scroll step, and
+        # making a label for every file boundary in the project (300 files →
+        # 300 labels per step) made scrolling and loading slow (issue #185).
+        # The row just below the viewport is included, since its banner sits
+        # above its top edge.
+        first = self.table.rowAt(0)
+        if first < 0:
+            return
+        last = self.table.rowAt(viewport.height() - 1)
+        if last < 0:
+            last = len(segments) - 1
+        for row in range(max(first, 1), min(last + 2, len(segments))):
+            segment = segments[row]
             prev_file_id = getattr(segments[row - 1], 'file_id', None)
             curr_file_id = getattr(segment, 'file_id', None)
             if curr_file_id is None or prev_file_id is None or curr_file_id == prev_file_id:
@@ -48076,10 +48178,14 @@ class SupervertalerQt(QMainWindow):
         width_reduction = 8
 
         # Manually calculate and set row heights for compact display
+        last_pump = time.monotonic()
         for row in range(self.table.rowCount()):
-            # Keep UI responsive during large grid updates
-            if row % 50 == 0:
+            # Keep UI responsive during large grid updates – a few times a
+            # second is enough; pumping every 50 rows cost more than the
+            # resizing itself on a 17,000-row project (issue #185).
+            if time.monotonic() - last_pump > 0.1:
                 QApplication.processEvents()
+                last_pump = time.monotonic()
             self._auto_resize_single_row(row, width_reduction)
 
         self.log("✓ Auto-resized rows to fit content (compact)")
@@ -48193,11 +48299,15 @@ class SupervertalerQt(QMainWindow):
         """
         font = QFont(self.default_font_family, self.default_font_size)
 
-        self.table.setFont(font)
+        # Re-setting an unchanged font still re-lays out every cell editor
+        # (seconds on a big project, issue #185), so only set a real change.
+        if self.table.font() != font:
+            self.table.setFont(font)
 
         # Also update header font - same size as grid content, normal weight
         header_font = QFont(self.default_font_family, self.default_font_size, QFont.Weight.Normal)
-        self.table.horizontalHeader().setFont(header_font)
+        if self.table.horizontalHeader().font() != header_font:
+            self.table.horizontalHeader().setFont(header_font)
 
         if skip_per_row:
             # Fast path for initial load: fonts on individual cells/widgets
@@ -62228,15 +62338,29 @@ class SupervertalerQt(QMainWindow):
         # (switching display modes changes widget content which could trigger textChanged)
         self._suppress_target_change_handlers = True
 
+        # One id → segment map for the whole pass: looking each row up with
+        # _segment_for_grid_row scanned the segment list per row, which took
+        # 16 s on a 17,000-segment project (issue #185).
+        segments_by_id = {s.id: s for s in self.current_project.segments}
+
         # Get current visible rows
         for row in range(self.table.rowCount()):
+            # Rows not built yet (another page, or not scrolled to) have no
+            # editors to update – they are built in the current mode later.
+            source_widget = self.table.cellWidget(row, 2)
+            target_widget = self.table.cellWidget(row, 3)
+            if source_widget is None and target_widget is None:
+                continue
             # Resolve the segment via the id in column 0 — NOT segments[row].
             # The table row index only equals the list position in unsorted,
             # unfiltered, single-page view; under a sort/filter/pagination the
             # positional lookup rendered each cell from the WRONG segment, so
             # toggling the view mode appeared to "not update" (or showed stale
             # text). The id-based lookup is correct in every view state.
-            segment, _seg_idx = self._segment_for_grid_row(row)
+            try:
+                segment = segments_by_id.get(int(self.table.item(row, 0).text()))
+            except (AttributeError, ValueError, TypeError):
+                segment = None
             if segment is None:
                 continue
 
@@ -62267,12 +62391,10 @@ class SupervertalerQt(QMainWindow):
             show_tags_for_cell = (mode in ('tags', 'compact'))
 
             # Update source cell (column 2)
-            source_widget = self.table.cellWidget(row, 2)
             if source_widget and hasattr(source_widget, 'update_display_mode'):
                 source_widget.update_display_mode(source_for_display, show_tags_for_cell)
 
             # Update target cell (column 3)
-            target_widget = self.table.cellWidget(row, 3)
             if target_widget and hasattr(target_widget, 'update_display_mode'):
                 target_widget.update_display_mode(target_for_display, show_tags_for_cell)
                 # Store tag map for reverse-expanding on save

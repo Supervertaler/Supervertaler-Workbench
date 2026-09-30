@@ -7,6 +7,22 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ## Unreleased
 
+### Fixed (Performance · big projects no longer freeze on import)
+
+A Trados package of 300 files and 17,000 segments (about 200,000 words) froze Supervertaler for over ten minutes on import. It now imports in about 11 seconds (issues #185 and #203). Most of the wait came from work nobody could see:
+- **The document Preview was rebuilt on every import, even behind the Match Panel,** one sentence at a time with a full re-layout after each. It is now built only when you open the Preview tab or the pop-out window, and in one go. That makes it several times faster when it is shown.
+- **Loading the grid looked up each row's segment by scanning the whole project,** 17,000 × 17,000 times. It now uses a direct lookup.
+- **The file-name banners of multi-file projects were rebuilt for all 300 files on every scroll step.** Only the banners on screen are drawn now, so scrolling a big multi-file project is smooth again.
+- **Smaller savings:**
+  - the progress bar repaints at most ten times a second;
+  - "Files: 3/300" in the status bar is counted in one pass;
+  - each grid cell's style is applied once instead of three times;
+  - reading SDLXLIFF files is 30% faster.
+
+**Starting Supervertaler is faster too.** The theme is now applied before the window is built, not afterwards to every widget in it. In our tests this cut about two seconds from each start.
+
+Nothing changes in what you see or export: the imported segments and the exported return package are byte-for-byte the same as before.
+
 ### Added (QuickTrans · see where the MT engines disagree)
 
 QuickTrans lists the suggestions of several MT engines for the current segment. It now marks, character by character, where each one differs from the top result (issue #208). "Open de k**raan** langzaam." under "Open de klep langzaam." shows at a glance that only the noun differs. A small inflection or a punctuation change is just as easy to spot.
