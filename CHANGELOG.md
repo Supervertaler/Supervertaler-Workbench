@@ -7,6 +7,15 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ## Unreleased
 
+### Added (QA · open the project in Xbench)
+
+**QA → 🔬 Open in Xbench…** opens the current project in ApSIC Xbench for QA, as memoQ and Trados can (issue #146). Supervertaler writes the files into the project's `qa/xbench/` folder, and opening the `.xbp` starts Xbench with everything loaded:
+- **The segments** go into an XLIFF file marked as the *ongoing translation*, the part Xbench's QA checks run on. Confirmed, approved and untranslated segments keep their status.
+- **The terms of the glossaries switched on for the project** become *key terms*, for Xbench's Key Term Mismatch check. Forbidden terms are left out, and a glossary made the other way round is flipped.
+- **An Xbench project file (`.xbp`)** lists both.
+
+After fixing things in Supervertaler, run it again and press F5 in Xbench to reload. If Xbench isn't installed, Supervertaler offers to open the folder instead.
+
 ### Added (Help · F1 on the newer pages)
 
 **F1** now opens the help page for **Settings → 📏 Segmentation Rules**, **Settings → 🏷️ Inline Codes**, **QA → Run QA Checks** and **QA → Check with LanguageTool**. These pages are new on [docs.supervertaler.com](https://docs.supervertaler.com/workbench/), together with *TM Matches Not Appearing* under Troubleshooting.

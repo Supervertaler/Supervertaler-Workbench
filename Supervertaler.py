@@ -12346,6 +12346,14 @@ class SupervertalerQt(QMainWindow):
         languagetool_action.triggered.connect(self.show_languagetool_dialog)
         self.qa_menu.addAction(languagetool_action)
 
+        # Open the project in ApSIC Xbench, as memoQ and Trados can (#146)
+        xbench_action = QAction(self.tr("🔬 Open in &Xbench..."), self)
+        xbench_action.setToolTip(self.tr(
+            "Open the project in ApSIC Xbench for QA, with the terms of your glossaries as "
+            "key terms. Run it again after making changes, then press F5 in Xbench to reload."))
+        xbench_action.triggered.connect(self.open_in_xbench)
+        self.qa_menu.addAction(xbench_action)
+
         proofreading_submenu = self.qa_menu.addMenu(self.tr("✅ &Proofreading"))
 
         proofread_action = QAction(self.tr("✅ &Proofread Translation..."), self)
@@ -54752,6 +54760,69 @@ class SupervertalerQt(QMainWindow):
         dlg.show()
         dlg.raise_()
         dlg.activateWindow()
+
+    def open_in_xbench(self):
+        """QA → Open in Xbench (issue #146): write the project as XLIFF, the terms
+        of its glossaries as key terms, and an Xbench project (.xbp) listing both,
+        then open the .xbp as a double-click would, which starts Xbench."""
+        from PyQt6.QtCore import QUrl
+        from PyQt6.QtGui import QDesktopServices
+        from modules import xbench_export
+        from modules import language_codes as lc
+
+        project = self.current_project
+        if not project or not project.segments:
+            QMessageBox.information(self, "Open in Xbench", "Open a project first.")
+            return
+        if self.project_file_path:
+            folder = os.path.join(os.path.dirname(os.path.abspath(self.project_file_path)),
+                                  xbench_export.XBENCH_FOLDER)
+        else:
+            import tempfile
+            folder = os.path.join(tempfile.gettempdir(), "Supervertaler Xbench",
+                                  xbench_export._safe_name(project.name))
+
+        key_terms = []
+        try:
+            mgr = getattr(self, 'termbase_mgr', None)
+            if mgr is not None and project.id is not None:
+                for tb_id in mgr.get_active_termbase_ids(project.id):
+                    termbase = mgr.get_termbase(tb_id) or {}
+                    key_terms += xbench_export.oriented_terms(
+                        mgr.get_terms(tb_id), termbase.get('source_lang'),
+                        project.source_lang, lc.same_language)
+        except Exception as e:
+            self.log(f"⚠ Xbench: could not read the glossaries: {e}")
+
+        # Document order, whatever the grid is sorted by
+        segments = getattr(self, '_original_segment_order', None) or project.segments
+        try:
+            result = xbench_export.write_xbench_project(
+                folder, project.name, segments,
+                lc.canonical(project.source_lang) or project.source_lang,
+                lc.canonical(project.target_lang) or project.target_lang,
+                key_terms)
+        except OSError as e:
+            QMessageBox.warning(self, "Open in Xbench", f"Could not write the Xbench files:\n\n{e}")
+            return
+        self.log(f"🔬 Xbench project written: {result['xbp']} ({result['segments']} segments, "
+                 f"{result['terms']} key terms)")
+
+        if QDesktopServices.openUrl(QUrl.fromLocalFile(result['xbp'])):
+            self.statusBar().showMessage(
+                f"Opening the project in Xbench – {result['segments']} segments, "
+                f"{result['terms']} key terms", 6000)
+            return
+        reply = QMessageBox.question(
+            self, "Open in Xbench",
+            "The Xbench project is ready, but it could not be opened. Is ApSIC Xbench "
+            "installed? It is available from xbench.net.\n\n"
+            f"The files are in:\n{folder}\n\n"
+            "Open that folder? You can then open the .xbp file in Xbench yourself.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes)
+        if reply == QMessageBox.StandardButton.Yes:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(folder))
 
     def show_languagetool_dialog(self):
         """QA → Check with LanguageTool (issue #233). Non-modal."""
