@@ -3113,6 +3113,11 @@ class UnifiedPromptManagerQt:
             action_dup = menu.addAction("📋 Duplicate")
             action_dup.triggered.connect(lambda: self._duplicate_prompt(path))
 
+            # Two AI models review the prompt together (issue #242)
+            action_duet = menu.addAction("🎭 Duet review…")
+            action_duet.setToolTip("Two AI models review this prompt together; the result is saved as a new version")
+            action_duet.triggered.connect(lambda: self._duet_review(path))
+
             action_del = menu.addAction("🗑️ Delete")
             action_del.triggered.connect(lambda: self._delete_prompt(path))
             # Disable delete for default prompts (they get recreated anyway)
@@ -3635,6 +3640,23 @@ class UnifiedPromptManagerQt:
         else:
             QMessageBox.warning(self.main_widget, "Duplicate failed", "Failed to duplicate the prompt.")
     
+    def _duet_review(self, relative_path: str):
+        """Open the Duet review for a prompt (issue #242): two AI models
+        review it and the result is saved as a new version next to it."""
+        if relative_path not in self.library.prompts:
+            return
+        from modules.duet_dialog import DuetDialog
+
+        def _saved(new_path):
+            self.library.load_all_prompts()
+            self._refresh_tree()
+            self._select_and_reveal_prompt(new_path)
+            self.log_message(f"✓ Duet review saved as a new version: {new_path}")
+
+        self._duet_dialog = DuetDialog(self.main_widget, self.parent_app, self.library,
+                                       relative_path, on_saved=_saved)
+        self._duet_dialog.show()
+
     def _delete_prompt(self, relative_path: str):
         """Delete a prompt"""
         reply = QMessageBox.question(

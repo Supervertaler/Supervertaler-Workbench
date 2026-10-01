@@ -7,6 +7,17 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ## Unreleased
 
+### Added (AI · Duet review: two models improve a prompt together)
+
+In the **Prompt Manager**, right-click a prompt and choose **🎭 Duet review…** (issue #242). Two different AI models, for example Claude and GPT, review the prompt against the open project, and one of them writes the improved version.
+- **Each model checks the other.** Each model must verify the other's claims against the attached material and quote the evidence, so problems neither would catch alone come out, and bad "improvements" are rejected. The material is the language pair, a sample of the document, your confirmed translations or TM matches, and the project's glossary terms.
+- **Rules that stop early agreement.** Each turn keeps a register of open issues and ends with `VERDICT: CONTINUE` or `VERDICT: AGREED`. Agreement only counts when both models say so in a row, with no open issues left.
+- **The result is a new version.** It is saved next to the original as *&lt;name&gt; (duet v2)*, after you've had a chance to edit it. Anything the models didn't agree on is listed for you to decide. The original prompt is never changed.
+- **A transcript of every turn** is saved in the project's `reports/duet/` folder, written as the review goes.
+- **You choose:** both models, the round limit (default 4), output tokens per turn, which model opens and which writes the result, and the size of the source sample.
+- **Cost:** before you start, the dialog shows the size of what is sent and the estimated cost if all rounds run. The whole discussion is re-sent every turn, so the cost grows quickly with more rounds.
+- **API errors:** a failed call is retried after 15 and 30 seconds.
+
 ### Added (TM · fragment matches when the document is segmented differently)
 
 A fuzzy match compares whole segments, so the TM had nothing to offer when it was segmented differently from the document (issue #193). For example, the TM holds *Which heading do you want to read?*, but the document has it as two segments, *Which heading* and *do you want to read?*. The Match Panel now also shows **fragment matches**:
