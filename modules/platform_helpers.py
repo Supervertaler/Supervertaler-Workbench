@@ -1041,6 +1041,9 @@ class GlobalHotkeyManager:
 
         # macOS-specific (NSEvent monitor)
         self._mac_backend = None  # _MacNSEventHotkey instance
+        # True when the monitor is installed but macOS hasn't granted
+        # Accessibility, so no keystrokes from other apps will reach it (#188)
+        self.permission_missing = False
 
     # -- public API ----------------------------------------------------------
 
@@ -1060,6 +1063,14 @@ class GlobalHotkeyManager:
     @property
     def running(self) -> bool:
         return self._running
+
+    def last_trigger_keycode(self) -> Optional[int]:
+        """macOS: the virtual keycode of the key that fired the most recent
+        hotkey, so push-to-talk can watch that physical key for its release
+        whatever the keyboard layout. None elsewhere."""
+        if self._mac_backend is not None:
+            return self._mac_backend.last_keycode
+        return None
 
     def register(self, shortcut: str, callback: Callable) -> bool:
         """Register a global hotkey.
@@ -1116,12 +1127,16 @@ class GlobalHotkeyManager:
 
         backend = _MacNSEventHotkey()
         for shortcut, callback in self._hotkeys.items():
-            backend.register(shortcut, callback)
+            if not backend.register(shortcut, callback):
+                self.failed_hotkeys.append(shortcut)
         if not backend.start():
             return False
         self._mac_backend = backend
         self._running = True
         self._backend = 'nsevent'
+        # The monitor installs fine without Accessibility – it just never
+        # receives keystrokes – so ask macOS directly
+        self.permission_missing = mac_accessibility_trusted() is False
         return True
 
     # -- Windows RegisterHotKey backend --------------------------------------
@@ -1331,6 +1346,110 @@ class GlobalHotkeyManager:
 # ---------------------------------------------------------------------------
 # macOS NSEvent global hotkey backend
 # ---------------------------------------------------------------------------
+# macOS keys by name → the character NSEvent reports for them
+_MAC_NAMED_KEYS = {
+    'space': ' ', 'tab': '\t', 'enter': '\r', 'return': '\r',
+    'escape': '\x1b', 'esc': '\x1b', 'backspace': '\x7f',
+    'up': '\uf700', 'down': '\uf701', 'left': '\uf702', 'right': '\uf703',
+    'insert': '\uf727', 'ins': '\uf727', 'delete': '\uf728', 'del': '\uf728',
+    'home': '\uf729', 'end': '\uf72b', 'pageup': '\uf72c', 'pagedown': '\uf72d',
+    **{f'f{i}': chr(0xF703 + i) for i in range(1, 21)},   # NSF1FunctionKey = U+F704
+}
+
+# Virtual keycodes of the US (ANSI) layout → the character on that key.
+# Used only when the active layout types a non-Latin character (Russian,
+# Greek, Hebrew …), so ⌘⌥L still means the key where L is on a US
+# keyboard – as macOS itself does for ⌘ shortcuts on those layouts.
+_MAC_ANSI_KEYCODES = {
+    0x00: 'a', 0x01: 's', 0x02: 'd', 0x03: 'f', 0x04: 'h', 0x05: 'g', 0x06: 'z',
+    0x07: 'x', 0x08: 'c', 0x09: 'v', 0x0B: 'b', 0x0C: 'q', 0x0D: 'w', 0x0E: 'e',
+    0x0F: 'r', 0x10: 'y', 0x11: 't', 0x12: '1', 0x13: '2', 0x14: '3', 0x15: '4',
+    0x16: '6', 0x17: '5', 0x18: '=', 0x19: '9', 0x1A: '7', 0x1B: '-', 0x1C: '8',
+    0x1D: '0', 0x1E: ']', 0x1F: 'o', 0x20: 'u', 0x21: '[', 0x22: 'i', 0x23: 'p',
+    0x25: 'l', 0x26: 'j', 0x27: "'", 0x28: 'k', 0x29: ';', 0x2A: '\\', 0x2B: ',',
+    0x2C: '/', 0x2D: 'n', 0x2E: 'm', 0x2F: '.', 0x32: '`',
+}
+
+MAC_ACCESSIBILITY_HINT = (
+    "Allow Supervertaler (or Terminal / iTerm2, when you start it from a "
+    "terminal) in System Settings → Privacy & Security → Accessibility, "
+    "then restart Supervertaler.")
+MAC_ACCESSIBILITY_SETTINGS_URL = (
+    "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+
+
+def _event_chars(event) -> str:
+    """The key's character on the current layout, without Shift or other
+    modifiers applied (so ⌘⇧1 reads as "1", not "!"). Falls back to
+    charactersIgnoringModifiers, which keeps Shift, before macOS 10.15."""
+    try:
+        chars = event.charactersByApplyingModifiers_(0)
+        if chars:
+            return str(chars)
+    except Exception:
+        pass
+    chars = event.charactersIgnoringModifiers()
+    return str(chars) if chars else ""
+
+
+def mac_event_key(chars: str, keycode: int) -> Optional[str]:
+    """The key to compare with a registered shortcut's key: the typed
+    character, lower-cased – or, when the layout types a non-Latin
+    letter, the character on that key of a US keyboard."""
+    if not chars:
+        return _MAC_ANSI_KEYCODES.get(keycode)
+    ch = chars.lower()
+    if len(ch) == 1 and ord(ch) > 0x7F and not 0xF700 <= ord(ch) <= 0xF8FF:
+        return _MAC_ANSI_KEYCODES.get(keycode, ch)
+    return ch
+
+
+def mac_accessibility_trusted(prompt: bool = False) -> Optional[bool]:
+    """Whether macOS lets this process watch keystrokes in other apps
+    (Accessibility). None when it can't be determined (not macOS, or the
+    framework can't be loaded). ``prompt`` also has macOS show its own
+    dialog and list the app in the Accessibility settings."""
+    if not IS_MACOS:
+        return None
+    if prompt:
+        try:
+            from ApplicationServices import (  # type: ignore
+                AXIsProcessTrustedWithOptions, kAXTrustedCheckOptionPrompt)
+            return bool(AXIsProcessTrustedWithOptions({kAXTrustedCheckOptionPrompt: True}))
+        except Exception:
+            pass
+    try:
+        import ctypes
+        ax = ctypes.cdll.LoadLibrary(
+            '/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices')
+        if not prompt:
+            ax.AXIsProcessTrusted.restype = ctypes.c_bool
+            ax.AXIsProcessTrusted.argtypes = []
+            return bool(ax.AXIsProcessTrusted())
+        # The same with plain ctypes when PyObjC's ApplicationServices
+        # wrapper isn't installed: {kAXTrustedCheckOptionPrompt: kCFBooleanTrue}
+        cf = ctypes.cdll.LoadLibrary(
+            '/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation')
+        vp = ctypes.c_void_p
+        cf.CFDictionaryCreate.restype = vp
+        cf.CFDictionaryCreate.argtypes = [vp, vp, vp, ctypes.c_long, vp, vp]
+        cf.CFRelease.argtypes = [vp]
+        keys = (vp * 1)(vp.in_dll(ax, 'kAXTrustedCheckOptionPrompt').value)
+        values = (vp * 1)(vp.in_dll(cf, 'kCFBooleanTrue').value)
+        options = cf.CFDictionaryCreate(
+            None, keys, values, 1,
+            ctypes.addressof(ctypes.c_char.in_dll(cf, 'kCFTypeDictionaryKeyCallBacks')),
+            ctypes.addressof(ctypes.c_char.in_dll(cf, 'kCFTypeDictionaryValueCallBacks')))
+        ax.AXIsProcessTrustedWithOptions.restype = ctypes.c_bool
+        ax.AXIsProcessTrustedWithOptions.argtypes = [vp]
+        try:
+            return bool(ax.AXIsProcessTrustedWithOptions(options))
+        finally:
+            cf.CFRelease(options)
+    except Exception:
+        return None
+
+
 class _MacNSEventHotkey:
     """macOS global hotkey backend using NSEvent monitors via PyObjC.
 
@@ -1360,6 +1479,7 @@ class _MacNSEventHotkey:
     def __init__(self):
         self._hotkeys: Dict[str, tuple] = {}  # shortcut_lower -> (mods_int, char_lower, callback)
         self._global_monitor = None
+        self.last_keycode: Optional[int] = None  # keyCode of the last hotkey that fired
 
     @staticmethod
     def is_available() -> bool:
@@ -1414,12 +1534,15 @@ class _MacNSEventHotkey:
         def _global_handler(event):
             try:
                 event_mods = int(event.modifierFlags()) & mod_mask
-                chars = event.charactersIgnoringModifiers()
-                if not chars:
+                if not any(flags == event_mods for flags, _c, _cb in hotkeys.values()):
                     return
-                ch = str(chars).lower()
+                keycode = int(event.keyCode())
+                ch = mac_event_key(_event_chars(event), keycode)
+                if ch is None:
+                    return
                 for shortcut, (flags, target_char, callback) in hotkeys.items():
                     if event_mods == flags and ch == target_char:
+                        self.last_keycode = keycode
                         try:
                             callback()
                         except Exception as e:
@@ -1432,14 +1555,15 @@ class _MacNSEventHotkey:
             NSEventMaskKeyDown, _global_handler
         )
         if self._global_monitor is None:
-            print("[MacNSEvent] Failed to install global monitor. Grant "
-                  "Accessibility permission to Terminal.app (or iTerm2 / "
-                  "the bundled Supervertaler.app) in System Settings → "
-                  "Privacy & Security → Accessibility, then restart.")
+            print("[MacNSEvent] Failed to install global monitor. " + MAC_ACCESSIBILITY_HINT)
             return False
 
         registered = ', '.join(self._hotkeys.keys())
         print(f"[MacNSEvent] Started — global hotkeys: {registered}")
+        if mac_accessibility_trusted() is False:
+            # The monitor is in place but gets no keystrokes until allowed
+            print("[MacNSEvent] Accessibility permission not granted – the hotkeys "
+                  "won't fire from other apps. " + MAC_ACCESSIBILITY_HINT)
         return True
 
     def stop(self):
@@ -1481,20 +1605,10 @@ class _MacNSEventHotkey:
             except ImportError:
                 return 0, None
 
-        # Map named keys to the character NSEvent's
-        # charactersIgnoringModifiers() returns when that key is pressed
-        # with our modifiers held. Add to this map as new combos appear
-        # in shortcut bindings; function keys (f1-f12) don't produce a
-        # printable character and would need keycode-based detection,
-        # so they're not in this map.
-        named_keys = {
-            'space': ' ',
-            'tab': '\t',
-            'enter': '\r',
-            'return': '\r',
-            'escape': '\x1b',
-            'esc': '\x1b',
-        }
+        # Named keys → the character NSEvent reports for them: function
+        # and arrow keys come as Unicode private-use characters
+        # (NSF1FunctionKey = U+F704 …).
+        named_keys = _MAC_NAMED_KEYS
 
         flags = 0
         char = None
@@ -1523,8 +1637,6 @@ class _MacNSEventHotkey:
             elif part in named_keys:
                 char = named_keys[part]
             elif part:
-                # Function keys etc. would need keycode-based detection
-                # rather than the character-comparison approach used here.
                 print(f"[MacNSEvent] Unsupported key in shortcut: {part!r}")
                 return 0, None
         return flags, char

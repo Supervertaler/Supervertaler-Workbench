@@ -29,6 +29,7 @@ caller, since every consumer would otherwise re-implement them wrong:
 from __future__ import annotations
 
 import re
+import sys
 from typing import Optional
 
 from PyQt6.QtCore import QObject, pyqtSignal
@@ -400,6 +401,14 @@ class GlobalHotkeyListener(QObject):
 
     def start(self) -> bool:
         """Start the listener thread. Returns True on success."""
+        if sys.platform == 'darwin':
+            # pynput's macOS listener calls the Text Services Manager from its
+            # own thread as soon as it starts, and macOS 26 aborts the whole
+            # app for that (issue #188). Global hotkeys on macOS go through
+            # the NSEvent monitor in platform_helpers instead.
+            print("[GlobalHotkeyListener] Not started on macOS: pynput's keyboard "
+                  "listener crashes the app on macOS 26 (#188).", flush=True)
+            return False
         try:
             from pynput import keyboard
         except Exception:

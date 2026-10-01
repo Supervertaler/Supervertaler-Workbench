@@ -60225,12 +60225,12 @@ class SupervertalerQt(QMainWindow):
         if existing is not None:
             return existing
         try:
-            from modules.voice_release_poller import KeyReleasePoller, IS_WINDOWS
+            from modules.voice_release_poller import KeyReleasePoller, POLLING_SUPPORTED
         except Exception as e:
             self.log(f"⚠ Voice release poller unavailable: {e}")
             self._voice_release_poller = None
             return None
-        if not IS_WINDOWS:
+        if not POLLING_SUPPORTED:  # Windows and macOS (#188)
             self._voice_release_poller = None
             return None
         poller = KeyReleasePoller(parent=self)
@@ -60271,13 +60271,13 @@ class SupervertalerQt(QMainWindow):
         if existing is not None:
             return existing
         try:
-            from modules.voice_release_poller import KeyReleasePoller, IS_WINDOWS
+            from modules.voice_release_poller import KeyReleasePoller, POLLING_SUPPORTED
         except Exception as e:
             self.log(f"⚠ Command-PTT release poller unavailable: {e}")
             self._command_ptt_release_poller = None
             return None
-        if not IS_WINDOWS:
-            # Non-Windows: no release polling. The listener stays on
+        if not POLLING_SUPPORTED:
+            # Linux: no release polling. The listener stays on
             # until the user toggles always-on off manually. Graceful
             # degradation rather than a broken feature.
             self._command_ptt_release_poller = None
@@ -73622,9 +73622,15 @@ class SuperlookupTab(QWidget):
                     self.hotkey_registered = True
                     failed = getattr(manager, 'failed_hotkeys', [])
                     if failed:
-                        _log(f"\u26A0 [Global Hotkeys] Failed to register: {', '.join(failed)} (claimed by another app)")
+                        _why = ("a key macOS global hotkeys can't use" if manager._backend == 'nsevent'
+                                else "claimed by another app")
+                        _log(f"\u26A0 [Global Hotkeys] Failed to register: {', '.join(failed)} ({_why})")
                     ok_keys = [s for s, _ in _to_register if s not in failed]
                     _log(f"\u2328 [Global Hotkeys] Registered via {manager._backend}: {', '.join(ok_keys)}")
+                    if getattr(manager, 'permission_missing', False):
+                        _log("\u26A0 [Global Hotkeys] macOS hasn't granted Accessibility, so the "
+                             "hotkeys won't fire from other apps.")
+                        QTimer.singleShot(2500, self._show_mac_accessibility_notice)
                     return
                 else:
                     _log("[Global Hotkeys] manager.start() returned False")
@@ -73933,6 +73939,7 @@ class SuperlookupTab(QWidget):
                         sm = getattr(mw, 'shortcut_manager', None)
                         chord_str = sm.get_shortcut('voice_dictate') if sm else ''
                         if chord_str and poller.set_chord(chord_str):
+                            self._arm_release_keycode(poller)
                             poller.start()
             else:
                 print("[Voice] Workbench unavailable for push-to-talk")
@@ -74014,9 +74021,60 @@ class SuperlookupTab(QWidget):
                     sm = getattr(mw, 'shortcut_manager', None)
                     chord_str = sm.get_shortcut('voice_command_ptt') if sm else ''
                     if chord_str and poller.set_chord(chord_str):
+                        self._arm_release_keycode(poller)
                         poller.start()
         except Exception as e:
             print(f"[Voice] Error in command-PTT press handler: {e}")
+
+    def _arm_release_keycode(self, poller):
+        """macOS: have the release poller watch the physical key that fired
+        the hotkey – on a non-US layout it isn't the US key the shortcut
+        string names (#188). No-op elsewhere."""
+        manager = getattr(self, '_hotkey_manager', None)
+        if manager is not None and hasattr(poller, 'set_trigger_keycode'):
+            try:
+                poller.set_trigger_keycode(manager.last_trigger_keycode())
+            except Exception:
+                pass
+
+    def _show_mac_accessibility_notice(self):
+        """macOS: the global hotkeys are registered, but Accessibility isn't
+        granted, so macOS sends them no keystrokes from other apps (#188).
+        Say so once, with a way to the right System Settings page."""
+        from modules.platform_helpers import (
+            MAC_ACCESSIBILITY_SETTINGS_URL, mac_accessibility_trusted)
+        mw = self.main_window
+        try:
+            gs = mw._load_general_settings_from_file() if mw else {}
+            if gs.get('mac_accessibility_notice_off'):
+                return
+        except Exception:
+            gs = None
+        box = QMessageBox(mw or self)
+        box.setIcon(QMessageBox.Icon.Information)
+        box.setWindowTitle("Global hotkeys need Accessibility")
+        box.setText("Supervertaler's global hotkeys won't work in other apps yet.")
+        box.setInformativeText(
+            "macOS only passes keystrokes to Supervertaler after you allow it in "
+            "System Settings → Privacy & Security → Accessibility. Switch on "
+            "Supervertaler there (or Terminal / iTerm2, if you start Supervertaler "
+            "from a terminal), then restart Supervertaler.\n\n"
+            "Hold-to-talk dictation also needs Input Monitoring, on the same page.\n\n"
+            "Inside Supervertaler, the shortcuts work without this.")
+        open_btn = box.addButton("Open System Settings", QMessageBox.ButtonRole.AcceptRole)
+        box.addButton("Not Now", QMessageBox.ButtonRole.RejectRole)
+        never = QCheckBox("Don't show this again")
+        box.setCheckBox(never)
+        box.exec()
+        if box.clickedButton() is open_btn:
+            mac_accessibility_trusted(prompt=True)  # lists the app on that page
+            QDesktopServices.openUrl(QUrl(MAC_ACCESSIBILITY_SETTINGS_URL))
+        if never.isChecked() and gs is not None:
+            try:
+                gs['mac_accessibility_notice_off'] = True
+                mw.save_general_settings(gs)
+            except Exception:
+                pass
 
     def _try_ahk_library_method(self):
         """Try to register hotkey using ahk Python library

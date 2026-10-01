@@ -7,6 +7,19 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ## Unreleased
 
+### Fixed (macOS · global hotkeys: a crash, silent failures and hold-to-talk)
+
+Global hotkeys on macOS go through the NSEvent monitor that replaced pynput, the background listener that crashed on macOS 26 (issue #188). This finishes that work:
+- **A crash on macOS 26.** The pause-Always-On hotkey (Voice tab) still started pynput's keyboard listener, the one that crashed Supervertaler on macOS 26 as soon as it ran. It no longer starts on macOS, and **⏺ Record key** for the pause hotkey is switched off there.
+- **Missing Accessibility no longer fails silently.** Without that permission macOS sends the hotkeys no keystrokes from other apps, and nothing said so. Supervertaler now checks, and says so when it starts. **Open System Settings** goes straight to Privacy & Security → Accessibility, with Supervertaler listed. You can switch the message off.
+- **Hold-to-talk works on macOS.** Releasing the push-to-talk hotkeys (dictation and voice commands) now stops them, as on Windows. Supervertaler watches the key's state, which needs the Input Monitoring permission. Without it, press the hotkey again to stop, as before.
+- **More keys work as global hotkeys:**
+  - ⌘⇧ with a digit or punctuation: the key was read as the character Shift makes, so ⌘⇧1 never fired;
+  - function keys F1–F20, the arrow keys, and Home/End/Page Up/Page Down, with a modifier;
+  - on a layout that types non-Latin letters, such as Russian or Greek, ⌘⌥L is the key where L is on a US keyboard.
+
+  A shortcut macOS can't use is reported as such in the log, not as "claimed by another app".
+
 ### Added (QA · a second AI model reviews the translations)
 
 **QA → Proofreading → 🔀 Cross-model Review…** has a second AI model check translations made by another one, for example Claude checking GPT (issue #242, tier 2). A model easily overlooks its own mistakes; a different one doesn't share its blind spots.

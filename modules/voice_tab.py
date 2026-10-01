@@ -23,6 +23,8 @@ Historically named "AutoFingers"; the internal name was simplified to
 ``autofingers_layout`` settings as a one-time fallback so existing users
 keep their splitter / column widths.
 """
+import sys
+
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
@@ -311,6 +313,13 @@ class VoiceTab(QWidget):
             "dictation tool (e.g. the media fast-forward key)."
         )
         self._voice_pause_record_btn.clicked.connect(self._on_record_pause_hotkey)
+        if sys.platform == 'darwin':
+            # Recording a key needs the global keyboard listener, which macOS
+            # 26 doesn't allow off the main thread (#188)
+            self._voice_pause_record_btn.setEnabled(False)
+            self._voice_pause_record_btn.setToolTip(
+                "Not available on macOS yet: recording a key needs a keyboard "
+                "listener that macOS doesn't allow.")
         pk_row.addWidget(self._voice_pause_record_btn)
         clear_pause_btn = QPushButton("Clear")
         clear_pause_btn.clicked.connect(self._on_clear_pause_hotkey)
