@@ -60845,6 +60845,16 @@ class SupervertalerQt(QMainWindow):
                     ptt_engine = 'faster_whisper'
             elif ptt_engine == 'local':  # very old legacy alias
                 ptt_engine = 'faster_whisper'
+            if ptt_engine == 'parakeet':
+                # NVIDIA Parakeet V3 (#198): needs its model downloaded first
+                from modules.voice_engines import parakeet as _parakeet
+                if not _parakeet.is_installed(self.user_data_path):
+                    QMessageBox.information(
+                        self, "Parakeet V3 not downloaded",
+                        "Dictation is set to use Parakeet V3, but its model isn't "
+                        "downloaded yet.\n\nOpen the Voice tab and click Download in the "
+                        "Dictation group, or switch the engine back to faster-whisper.")
+                    return
             use_api = ptt_engine == 'api'
             api_key = None
             if use_api:
@@ -60917,6 +60927,8 @@ class SupervertalerQt(QMainWindow):
                 mic_device=mic_device,
                 initial_prompt=self.build_voice_initial_prompt(),
                 replacements=vocab_settings.get('replacements', []),
+                engine='parakeet' if ptt_engine == 'parakeet' else 'faster_whisper',
+                user_data_path=str(self.user_data_path),
             )
 
             # Connect signals
@@ -60933,6 +60945,8 @@ class SupervertalerQt(QMainWindow):
             # Start recording
             if use_api:
                 self.log(f"▶️ Starting dictation thread (OpenAI Whisper API, language={lang_code}, duration={max_duration}s)...")
+            elif ptt_engine == 'parakeet':
+                self.log(f"▶️ Starting dictation thread (Parakeet V3, language detected automatically, duration={max_duration}s)...")
             else:
                 self.log(f"▶️ Starting dictation thread (local Whisper model={model_name}, language={lang_code}, duration={max_duration}s)...")
             # Visual cue so the user knows the hotkey was received and the

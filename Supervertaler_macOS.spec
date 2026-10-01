@@ -22,6 +22,8 @@ for _pkg in (
     'google.generativeai', 'openai', 'anthropic',
     'httpx', 'httpcore', 'h11', 'sniffio', 'anyio',
     'distro', 'pydantic', 'jiter',
+    # onnx-asr ships its audio preprocessors as .onnx data files (#198)
+    'onnx_asr',
 ):
     _d, _b, _h = collect_all(_pkg)
     _llm_datas += _d

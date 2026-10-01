@@ -121,6 +121,12 @@ dependencies = [
     # Whisper backend (~30 MB ctranslate2 wheel + model on first use).
     "vosk>=0.3.44",
     "faster-whisper>=1.0.0",
+    # NVIDIA Parakeet V3, the optional faster dictation engine (#198). A
+    # small pure-Python package; ONNX Runtime comes with faster-whisper
+    # already and is named here so the dependency is explicit. The model
+    # itself (~650 MB) downloads only when the user asks for it.
+    "onnx-asr>=0.12.0",
+    "onnxruntime>=1.18.1",
 ]
 
 [project.optional-dependencies]

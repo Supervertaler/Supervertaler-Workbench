@@ -7,6 +7,20 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ## Unreleased
 
+### Added (Voice · NVIDIA Parakeet V3 as a faster dictation engine)
+
+The Voice tab's **Dictation** group has a new **Engine** setting (issue #198):
+- **faster-whisper** (as before): about 100 languages.
+- **Parakeet V3**: NVIDIA's Parakeet TDT 0.6B v3, offline and free, for 25 European languages, including Dutch, German, French, Polish and Russian. It transcribes much faster than faster-whisper and recognises the language by itself.
+
+How the Parakeet model is handled:
+- **Download** fetches the model, about 650 MB, from Hugging Face. A progress bar shows how far it has got, and **Cancel** stops it. Files that finished downloading are kept, so a new attempt continues where the last one stopped.
+- Every file is checked against the checksum Hugging Face lists for it, and a damaged file is thrown away.
+- The model goes to `voice-models/` in the data folder. **Remove** deletes it.
+- After the first dictation it stays loaded, so later dictations don't wait for it.
+
+The Whisper model and language settings are switched off while Parakeet is chosen. The replacements list still applies. The engine runs on ONNX Runtime through the `onnx-asr` package, which is now a dependency.
+
 ### Fixed (macOS · global hotkeys: a crash, silent failures and hold-to-talk)
 
 Global hotkeys on macOS go through the NSEvent monitor that replaced pynput, the background listener that crashed on macOS 26 (issue #188). This finishes that work:
