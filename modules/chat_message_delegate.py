@@ -312,7 +312,7 @@ class ChatMessageDelegate(QStyledItemDelegate):
         avatar_x = rect.left() + self.padding
         bubble_x = rect.left() + self.avatar_size + self.avatar_margin + self.padding
 
-        # Label "Supervertaler Sidekick" above bubble
+        # Label "Supervertaler" above bubble (Sidekick was retired in v1.10.4)
         label_y = rect.top() + self.padding // 2
 
         painter.setPen(QPen(QColor("#646464")))
@@ -321,7 +321,7 @@ class ChatMessageDelegate(QStyledItemDelegate):
         painter.drawText(
             label_rect,
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-            "Supervertaler Sidekick",
+            "Supervertaler",
         )
 
         bubble_y = label_y + self.label_height

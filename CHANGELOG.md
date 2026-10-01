@@ -5,6 +5,256 @@ All notable changes to Supervertaler Workbench are documented in this file.
 **Current Version:** v1.10.372 (September 29, 2026)
 
 
+## Unreleased
+
+### Added (Voice · NVIDIA Parakeet V3 as a faster dictation engine)
+
+The Voice tab's **Dictation** group has a new **Engine** setting (issue #198):
+- **faster-whisper** (as before): about 100 languages.
+- **Parakeet V3**: NVIDIA's Parakeet TDT 0.6B v3, offline and free, for 25 European languages, including Dutch, German, French, Polish and Russian. It transcribes much faster than faster-whisper and recognises the language by itself.
+
+How the Parakeet model is handled:
+- **Download** fetches the model, about 650 MB, from Hugging Face. A progress bar shows how far it has got, and **Cancel** stops it. Files that finished downloading are kept, so a new attempt continues where the last one stopped.
+- Every file is checked against the checksum Hugging Face lists for it, and a damaged file is thrown away.
+- The model goes to `voice-models/` in the data folder. **Remove** deletes it.
+- After the first dictation it stays loaded, so later dictations don't wait for it.
+
+The Whisper model and language settings are switched off while Parakeet is chosen. The replacements list still applies. The engine runs on ONNX Runtime through the `onnx-asr` package, which is now a dependency.
+
+### Fixed (macOS · global hotkeys: a crash, silent failures and hold-to-talk)
+
+Global hotkeys on macOS go through the NSEvent monitor that replaced pynput, the background listener that crashed on macOS 26 (issue #188). This finishes that work:
+- **A crash on macOS 26.** The pause-Always-On hotkey (Voice tab) still started pynput's keyboard listener, the one that crashed Supervertaler on macOS 26 as soon as it ran. It no longer starts on macOS, and **⏺ Record key** for the pause hotkey is switched off there.
+- **Missing Accessibility no longer fails silently.** Without that permission macOS sends the hotkeys no keystrokes from other apps, and nothing said so. Supervertaler now checks, and says so when it starts. **Open System Settings** goes straight to Privacy & Security → Accessibility, with Supervertaler listed. You can switch the message off.
+- **Hold-to-talk works on macOS.** Releasing the push-to-talk hotkeys (dictation and voice commands) now stops them, as on Windows. Supervertaler watches the key's state, which needs the Input Monitoring permission. Without it, press the hotkey again to stop, as before.
+- **More keys work as global hotkeys:**
+  - ⌘⇧ with a digit or punctuation: the key was read as the character Shift makes, so ⌘⇧1 never fired;
+  - function keys F1–F20, the arrow keys, and Home/End/Page Up/Page Down, with a modifier;
+  - on a layout that types non-Latin letters, such as Russian or Greek, ⌘⌥L is the key where L is on a US keyboard.
+
+  A shortcut macOS can't use is reported as such in the log, not as "claimed by another app".
+
+### Added (QA · a second AI model reviews the translations)
+
+**QA → Proofreading → 🔀 Cross-model Review…** has a second AI model check translations made by another one, for example Claude checking GPT (issue #242, tier 2). A model easily overlooks its own mistakes; a different one doesn't share its blind spots.
+- **Against the same instructions.** The reviewer checks every translation against its source, the project's prompt and attached prompts, and the terms of the project's glossaries found in the segments, including forbidden terms. It answers each segment with *pass* or a flag saying what is wrong and how to fix it.
+- **It never changes a translation.** Flags become proofreading comments named *XR · model*, kept apart from AI proofreading and from translator comments. A segment that passes a later review by the same model loses its old flag.
+- **Straight after a batch.** The Batch Translate dialog has a new option, **🔀 Then have a second AI model review the translations**, which reviews the new translations when the batch is done.
+- **A record of the review.** A report with every flag goes to the project's `reports/cross-review/` folder.
+- **Cost:** the dialog shows the estimated cost before you start. The segments go in batches of 20, and a failed call is retried after 15 and 30 seconds.
+
+The **✅ Proofreading** comments list has a new **Show:** filter: all comments, AI proofreading, cross-model review (XR), or translator comments (TC).
+
+### Added (QA · move ⟦TC⟧ translator comments out of the target text)
+
+A prompt made with AutoPrompt has the AI correct obvious mistakes in the source and mark each such segment with a comment at the end of the translation, such as `⟦TC: "verzekerd" corrected to "verzekert"⟧`. Those comments were left in the target text, so they ended up in the exported document. **QA → Proofreading → ⟦TC⟧ Move Translator Comments out of the Target Text** moves them into proofreading comments named *TC · translator* (issue #242). Ctrl+Z puts them back, and locked segments are left alone.
+
+### Added (Grid · two AI models settle one contested translation)
+
+Right-click a segment and choose **🎭 Arbitrate This Segment (two AI models)…** (issue #242, tier 3). Two different models debate the translation under the Duet rules: they check each other's claims against the source, the neighbouring segments, the project's prompt, the glossary terms and the TM matches, and against the segment's review comments, which are filled in as the question. When they agree, or at the round limit (default 3), one writes the final translation and lists anything still disputed. Nothing changes until you click **✔ Use this translation**, and Ctrl+Z undoes it. The debate is saved in the project's `reports/arbitration/` folder. It works on one segment at a time only, on purpose.
+
+### Added (Projects · pack a project into one file and open it elsewhere)
+
+**Project → 📦 Pack Project (.svpkg)…** puts the open project into one file (issue #156): the project, its folder (`source/`, `target/`, `tm/`, `glossary/`, `reports/`, `qa/`), and the TMs, glossaries and prompt the project uses. Use it to carry on with a project on another computer, for example from a Windows laptop to a Mac, or to hand it to a colleague.
+
+**Project → 📦 Open Package (.svpkg)…** unpacks it into a new project folder wherever you choose, and opens the project:
+- **TMs and glossaries** are added to the ones with the same name on that computer, without duplicating what they already contain, or created there. They are switched on for the project as before, and a copy stays in the project's `tm/` and `glossary/` folders.
+- **The prompt** goes into the prompt library at the same place. If that computer has a different prompt under that name, both are kept: the package's gets "(from package)" added, and the project uses it.
+- **Nothing is overwritten.** A project folder that already exists gets "(2)" added.
+
+Only the project file and its own subfolders are packed, never other files that happen to sit next to the project. The package is a zip file with a manifest. Sharing packages online, mentioned in the issue, isn't part of this.
+
+### Added (AI · Duet review: two models improve a prompt together)
+
+In the **Prompt Manager**, right-click a prompt and choose **🎭 Duet review…** (issue #242). Two different AI models, for example Claude and GPT, review the prompt against the open project, and one of them writes the improved version.
+- **Each model checks the other.** Each model must verify the other's claims against the attached material and quote the evidence, so problems neither would catch alone come out, and bad "improvements" are rejected. The material is the language pair, a sample of the document, your confirmed translations or TM matches, and the project's glossary terms.
+- **Rules that stop early agreement.** Each turn keeps a register of open issues and ends with `VERDICT: CONTINUE` or `VERDICT: AGREED`. Agreement only counts when both models say so in a row, with no open issues left.
+- **The result is a new version.** It is saved next to the original as *&lt;name&gt; (duet v2)*, after you've had a chance to edit it. Anything the models didn't agree on is listed for you to decide. The original prompt is never changed.
+- **A transcript of every turn** is saved in the project's `reports/duet/` folder, written as the review goes.
+- **You choose:** both models, the round limit (default 4), output tokens per turn, which model opens and which writes the result, and the size of the source sample.
+- **Cost:** before you start, the dialog shows the size of what is sent and the estimated cost if all rounds run. The whole discussion is re-sent every turn, so the cost grows quickly with more rounds.
+- **API errors:** a failed call is retried after 15 and 30 seconds.
+
+### Added (TM · fragment matches when the document is segmented differently)
+
+A fuzzy match compares whole segments, so the TM had nothing to offer when it was segmented differently from the document (issue #193). For example, the TM holds *Which heading do you want to read?*, but the document has it as two segments, *Which heading* and *do you want to read?*. The Match Panel now also shows **fragment matches**:
+- **A TM sentence that contains the whole segment.** On *Which heading*, you see the TM's *Which heading do you want to read?* → *Który nagłówek chcesz przeczytać?*, and the TM Source box shows which part is yours. Use the part of the translation you need, or let FuzzyFixer do that.
+- **A TM sentence that is part of the segment.** On *Close the valve. Then open the tap.*, you see the TM's *Close the valve.* with its translation.
+
+A fragment match is marked **✂ fragment**, and its percentage says how much of the longer text the shorter one covers. The words must match in an unbroken run, ignoring case, punctuation and tags, and a fragment has at least two words; single words are what glossaries are for. Fragments appear only where fuzzy matches leave room, never fill a segment automatically, and don't play the fuzzy-match sound. Switch them off with **Show fragment matches from the TM** on **Settings → ⚙️ General**, in the **📂 TM settings** box.
+
+### Changed (Projects · reports, glossaries and TMX exports have their own folders)
+
+The last conventions of the project folder (issue #228), next to `source/`, `target/` and `tm/`. When the project has been saved, these save dialogs now open in the project folder:
+- **`reports/`:** **Statistics → Export** and **QA → Run QA Checks → Export**.
+- **`glossary/`:** exporting a termbase from the **Termbases** tab.
+- **`tm/`:** exporting a TM, the TM database or selected segments as TMX.
+- **`target/`:** the bilingual review table, like the other exports.
+
+You can still save anywhere else. Before a project is saved, the dialogs open where they did before.
+
+### Fixed (Export · sorting the grid scrambled the exported translations)
+
+Sorting the grid, for example by source text or by length, rearranges the project's segments, and several exports read them in that order. Every export that puts translations back into the original file by position then wrote them into the wrong segments: the translation of "Apple" ended up under "Zebra". This affected:
+- memoQ bilingual DOCX, memoQ RTF and memoQ XLIFF;
+- Trados bilingual review DOCX;
+- PO and CafeTran.
+
+The plain-text, AI-friendly bilingual text, bilingual Markdown and review-table exports also came out in the sorted order. All of them now use the document order, however the grid is sorted.
+
+The Trados review DOCX export had a second problem: it read the translations from the grid's rows, so with more segments than fit on one grid page, the translations on the other pages were left out. It now reads every segment.
+
+Exporting a large SDLPPX or SDLXLIFF project is also faster. Before an export, the grid is now read in one pass instead of searched once per segment, which took minutes for a 17,000-segment package.
+
+### Fixed (memoQ XLIFF · a memoQ view imported only its first document)
+
+A `.mqxliff` exported from a memoQ **view** contains one part per document, and Supervertaler read only the first (issue #110). A view of 364 segments came in with 5. Every document is now imported, and the import message says how many documents there were.
+
+memoQ's inline codes were also imported wrongly. What memoQ stores inside a tag ended up in the segment text as `(<x id="1164" mq:catalogvalue="…"/>)`, and formatting disappeared altogether. Codes now appear as numbered tags, as in SDLXLIFF imports: `<1>`…`</1>` for a pair such as bold, `<2/>` for a placeholder such as a cross-reference. The export turns each tag back into the original memoQ code, so formatting and placeholders return to memoQ where you put them.
+
+The export also used to lose your translation in segments with tags, leaving the source text in the target. It now:
+- **Keeps memoQ's statuses:**
+  - they are imported: *Confirmed*, *Reviewer 1/2 confirmed*, *Pre-translated*, *Edited* and so on no longer all arrive as *Not started*;
+  - locked segments stay locked;
+  - on export, only segments whose translation or status changed are written, so everything else keeps memoQ's own status.
+- **Leaves empty segments alone.** It used to mark every segment as confirmed, even untranslated ones.
+
+### Added (DeepL · the CAT-tool key of DeepL Pro Advanced and Ultimate works)
+
+DeepL gives out two kinds of key:
+- the **DeepL API** key (API Free or API Pro);
+- the **authentication key for CAT tools** included with a DeepL Pro Advanced or Ultimate subscription.
+
+Supervertaler only worked with the first (issue #135). DeepL accepts the CAT-tool key only on the older version of its interface, so DeepL returned an authorization error. Now, when DeepL refuses a key, Supervertaler tries the older interface and, if the key works there, keeps using it for that key. Paste either key into the **DeepL** field on **Settings → 🌐 MT Settings**; its tooltip explains both.
+
+### Added (QA · open the project in Xbench)
+
+**QA → 🔬 Open in Xbench…** opens the current project in ApSIC Xbench for QA, as memoQ and Trados can (issue #146). Supervertaler writes the files into the project's `qa/xbench/` folder, and opening the `.xbp` starts Xbench with everything loaded:
+- **The segments** go into an XLIFF file marked as the *ongoing translation*, the part Xbench's QA checks run on. Confirmed, approved and untranslated segments keep their status.
+- **The terms of the glossaries switched on for the project** become *key terms*, for Xbench's Key Term Mismatch check. Forbidden terms are left out, and a glossary made the other way round is flipped.
+- **An Xbench project file (`.xbp`)** lists both.
+
+After fixing things in Supervertaler, run it again and press F5 in Xbench to reload. If Xbench isn't installed, Supervertaler offers to open the folder instead.
+
+### Added (Help · F1 on the newer pages)
+
+**F1** now opens the help page for **Settings → 📏 Segmentation Rules**, **Settings → 🏷️ Inline Codes**, **QA → Run QA Checks** and **QA → Check with LanguageTool**. These pages are new on [docs.supervertaler.com](https://docs.supervertaler.com/workbench/), together with *TM Matches Not Appearing* under Troubleshooting.
+
+### Fixed (Keyboard · Ctrl+O did nothing)
+
+**Ctrl+O** was the shortcut of both **Project → Open Project…** and **Project → Import → Import Document…**. Qt cannot choose between two menu items on the same key, so pressing it did nothing at all. Ctrl+O opens a project again, as Settings → Keyboard Shortcuts says, and **Import Document…** is now **Ctrl+Shift+O**.
+
+### Fixed (Tags · standalone tags like `<2/>` were not recognised)
+
+Supervertaler writes a Trados or SDLXLIFF standalone tag as `<2/>`, but two features did not recognise that form, nor `<br/>` or memoQ's `<mq:ch …/>`:
+- **Insert next tag (Ctrl+,)** never offered them.
+- **QA → Run QA Checks** did not report one missing from a translation.
+
+Both recognise every self-closing tag now, as AutoTagger already did. Pseudo-translation now keeps them intact too.
+
+### Fixed (SuperLookup · the settings page pointed to the wrong column)
+
+**SuperLookup → ⚙️ SuperLookup Settings** said SuperLookup searches the TMs and termbases ticked **Read**. Since v1.10.247 it searches the ones ticked in the **🔍 SuperLookup** column of the TMs and Termbases tabs, whether or not they are ticked Read. The note now says so.
+
+### Fixed (SuperLookup · search history kept in the old settings folder)
+
+SuperLookup's search history was still saved in `settings/` directly in your data folder. All the other settings files moved from there to `workbench/settings/` long ago. It now lives with them, and a history in the old place is picked up the first time.
+
+### Fixed (Messages · menu and tab names that no longer exist)
+
+A few messages sent you to places that have been renamed:
+- **Bilingual text export:** after exporting AI-friendly bilingual text, the message said to re-import through "File → Import". That menu has been called **Project** since v1.10.182.
+- **No TM matches:** when no TM was switched on, the log line and the Match Panel said "Resources → TM". It is the **💾 TMs** tab.
+
+They now name the menu items and tabs as they appear. The TM diagnostic script (`scripts/sv_tm_diagnose.py`) says the same.
+
+### Improved (Projects · every kind of project travels with its source files)
+
+Supervertaler already copied a project's source document into the project's `source/` folder, but only the main document (issue #228). The files a project exports back into stayed outside it, so a project moved to another computer could no longer produce its return file:
+- memoQ bilingual DOCX and memoQ XLIFF;
+- Trados review DOCX, SDLPPX packages and SDLXLIFF files;
+- CafeTran, Déjà Vu, PO and plain text/Markdown files.
+
+Saving now puts a copy of each of these in `source/` as well:
+- **Your original is still the file Supervertaler uses**, so exports are offered next to it as before. The copy is only used when the original can no longer be found, for example after you moved the project folder or opened it on another computer. An export from the copy is offered in the project's `target/` folder.
+- **Nothing is copied twice.** A file is copied again only after it has changed.
+- **Two different files with the same name get separate copies** (`doc.sdlxliff`, `doc_2.sdlxliff`), so one never replaces the other.
+
+### Changed (Projects · the backup TMX has its own tm/ folder)
+
+The automatic backup wrote `<project>_backup.tmx` next to the `.svproj`. It now goes into a `tm/` folder inside the project folder, as OmegaT keeps its TMs in `tm/` (issue #228). A backup left next to the project file by an older version is moved there.
+
+### Fixed (Projects · an export could use the file of the project you had open before)
+
+Opening a project kept the memoQ, Trados, CafeTran, Phrase, PO, Déjà Vu or SDLPPX file of the project that was open before. The export preferred that file over the one saved with the project you had just opened. Exporting the second project in the same format then built the exported file from the first project's file. Opening a project now clears all of that.
+
+### Fixed (Performance · big projects no longer freeze on import)
+
+A Trados package of 300 files and 17,000 segments (about 200,000 words) froze Supervertaler for over ten minutes on import. It now imports in about 11 seconds (issues #185 and #203). Most of the wait came from work nobody could see:
+- **The document Preview was rebuilt on every import, even behind the Match Panel,** one sentence at a time with a full re-layout after each. It is now built only when you open the Preview tab or the pop-out window, and in one go. That makes it several times faster when it is shown.
+- **Loading the grid looked up each row's segment by scanning the whole project,** 17,000 × 17,000 times. It now uses a direct lookup.
+- **The file-name banners of multi-file projects were rebuilt for all 300 files on every scroll step.** Only the banners on screen are drawn now, so scrolling a big multi-file project is smooth again.
+- **Smaller savings:**
+  - the progress bar repaints at most ten times a second;
+  - "Files: 3/300" in the status bar is counted in one pass;
+  - each grid cell's style is applied once instead of three times;
+  - reading SDLXLIFF files is 30% faster.
+
+**Starting Supervertaler is faster too.** The theme is now applied before the window is built, not afterwards to every widget in it. In our tests this cut about two seconds from each start.
+
+Nothing changes in what you see or export: the imported segments and the exported return package are byte-for-byte the same as before.
+
+### Added (QuickTrans · see where the MT engines disagree)
+
+QuickTrans lists the suggestions of several MT engines for the current segment. It now marks, character by character, where each one differs from the top result (issue #208). "Open de k**raan** langzaam." under "Open de klep langzaam." shows at a glance that only the noun differs. A small inflection or a punctuation change is just as easy to spot.
+
+This works in the docked QuickTrans panel and in the Ctrl+Alt+Q popup. The **Δ** button beside ⚙️ switches it on and off, and the choice is remembered. Only the display is marked: clicking a row, or Ctrl+1…9, still inserts that engine's exact translation.
+
+### Added (Interface · Polish)
+
+The interface can now be used in Polish (issue #190): choose **Settings → General → Language → Polski — Polish** and restart. All 1,286 strings that can currently be translated are done. That covers every menu and menu item, the toolbar, the Settings pages, and most dialog titles, buttons and options. They follow one glossary of CAT terms (pamięć tłumaczeń, baza terminologiczna, dopasowanie rozmyte, znacznik, …).
+
+The translation was produced by Claude Code and checked mechanically: every menu accelerator, placeholder, HTML tag, keyboard shortcut, emoji and product name survived. It has not yet been reviewed by a native speaker, so corrections are welcome. The file is `translations/supervertaler_pl.xlf` and opens in any CAT tool.
+
+Message boxes and some labels are still English everywhere; they are not yet wrapped for translation in any language. The list of translatable strings was also refreshed (1,102 → 1,286). The Dutch and Chinese files were updated to it, keeping all their existing translations.
+
+**Chinese is complete again too** (issue #208). The refresh left 236 new strings untranslated in both Chinese files, such as the new Settings pages and the recent dialogs. They are now translated in Simplified Chinese (简体中文) and Traditional Chinese (繁體中文, Taiwan usage), following each file's existing terminology. All 1,286 strings are translated in both.
+
+### Fixed (Projects · a failed save could destroy the project file)
+
+Saving wrote the project straight over the existing `.svproj`. If anything went wrong halfway (a full disk, a crash, a value that could not be saved), the file was left cut off and could no longer be opened. Now (issue #228):
+- **Saving is all-or-nothing.** The project is written to a temporary file next to it, which then replaces the `.svproj` in one step, so a failed save leaves the previous version intact.
+- **A `.svproj.bak` safety copy** of the previous save is kept next to the project, as OmegaT does. A damaged file never overwrites a good backup.
+- **Recovery when opening.** If a project file cannot be read, Supervertaler offers to open the backup copy and says when it was saved. The next save then replaces the damaged file.
+- **"📁 Create a dedicated folder for this project"** in New Project is now remembered between sessions, not only until you close the app.
+
+### Improved (Glossaries · synonyms are first-class citizens)
+
+Two improvements for glossary synonyms (issue #114):
+- **TermLens shows a synonym where it occurs, even next to the main term.** Take an entry *methyl-ethylketoxime* → *methyl ethyl ketoxime* with the synonym *MEKO* on both sides. In "…op basis van methyl-ethylketoxime (MEKO) en…", TermLens used to show only the main term. It now also shows **MEKO** under "(MEKO)". A synonym's chip suggests the matching target synonym when there is one (MEKO → MEKO), otherwise the main target term, and offers the other forms as alternatives. The grid highlights the synonym too.
+- **Resources → Glossaries has a Synonyms column**, listing each term's source and target synonyms, for example `MEKO → MEKO`.
+
+### Added (Editor · tags are protected in the target, as in memoQ and Trados)
+
+Inline tags in the target cell now behave as single units, so a stray keystroke can no longer leave half a tag behind (issue #113). This covers `<b>`, `</1>`, `[2}`, `{3}`, Déjà Vu `{00108}` and your own codes from Settings → Inline Codes:
+- **The cursor steps over a tag** instead of landing inside it, whether you use the arrow keys or click in it.
+- **Backspace just after a tag, or Delete just before it, removes the whole tag.** Ctrl+Z brings it back.
+- **Typing, pasting or cutting over a selection that cuts into a tag takes the whole tag.** A paste made with the cursor inside a tag lands just after it.
+
+It is on by default. To edit tags character by character again, untick **Settings → 🏷️ Inline Codes → Protect tags and codes in the target**. **Ctrl+,** still inserts the next tag from the source.
+
+### Fixed (Dark theme · glossary synonyms turned black and unreadable)
+
+In the glossary entry editor, promoting a synonym or switching its "forbidden" mark off set its text to solid black, which could not be read on the dark theme. This is the same kind of fixed per-item colour as the Clipboard Manager fix in v1.10.372. The text now takes the theme's colour; forbidden synonyms stay red.
+
+### Changed (Voice · the last pointers to Sidekick are gone)
+
+Sidekick was retired in v1.10.4, but a few places still sent you looking for it (issue #199):
+- **Settings → 🎤 Voice** was a signpost saying Voice "lives in Supervertaler Sidekick". It has been removed: Voice has its own **🎤 Voice** tab.
+- **Chat replies** were labelled "Supervertaler Sidekick"; they now say "Supervertaler".
+- **Two dictation error messages** told you to "switch to 'OpenAI Whisper API' in Sidekick → Voice". Neither that window nor that option exists any more, so the messages now give only the fix that works: reinstall, or install FFmpeg.
+
+
 ## v1.10.372 - September 29, 2026
 
 ### Added (Settings · inline codes and placeholders treated like tags)

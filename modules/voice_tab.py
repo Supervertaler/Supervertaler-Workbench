@@ -23,13 +23,16 @@ Historically named "AutoFingers"; the internal name was simplified to
 ``autofingers_layout`` settings as a one-time fallback so existing users
 keep their splitter / column widths.
 """
-from PyQt6.QtCore import Qt
+import sys
+import threading
+
+from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QComboBox,
     QSpinBox, QGroupBox, QTableWidget, QTableWidgetItem, QHeaderView,
     QAbstractItemView, QScrollArea, QFrame, QMessageBox, QSplitter, QMenu,
-    QPlainTextEdit,
+    QPlainTextEdit, QProgressBar,
 )
 
 from modules.styled_widgets import (
@@ -47,6 +50,37 @@ _TYPE_LABELS = {
 }
 
 _DISABLED_COLOUR = QColor(170, 170, 170)
+
+# Push-to-talk engines (issue #198): (settings value, label)
+_DICTATION_ENGINES = [
+    ("faster_whisper", "faster-whisper (offline, free, ~100 languages)"),
+    ("parakeet", "Parakeet V3 (offline, free, faster, 25 European languages)"),
+]
+
+
+class _ParakeetDownload(QThread):
+    """Downloads the Parakeet V3 model off the UI thread."""
+    progress = pyqtSignal(object, object, str)  # bytes done, bytes total, file
+    succeeded = pyqtSignal(str)
+    failed = pyqtSignal(str)
+    cancelled = pyqtSignal()
+
+    def __init__(self, user_data_path, parent=None):
+        super().__init__(parent)
+        self.user_data_path = user_data_path
+        self.cancel_event = threading.Event()
+
+    def run(self):
+        from modules.voice_engines import parakeet
+        try:
+            path = parakeet.download_model(
+                self.user_data_path, cancel=self.cancel_event,
+                progress=lambda done, total, name: self.progress.emit(done, total, name))
+            self.succeeded.emit(str(path))
+        except parakeet.DownloadCancelled:
+            self.cancelled.emit()
+        except Exception as exc:
+            self.failed.emit(str(exc))
 
 # Column indices
 _COL_ENABLED  = 0
@@ -311,6 +345,13 @@ class VoiceTab(QWidget):
             "dictation tool (e.g. the media fast-forward key)."
         )
         self._voice_pause_record_btn.clicked.connect(self._on_record_pause_hotkey)
+        if sys.platform == 'darwin':
+            # Recording a key needs the global keyboard listener, which macOS
+            # 26 doesn't allow off the main thread (#188)
+            self._voice_pause_record_btn.setEnabled(False)
+            self._voice_pause_record_btn.setToolTip(
+                "Not available on macOS yet: recording a key needs a keyboard "
+                "listener that macOS doesn't allow.")
         pk_row.addWidget(self._voice_pause_record_btn)
         clear_pause_btn = QPushButton("Clear")
         clear_pause_btn.clicked.connect(self._on_clear_pause_hotkey)
@@ -405,14 +446,28 @@ class VoiceTab(QWidget):
         ptt_row.addWidget(self._ptt_combo, stretch=1)
         ptt_layout.addLayout(ptt_row)
 
-        # Hard-pin push-to-talk to faster-whisper. If the user previously
-        # had pushtotalk_engine='api', force it back to faster_whisper so
-        # the rest of the app's routing reads a sensible value. The UI
-        # widget is gone; advanced users who really want the API can hand-
-        # edit dictation_settings.json (the backend still honours 'api').
-        if settings.get('pushtotalk_engine') != 'faster_whisper':
+        # Push-to-talk engine (issue #198): faster-whisper or Parakeet V3,
+        # both offline. Anything else (the old 'api' / 'auto' values) goes
+        # back to faster-whisper, so the app's routing reads a sensible
+        # value; the OpenAI API choice was removed in v1.9.493.
+        if settings.get('pushtotalk_engine') not in ('faster_whisper', 'parakeet'):
             self._set_dictation_keys(pushtotalk_engine='faster_whisper')
-        self._ptt_engine_combo = None  # widget removed in v1.9.493
+            settings['pushtotalk_engine'] = 'faster_whisper'
+        self._ptt_engine_combo = None  # the v1.9.441 API/local dropdown, removed in v1.9.493
+        eng_row = QHBoxLayout()
+        eng_row.addWidget(QLabel("Engine:"))
+        self._dictation_engine_combo = QComboBox()
+        for key, label in _DICTATION_ENGINES:
+            self._dictation_engine_combo.addItem(label, key)
+        self._dictation_engine_combo.setCurrentIndex(
+            max(self._dictation_engine_combo.findData(settings.get('pushtotalk_engine')), 0))
+        self._dictation_engine_combo.setToolTip(
+            "faster-whisper covers about 100 languages. NVIDIA Parakeet V3 covers 25 "
+            "European languages, detects the language itself, and transcribes much "
+            "faster; its model (about 650 MB) is downloaded once.")
+        eng_row.addWidget(self._dictation_engine_combo, stretch=1)
+        ptt_layout.addLayout(eng_row)
+        ptt_layout.addWidget(self._build_parakeet_row())
 
         # Whisper Model controls live inside this group now, since
         # they only affect this dictation path (Always-On is Vosk).
@@ -469,6 +524,9 @@ class VoiceTab(QWidget):
             settings.get('language', 'Auto (use project target language)'))
         lang_row.addWidget(self._lang_combo, stretch=1)
         ptt_layout.addLayout(lang_row)
+        self._whisper_model_widgets = [model_info, self._model_combo]
+        self._dictation_engine_combo.currentIndexChanged.connect(self._on_dictation_engine_changed)
+        self._apply_dictation_engine(self._dictation_engine_combo.currentData())
 
         # The separate Whisper Model group is gone in v1.9.493 – its
         # controls are above. _whisper_group kept as None for the
@@ -1081,6 +1139,128 @@ class VoiceTab(QWidget):
     def _sync_commands_only_for_engine(self):
         """Back-compat shim – delegates to the new unified sync method."""
         self._sync_engine_dependent_widgets()
+
+    # -----------------------------------------------------------------
+    # Parakeet V3 (issue #198)
+    # -----------------------------------------------------------------
+    def _build_parakeet_row(self) -> QWidget:
+        """Model status, download progress and Download / Cancel / Remove."""
+        box = QWidget()
+        lay = QVBoxLayout(box)
+        lay.setContentsMargins(0, 0, 0, 0)
+        row = QHBoxLayout()
+        self._parakeet_status = QLabel("")
+        self._parakeet_status.setWordWrap(True)
+        self._parakeet_status.setStyleSheet("font-size: 8pt;")
+        row.addWidget(self._parakeet_status, stretch=1)
+        self._parakeet_download_btn = QPushButton("⬇ Download")
+        self._parakeet_cancel_btn = QPushButton("Cancel")
+        self._parakeet_remove_btn = QPushButton("Remove")
+        self._parakeet_remove_btn.setToolTip("Delete the downloaded Parakeet model from this computer")
+        self._parakeet_download_btn.clicked.connect(self._start_parakeet_download)
+        self._parakeet_cancel_btn.clicked.connect(self._cancel_parakeet_download)
+        self._parakeet_remove_btn.clicked.connect(self._remove_parakeet_model)
+        for b in (self._parakeet_download_btn, self._parakeet_cancel_btn, self._parakeet_remove_btn):
+            row.addWidget(b)
+        lay.addLayout(row)
+        self._parakeet_progress = QProgressBar()
+        self._parakeet_progress.setVisible(False)
+        lay.addWidget(self._parakeet_progress)
+        self._parakeet_box = box
+        self._parakeet_worker = None
+        return box
+
+    def _user_data_path(self):
+        return getattr(self._parent_app, 'user_data_path', None) or ""
+
+    def _on_dictation_engine_changed(self, idx: int):
+        engine = self._dictation_engine_combo.itemData(idx) or 'faster_whisper'
+        self._set_dictation_keys(pushtotalk_engine=engine)
+        self._apply_dictation_engine(engine)
+
+    def _apply_dictation_engine(self, engine: str):
+        """Show the controls that apply to the chosen engine: the Whisper
+        model for faster-whisper, the model download for Parakeet, which
+        also picks the language itself."""
+        parakeet = engine == 'parakeet'
+        for w in getattr(self, '_whisper_model_widgets', []):
+            w.setEnabled(not parakeet)
+        self._lang_combo.setEnabled(not parakeet)
+        self._lang_combo.setToolTip("Parakeet V3 detects the language itself" if parakeet else "")
+        self._parakeet_box.setVisible(parakeet)
+        self._refresh_parakeet_row()
+
+    def _refresh_parakeet_row(self):
+        from modules.voice_engines import parakeet
+        downloading = self._parakeet_worker is not None and self._parakeet_worker.isRunning()
+        installed = parakeet.is_installed(self._user_data_path())
+        available = parakeet.is_available()
+        if downloading:
+            pass  # the progress handler keeps the label current
+        elif not available:
+            self._parakeet_status.setText(
+                "⚠ Parakeet needs the onnx-asr and onnxruntime packages: "
+                "<code>pip install --upgrade supervertaler</code>")
+        elif installed:
+            mb = parakeet.installed_size(self._user_data_path()) / 1e6
+            self._parakeet_status.setText(f"✓ Parakeet V3 model downloaded ({mb:,.0f} MB)")
+        else:
+            self._parakeet_status.setText(
+                f"The Parakeet V3 model isn't downloaded yet: about "
+                f"{parakeet.PARAKEET_V3.approx_mb} MB from Hugging Face, once.")
+        self._parakeet_download_btn.setVisible(not downloading and not installed)
+        self._parakeet_download_btn.setEnabled(available)
+        self._parakeet_cancel_btn.setVisible(downloading)
+        self._parakeet_remove_btn.setVisible(installed and not downloading)
+        self._parakeet_progress.setVisible(downloading)
+
+    def _start_parakeet_download(self):
+        if self._parakeet_worker is not None and self._parakeet_worker.isRunning():
+            return
+        worker = _ParakeetDownload(self._user_data_path(), self)
+        worker.progress.connect(self._on_parakeet_progress)
+        worker.succeeded.connect(lambda _p: self._parakeet_download_ended("✓ Download complete."))
+        worker.failed.connect(lambda msg: self._parakeet_download_ended(f"⚠ Download failed: {msg}", error=True))
+        worker.cancelled.connect(lambda: self._parakeet_download_ended("Download cancelled."))
+        self._parakeet_worker = worker
+        self._parakeet_progress.setRange(0, 0)
+        self._parakeet_status.setText("Getting the file list from Hugging Face…")
+        worker.start()
+        self._refresh_parakeet_row()
+
+    def _on_parakeet_progress(self, done, total, name):
+        if total:
+            self._parakeet_progress.setRange(0, 1000)
+            self._parakeet_progress.setValue(int(1000 * done / total))
+        self._parakeet_status.setText(
+            f"Downloading Parakeet V3: {done / 1e6:,.0f} of {total / 1e6:,.0f} MB ({name})")
+
+    def _cancel_parakeet_download(self):
+        if self._parakeet_worker is not None:
+            self._parakeet_worker.cancel_event.set()
+            self._parakeet_status.setText("Cancelling…")
+
+    def _parakeet_download_ended(self, message: str, error: bool = False):
+        worker, self._parakeet_worker = self._parakeet_worker, None
+        if worker is not None:
+            worker.wait(2000)
+        self._refresh_parakeet_row()
+        if error:
+            self._parakeet_status.setText(message)
+        log = getattr(self._parent_app, 'log', None)
+        if callable(log):
+            log(f"🎤 Parakeet V3: {message}")
+
+    def _remove_parakeet_model(self):
+        from modules.voice_engines import parakeet
+        reply = QMessageBox.question(
+            self, "Remove Parakeet V3",
+            "Delete the downloaded Parakeet V3 model from this computer? "
+            "You can download it again at any time.")
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        parakeet.remove_model(self._user_data_path())
+        self._refresh_parakeet_row()
 
     def _sync_engine_dependent_widgets(self):
         """No-op kept as a safe call site.

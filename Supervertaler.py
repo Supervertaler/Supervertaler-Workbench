@@ -294,10 +294,11 @@ if sys.platform == 'win32':
 import pyperclip  # For clipboard operations in Superlookup
 from modules.superlookup import SuperlookupEngine  # Superlookup engine
 from modules.pseudo_translate_dialog import run_pseudo_translation  # Pseudo-translation export test (dialog + apply)
-from modules.project_assets import bundle_source, resolve_source_path, ensure_target_dir, nest_in_own_folder  # Project-folder model (issue #228)
+from modules.project_assets import bundle_source, resolve_source_path, ensure_target_dir, nest_in_own_folder, write_project_file, read_backup, bundle_round_trip_sources, restore_round_trip_sources, is_in_source_dir, TM_SUBDIR, REPORTS_SUBDIR, GLOSSARY_SUBDIR  # Project-folder model (issue #228)
 from modules.voice_dictation_lite import QuickDictationThread  # Voice dictation
 from modules.voice_commands import VoiceCommandManager, VoiceCommand, ContinuousVoiceListener  # Voice commands (Talon-style)
 from modules import inline_codes as _inline_codes  # User-defined inline codes / placeholders (issue #194)
+from modules import tag_protection as _tag_protection  # Tags as single units in the target cell (issue #113)
 from modules.voice_command_dialog import VoiceCommandEditDialog  # Voice command edit dialog
 from modules.styled_widgets import CheckmarkCheckBox, PurpleCheckmarkCheckBox, TealCheckmarkCheckBox, CheckmarkRadioButton
 from modules.statuses import (
@@ -1174,9 +1175,13 @@ def expand_compact_tags(text: str, tag_map: dict) -> str:
 
 # Combined pattern for memoQ tags, HTML tags, and Trados/SDLXLIFF numeric tags
 # memoQ: [N}, {N], [N]
-# HTML: <tag>, </tag>, <tag/>, <tag attr="value"> - includes hyphenated tags like li-o, li-b
-# Trados/SDLXLIFF: <N>, </N> (numeric tags from SDLXLIFF paired elements)
-_ALL_TAGS_PATTERN = r'(\[\d+\}|\{\d+\]|\[\d+\]|</?[a-zA-Z][a-zA-Z0-9-]*(?:\s+[^>]*)?>|</?\d+>)'
+# HTML/XML: <tag>, </tag>, <tag/>, <tag attr="value"> - includes hyphenated tags
+#   like li-o, li-b, and namespaced ones like memoQ's <mq:ch val="→" />
+# Trados/SDLXLIFF: <N>, </N>, and standalone <N/>
+# Self-closing forms without a space (<2/>, <br/>) used to be missed, so the
+# standalone tags of every SDLXLIFF/Trados import were never offered by Insert
+# next tag (Ctrl+,) and a lost one went unreported by the QA tag check.
+_ALL_TAGS_PATTERN = r'(\[\d+\}|\{\d+\]|\[\d+\]|</?\d+/?>|</?[a-zA-Z][a-zA-Z0-9._:-]*(?:\s+[^>]*)?/?>)'
 
 
 def extract_all_tags(text: str) -> list:
@@ -1198,10 +1203,9 @@ def extract_all_tags(text: str) -> list:
     return [tag for _, _, tag in sorted(found)]
 
 
-# AutoTagger uses its own, more complete pattern than extract_all_tags: it also
-# matches self-closing forms (numbered <2/> and HTML <x1/>) which the SDLXLIFF/
-# Trados standalone tags use. Kept separate so extract_all_tags' behaviour (used
-# by other features) is unchanged.
+# AutoTagger's pattern – now the same as extract_all_tags'. It matches
+# self-closing forms (numbered <2/> and HTML <x1/>) which the SDLXLIFF/Trados
+# standalone tags use.
 # The name part allows XML QName characters — letters, digits, '.', '_', '-'
 # and ':'. The colon matters: memoQ bilingual files carry NAMESPACED tags such
 # as <mq:ch val="→" />, and a name class of [a-zA-Z0-9-] stopped at the colon,
@@ -2021,6 +2025,7 @@ class Project:
     original_txt_path: str = None  # Path to original simple text file for round-trip export
     dejavu_source_path: str = None  # Path to original Déjà Vu bilingual RTF for round-trip export
     po_source_path: str = None  # Path to original GNU gettext .po / .pot for round-trip export
+    bundled_sources: Dict[str, Any] = None  # {field: "source/<name>"} copies of the round-trip sources above (#228)
     concordance_geometry: Dict[str, int] = None  # Window geometry for Concordance Search {x, y, width, height}
     # Multi-file project support
     files: List[Dict[str, Any]] = None  # List of files in project: [{id, name, path, type, segment_count, ...}]
@@ -2118,6 +2123,8 @@ class Project:
             result['dejavu_source_path'] = self.dejavu_source_path
         if self.po_source_path:
             result['po_source_path'] = self.po_source_path
+        if self.bundled_sources:
+            result['bundled_sources'] = self.bundled_sources
         
         # Add UI state
         if self.concordance_geometry:
@@ -2215,6 +2222,8 @@ class Project:
         # Store .po / .pot source path if it exists
         if 'po_source_path' in data:
             project.po_source_path = data['po_source_path']
+        if isinstance(data.get('bundled_sources'), dict):
+            project.bundled_sources = data['bundled_sources']
         # Store concordance window geometry if it exists
         if 'concordance_geometry' in data:
             project.concordance_geometry = data['concordance_geometry']
@@ -3084,6 +3093,43 @@ def is_triple_click(widget, event) -> bool:
         return (event.button() == Qt.MouseButton.LeftButton and bool(last)
                 and (event.timestamp() - last) <= QApplication.doubleClickInterval())
     except Exception:
+        return False
+
+
+class _GridStyleBatch:
+    """Coalesces grid-cell stylesheet rebuilds while a row is built (issue #185).
+
+    setStyleSheet re-polishes the widget, and building a row used to rebuild
+    each editor's sheet three times (constructor, font size, row colour) –
+    a third of the time it takes to fill a page of the grid. Inside
+    ``with _GridStyleBatch():`` a rebuild is only noted, and each editor gets
+    its final sheet once, on exit.
+    """
+    depth = 0
+    pending = {}  # id(widget) → widget
+
+    def __enter__(self):
+        _GridStyleBatch.depth += 1
+        return self
+
+    def __exit__(self, *exc):
+        _GridStyleBatch.depth -= 1
+        if _GridStyleBatch.depth == 0:
+            widgets = list(_GridStyleBatch.pending.values())
+            _GridStyleBatch.pending.clear()
+            for widget in widgets:
+                try:
+                    widget._rebuild_grid_stylesheet()
+                except RuntimeError:
+                    pass  # deleted before the row was finished
+        return False
+
+    @classmethod
+    def defer(cls, widget) -> bool:
+        """True (and the rebuild noted) while a batch is open."""
+        if cls.depth:
+            cls.pending[id(widget)] = widget
+            return True
         return False
 
 
@@ -4551,6 +4597,8 @@ class ReadOnlyGridTextEditor(QTextEdit):
 
     def _rebuild_grid_stylesheet(self):
         """Compose this cell's stylesheet from current bg colour + font size."""
+        if _GridStyleBatch.defer(self):
+            return
         # v1.10.229: When "Allow Replace in Source Text" is on, override the
         # cell background with a soft amber so the user can see at a glance
         # which cells are dangerous to touch. Mirrors the inline-editor
@@ -4778,20 +4826,10 @@ class TagHighlighter(QSyntaxHighlighter):
         # `wj?` after each "/" tolerates the display-only WORD JOINER that
         # protect_tags_from_linebreak inserts (to stop tags wrapping mid-way).
         # It's optional, so tags without the joiner still match.
-        wj = WORD_JOINER
-        tag_patterns = [
-            r'</?' + wj + r'?[a-zA-Z][a-zA-Z0-9-]*/?' + wj + r'?(?:\s[^>]*)?>',  # HTML/XML tags
-            r'</?' + wj + r'?\d+>',                       # Trados numeric: <1>, </1>
-            r'\{/?' + wj + r'?\d+/?' + wj + r'?\}',       # Compact tag placeholders: {1}, {/1}, {1/}
-            r'\[\d+[}\]]',                                # memoQ numeric: [1}, [1]
-            r'\{\d+[}\]]',                                # memoQ numeric: {1}, {1]
-            r'\[[^}\]]+\}',                               # memoQ mixed: [anything} (exclude } and ])
-            r'\{[^\[\]]+\]',                              # memoQ mixed: {anything] (exclude [ and ])
-            r'\[[a-zA-Z][^}\]]*\s[^}\]]*\]',              # memoQ content: [tag attr...] (exclude } and ])
-            r'\{[a-zA-Z][a-zA-Z0-9_-]*\}',                # memoQ closing: {uicontrol}, {MQ}
-            r'\{\d{5}\}',                                 # Déjà Vu tags: {00108}, {00109}, etc.
-        ]
-        combined_pattern = re.compile('|'.join(tag_patterns))
+        # The pattern lives in modules/tag_protection.py (TAG_PATTERNS lists
+        # each form) so tag protection in the target cell (issue #113) guards
+        # exactly what is coloured here.
+        combined_pattern = _tag_protection.TAG_RE
 
         matches_found = list(combined_pattern.finditer(text))
 
@@ -5091,6 +5129,11 @@ class EditableGridTextEditor(QTextEdit):
         # Set minimum height to 0 - let content determine size
         self.setMinimumHeight(0)
         self.setMaximumHeight(16777215)  # Qt's max int
+
+        # Tag protection (issue #113): the cursor never rests inside a tag
+        self._last_cursor_pos = 0
+        self._snapping_out_of_tag = False
+        self.cursorPositionChanged.connect(self._keep_cursor_out_of_tags)
 
     def mouseDoubleClickEvent(self, event):
         """Handle double-click to select words properly when invisibles are shown.
@@ -5917,6 +5960,12 @@ class EditableGridTextEditor(QTextEdit):
                 event.accept()
                 return
 
+        # Tag protection (issue #113): Backspace/Delete remove a tag whole,
+        # and edits never cut a tag in half
+        if self._protect_tags_for_key(event):
+            event.accept()
+            return
+
         # v1.10.229: Shift+F3 — toggle case of the selection (or the word at
         # the cursor if there is no selection). Cycles:
         #   lowercase → Sentence case → UPPERCASE → lowercase
@@ -6237,6 +6286,104 @@ class EditableGridTextEditor(QTextEdit):
             # as None so a subsequent Backspace deletes a character
             # normally.
             _ = had_pending  # marker var for future debugging
+
+    # ── Tag protection (issue #113) ────────────────────────────────────────
+
+    def _tag_protection_on(self) -> bool:
+        mw = self._get_main_window()
+        return bool(getattr(mw, 'protect_tags_in_target', True)) if mw else False
+
+    def _protect_tags_for_key(self, event) -> bool:
+        """Keep tags whole for this key press. Returns True when the key has
+        been dealt with here (a whole tag removed); otherwise the selection
+        or cursor may have been adjusted and Qt handles the key as usual."""
+        from PyQt6.QtGui import QKeySequence, QTextCursor
+        if not self._tag_protection_on():
+            return False
+        spans = _tag_protection.tag_spans(self.toPlainText())
+        if not spans:
+            return False
+        key, mods = event.key(), event.modifiers()
+        text = event.text()
+        edits = (key in (Qt.Key.Key_Backspace, Qt.Key.Key_Delete)
+                 or event.matches(QKeySequence.StandardKey.Cut)
+                 or event.matches(QKeySequence.StandardKey.Paste)
+                 or bool(text and text.isprintable()))
+        if not edits:
+            return False
+        cursor = self.textCursor()
+        if cursor.hasSelection():
+            self._select_whole_tags(spans)
+            return False
+        pos = cursor.position()
+        if mods == Qt.KeyboardModifier.NoModifier and key in (Qt.Key.Key_Backspace, Qt.Key.Key_Delete):
+            span = (_tag_protection.backspace_span(spans, pos) if key == Qt.Key.Key_Backspace
+                    else _tag_protection.delete_span(spans, pos))
+            if span is None:
+                return False
+            cursor.setPosition(span[0])
+            cursor.setPosition(span[1], QTextCursor.MoveMode.KeepAnchor)
+            cursor.removeSelectedText()
+            self.setTextCursor(cursor)
+            return True
+        outside = _tag_protection.snap(spans, pos, forward=True)
+        if outside != pos:
+            cursor.setPosition(outside)
+            self.setTextCursor(cursor)
+        return False
+
+    def _select_whole_tags(self, spans=None):
+        """Widen the selection so it never cuts through a tag."""
+        from PyQt6.QtGui import QTextCursor
+        cursor = self.textCursor()
+        if not cursor.hasSelection():
+            return
+        spans = spans if spans is not None else _tag_protection.tag_spans(self.toPlainText())
+        anchor, pos = cursor.anchor(), cursor.position()
+        start, end = _tag_protection.expand(spans, anchor, pos)
+        if (min(anchor, pos), max(anchor, pos)) == (start, end):
+            return
+        forward = pos >= anchor
+        self._snapping_out_of_tag = True
+        try:
+            cursor.setPosition(start if forward else end)
+            cursor.setPosition(end if forward else start, QTextCursor.MoveMode.KeepAnchor)
+            self.setTextCursor(cursor)
+        finally:
+            self._snapping_out_of_tag = False
+
+    def _keep_cursor_out_of_tags(self):
+        """Step the cursor over a tag instead of letting it land inside one."""
+        if self._snapping_out_of_tag:
+            return
+        cursor = self.textCursor()
+        pos = cursor.position()
+        if cursor.hasSelection() or not self._tag_protection_on():
+            self._last_cursor_pos = pos
+            return
+        spans = _tag_protection.tag_spans(self.toPlainText())
+        new_pos = _tag_protection.snap(spans, pos, forward=pos >= self._last_cursor_pos)
+        if new_pos != pos:
+            self._snapping_out_of_tag = True
+            try:
+                cursor.setPosition(new_pos)
+                self.setTextCursor(cursor)
+            finally:
+                self._snapping_out_of_tag = False
+        self._last_cursor_pos = new_pos
+
+    def insertFromMimeData(self, source):
+        """Pasting (Ctrl+V or the context menu) never lands inside a tag or
+        replaces half of one (issue #113)."""
+        if self._tag_protection_on():
+            cursor = self.textCursor()
+            spans = _tag_protection.tag_spans(self.toPlainText())
+            if cursor.hasSelection():
+                self._select_whole_tags(spans)
+            elif _tag_protection.inside(spans, cursor.position()):
+                cursor.setPosition(_tag_protection.snap(spans, cursor.position(), forward=True))
+                self.setTextCursor(cursor)
+        super().insertFromMimeData(source)
 
     def _handle_add_to_nt(self):
         """Handle Ctrl+Alt+N: Add selected text to active non-translatable list(s)"""
@@ -6577,6 +6724,8 @@ class EditableGridTextEditor(QTextEdit):
 
     def _rebuild_grid_stylesheet(self):
         """Compose this cell's stylesheet from current bg colour + font size."""
+        if _GridStyleBatch.defer(self):
+            return
         border_color = EditableGridTextEditor.focus_border_color
         border_thickness = EditableGridTextEditor.focus_border_thickness
         bg_rule = f"background-color: {self._grid_bg_color};" if self._grid_bg_color else ""
@@ -7652,8 +7801,9 @@ class TMSearchWorker(QThread):
     def __init__(self, db_path: str, source_text: str, segment_id: int,
                  tm_ids: list = None, source_lang: str = None, target_lang: str = None,
                  fuzzy_threshold: float = 0.75, max_matches: int = 10,
-                 tm_metadata: dict = None):
+                 tm_metadata: dict = None, fragment_matches: bool = True):
         super().__init__()
+        self.fragment_matches = fragment_matches  # issue #193
         self.db_path = db_path
         self.source_text = source_text
         self.segment_id = segment_id
@@ -7740,6 +7890,27 @@ class TMSearchWorker(QThread):
                     'tm_id': match['tm_id'],
                     'reverse_match': match.get('reverse_match', False),
                 })
+
+            # Fragment matches (issue #193): TM sentences that contain this
+            # whole segment, or that are part of it, when fuzzy matching
+            # leaves room – a document cut up differently from the TM
+            if self.fragment_matches and len(results) < self.max_matches and not self._cancelled:
+                fragments = db.search_fragment_matches(
+                    self.source_text, tm_ids=self.tm_ids,
+                    source_lang=self.source_lang, target_lang=self.target_lang,
+                    max_results=min(3, self.max_matches - len(results)),
+                    exclude_sources={m['source_text'] for m in fuzzy_matches})
+                for match in fragments:
+                    results.append({
+                        'source': match['source_text'],
+                        'target': match['target_text'],
+                        'similarity': match['similarity'],
+                        'match_pct': match['match_pct'],
+                        'tm_name': self.tm_metadata.get(match['tm_id'], {}).get('name', match['tm_id']),
+                        'tm_id': match['tm_id'],
+                        'reverse_match': False,
+                        'fragment': match['fragment'],
+                    })
 
             if not self._cancelled:
                 self.results_ready.emit(self.segment_id, results)
@@ -8923,6 +9094,12 @@ class _ImportProgressDialog:
             return
         if self.cancelled():
             return
+        # Repaint at most ten times a second (issue #185): each repaint pumps
+        # the event loop, and doing it every few rows added seconds to a big load.
+        now = time.monotonic()
+        if rows_done < total and now - getattr(self, '_last_grid_repaint', 0.0) < 0.1:
+            return
+        self._last_grid_repaint = now
         self._dialog.setValue(int(rows_done))
         self._dialog.setLabelText(
             f"Loading segments into grid… ({rows_done:,}/{total:,})"
@@ -9068,6 +9245,7 @@ class SupervertalerQt(QMainWindow):
         # + auto_insert_100_percent_matches pair). When you select an empty segment
         # that has a 100% TM match, its translation is filled in automatically.
         self.auto_fill_100_matches = True  # Auto-fill empty segments with 100% TM matches
+        self.tm_fragment_matches = True  # Fragment matches in the Match Panel (issue #193)
         self.auto_fill_confirm = False  # Mark auto-filled segments as confirmed (else draft)
         # Old attrs kept for back-compat with any lingering references; the live
         # code paths now read self.auto_fill_100_matches.
@@ -9378,16 +9556,20 @@ class SupervertalerQt(QMainWindow):
         self.theme_manager = None  # Will be initialized after UI setup
         
         self.recent_projects_file = self.user_data_path / "workbench" / "settings" / "recent_projects.json"
-        
+
+        # Apply the theme's application stylesheet BEFORE building the UI, so
+        # each widget is styled once as it is created. Applied afterwards it
+        # re-styled every widget in the window – three seconds of a cold start
+        # (issue #203). self.theme_manager stays None during init_ui, as before.
+        theme_manager = ThemeManager(self.user_data_path)
+        # Apply saved global UI font scale
+        theme_manager.font_scale = self._get_global_ui_font_scale()
+        theme_manager.apply_theme(QApplication.instance())
+
         # Initialize UI
         self.init_ui()
         
-        # Initialize theme manager and apply theme
-        self.theme_manager = ThemeManager(self.user_data_path)
-        # Apply saved global UI font scale
-        saved_font_scale = self._get_global_ui_font_scale()
-        self.theme_manager.font_scale = saved_font_scale
-        self.theme_manager.apply_theme(QApplication.instance())
+        self.theme_manager = theme_manager
 
         # Dark themes: rewrite the fixed light colours in widgets' own
         # stylesheets – now, and for dialogs and lazily built tabs as they
@@ -11491,15 +11673,19 @@ class SupervertalerQt(QMainWindow):
                 files = getattr(self.current_project, 'files', [])
                 
                 if is_multifile and files:
-                    # Count completed files
+                    # Count completed files – one pass over the segments, not
+                    # one per file (300 files × 17,000 segments, issue #185).
+                    per_file = {}  # file_id → [segments, confirmed]
+                    for s in segments:
+                        counts = per_file.setdefault(getattr(s, 'file_id', None), [0, 0])
+                        counts[0] += 1
+                        if s.status in confirmed_statuses:
+                            counts[1] += 1
                     completed_files = 0
                     for file_info in files:
-                        file_id = file_info['id']
-                        file_segs = [s for s in segments if getattr(s, 'file_id', None) == file_id]
-                        if file_segs:
-                            conf_count = sum(1 for s in file_segs if s.status in confirmed_statuses)
-                            if conf_count == len(file_segs):
-                                completed_files += 1
+                        total, confirmed = per_file.get(file_info['id'], (0, 0))
+                        if total and confirmed == total:
+                            completed_files += 1
                     
                     self.progress_files_label.setText(f"📁 Files: {completed_files}/{len(files)}")
                     self.progress_files_label.setToolTip(
@@ -11615,6 +11801,21 @@ class SupervertalerQt(QMainWindow):
 
         file_menu.addSeparator()
 
+        # Project packages: the whole project, with its TMs, glossaries and
+        # prompt, in one file (issue #156)
+        pack_action = QAction(self.tr("📦 &Pack Project (.svpkg)..."), self)
+        pack_action.setToolTip(self.tr("Put the project, its TMs, glossaries and prompt into one file, "
+                                       "to carry on with it on another computer"))
+        pack_action.triggered.connect(self.export_project_package)
+        file_menu.addAction(pack_action)
+
+        unpack_action = QAction(self.tr("📦 Open Pac&kage (.svpkg)..."), self)
+        unpack_action.setToolTip(self.tr("Unpack a project package and open the project"))
+        unpack_action.triggered.connect(self.open_project_package)
+        file_menu.addAction(unpack_action)
+
+        file_menu.addSeparator()
+
         close_action = QAction(self.tr("&Close Project"), self)
         close_action.triggered.connect(self.close_project)
         file_menu.addAction(close_action)
@@ -11638,7 +11839,9 @@ class SupervertalerQt(QMainWindow):
             "on export."
         ))
         import_document_action.triggered.connect(self.import_document)
-        import_document_action.setShortcut("Ctrl+O")
+        # Not Ctrl+O: that is Open Project (QKeySequence.StandardKey.Open), and
+        # two menu actions on one key are ambiguous to Qt, so neither fired.
+        import_document_action.setShortcut("Ctrl+Shift+O")
         import_menu.addAction(import_document_action)
 
         import_txt_action = QAction(self.tr("&Text / Markdown File (TXT, MD)..."), self)
@@ -12181,12 +12384,36 @@ class SupervertalerQt(QMainWindow):
         languagetool_action.triggered.connect(self.show_languagetool_dialog)
         self.qa_menu.addAction(languagetool_action)
 
+        # Open the project in ApSIC Xbench, as memoQ and Trados can (#146)
+        xbench_action = QAction(self.tr("🔬 Open in &Xbench..."), self)
+        xbench_action.setToolTip(self.tr(
+            "Open the project in ApSIC Xbench for QA, with the terms of your glossaries as "
+            "key terms. Run it again after making changes, then press F5 in Xbench to reload."))
+        xbench_action.triggered.connect(self.open_in_xbench)
+        self.qa_menu.addAction(xbench_action)
+
         proofreading_submenu = self.qa_menu.addMenu(self.tr("✅ &Proofreading"))
 
         proofread_action = QAction(self.tr("✅ &Proofread Translation..."), self)
         proofread_action.setToolTip(self.tr("Use AI to proofread and verify translation quality"))
         proofread_action.triggered.connect(self.show_proofread_dialog)
         proofreading_submenu.addAction(proofread_action)
+
+        # A second model reviews the translations against the project's own
+        # prompt and glossary – the translate–edit–proofread pattern (#242 tier 2)
+        cross_review_action = QAction(self.tr("🔀 Cross-model &Review..."), self)
+        cross_review_action.setToolTip(self.tr(
+            "Have a second AI model check the translations against their source and the "
+            "project's prompt and glossary; its flags appear as XR proofreading comments"))
+        cross_review_action.triggered.connect(lambda: self.show_cross_review_dialog())
+        proofreading_submenu.addAction(cross_review_action)
+
+        extract_tc_action = QAction(self.tr("⟦TC⟧ Move &Translator Comments out of the Target Text"), self)
+        extract_tc_action.setToolTip(self.tr(
+            "Move the ⟦TC: …⟧ comments an AutoPrompt prompt has the AI add to its translations "
+            "into proofreading comments, so they can't end up in the exported file"))
+        extract_tc_action.triggered.connect(self.extract_translator_comments)
+        proofreading_submenu.addAction(extract_tc_action)
 
         # (The separate "Proofreading Results" pop-up window was removed in
         # v1.10.327 — issue #234 follow-up. It's superseded by the Proofreading
@@ -13730,6 +13957,7 @@ class SupervertalerQt(QMainWindow):
                 tm_choices=tm_choices,
                 preselected_tm_ids=preselected,
                 project_name=getattr(self.current_project, 'name', '') or '',
+                export_dir=self._project_subdir(REPORTS_SUBDIR),
             )
             dialog.exec()
         except Exception as e:
@@ -16513,9 +16741,41 @@ class SupervertalerQt(QMainWindow):
         else:
             self.export_target_only_docx()
 
-    def _project_export_path(self, filename):
-        """Default save path for a generated translation: the project's target/
-        folder (project-folder model, #228).
+    def _export_dir_beside(self, source_path) -> Path:
+        """Where a round-trip export is offered by default: next to the file it
+        came from – or in the project's target/ folder when that file is the
+        copy in source/ (#228), which is no place for a translation."""
+        source_path = Path(source_path)
+        project_path = getattr(self, 'project_file_path', None)
+        if project_path:
+            project_dir = os.path.dirname(os.path.abspath(project_path))
+            if is_in_source_dir(str(source_path), project_dir):
+                try:
+                    return Path(ensure_target_dir(project_dir))
+                except Exception:
+                    pass
+        return source_path.parent
+
+    def _segments_in_document_order(self):
+        """The project's segments in document order, however the grid is sorted.
+
+        Sorting the grid reorders ``current_project.segments`` itself, so an
+        export that reads that list after a sort by source text wrote the
+        segments in that order – and the round-trip exports, which pair the
+        n-th segment with the n-th unit of the original file, put every
+        translation into the wrong unit. The segment id is the document
+        position; Document Order sorts by it as well.
+        """
+        segments = list(self.current_project.segments) if self.current_project else []
+        try:
+            return sorted(segments, key=lambda seg: int(seg.id))
+        except (TypeError, ValueError):
+            return list(getattr(self, '_original_segment_order', None) or segments)
+
+    def _project_export_path(self, filename, subdir="target"):
+        """Default save path for something the project produces: a translation
+        in target/, or a report (reports/), glossary (glossary/) or TMX (tm/)
+        in its own subfolder – the project-folder model (#228).
 
         Falls back to the bare filename — so Qt opens the last-used directory —
         when the project hasn't been saved yet (no folder exists to write into).
@@ -16524,10 +16784,17 @@ class SupervertalerQt(QMainWindow):
         if project_path:
             try:
                 return os.path.join(
-                    ensure_target_dir(os.path.dirname(project_path)), filename)
+                    ensure_target_dir(os.path.dirname(project_path), subdir), filename)
             except Exception as exc:
-                self.log(f"⚠ Could not prepare the project's target/ folder: {exc}")
+                self.log(f"⚠ Could not prepare the project's {subdir}/ folder: {exc}")
         return filename
+
+    def _project_subdir(self, subdir):
+        """``<project folder>/<subdir>`` of the saved project (not created), or None."""
+        project_path = getattr(self, 'project_file_path', None)
+        if not project_path:
+            return None
+        return os.path.join(os.path.dirname(os.path.abspath(project_path)), subdir)
 
     def _prompt_for_original_source(self, stored_hint=None):
         """The formatting-preserving export needs the project's original source
@@ -16674,7 +16941,7 @@ class SupervertalerQt(QMainWindow):
                 return
             
             # Check if there are any translations
-            segments = list(self.current_project.segments)
+            segments = self._segments_in_document_order()
             translated_count = sum(1 for seg in segments if seg.target and seg.target.strip())
             
             if translated_count == 0:
@@ -18003,7 +18270,7 @@ class SupervertalerQt(QMainWindow):
             QMessageBox.warning(self, "No Data", "No segments to export")
             return
         
-        segments = list(self.current_project.segments)
+        segments = self._segments_in_document_order()
 
         if not segments:
             QMessageBox.warning(self, "No Data", "No segments to export")
@@ -18024,7 +18291,7 @@ class SupervertalerQt(QMainWindow):
             project_name = Path(self.current_project_path).stem
         
         format_suffix = "_bilingual_formatted" if apply_formatting else "_bilingual"
-        default_name = f"{project_name}{format_suffix}.docx"
+        default_name = self._project_export_path(f"{project_name}{format_suffix}.docx")
         
         # Get save path
         file_path, _ = QFileDialog.getSaveFileName(
@@ -18585,7 +18852,7 @@ class SupervertalerQt(QMainWindow):
             file_path, _ = QFileDialog.getSaveFileName(
                 self, 
                 "Export Selected Segments as TMX", 
-                "supervertaler_selected.tmx", 
+                self._project_export_path("supervertaler_selected.tmx", TM_SUBDIR), 
                 "TMX Files (*.tmx);;All Files (*.*)"
             )
             
@@ -18674,7 +18941,7 @@ class SupervertalerQt(QMainWindow):
             file_path, _ = QFileDialog.getSaveFileName(
                 self, 
                 "Export TM Database as TMX", 
-                "supervertaler_tm_database.tmx", 
+                self._project_export_path("supervertaler_tm_database.tmx", TM_SUBDIR), 
                 "TMX Files (*.tmx);;All Files (*.*)"
             )
             
@@ -18837,7 +19104,9 @@ class SupervertalerQt(QMainWindow):
         rule switches, extra abbreviations, and SRX-style custom break /
         exception rules with SRX import/export and a live test box."""
         from modules.segmentation_rules_widget import SegmentationRulesWidget
-        return SegmentationRulesWidget(self._load_segmentation_rules, self._save_segmentation_rules)
+        widget = SegmentationRulesWidget(self._load_segmentation_rules, self._save_segmentation_rules)
+        set_help_topic(widget, HelpTopics.SETTINGS_SEGMENTATION)  # F1 opens its help page
+        return widget
 
     def _load_segmentation_rules(self):
         from modules.segmentation_rules import SETTINGS_KEY, SegmentationRules
@@ -18860,7 +19129,23 @@ class SupervertalerQt(QMainWindow):
         from modules.inline_codes_widget import InlineCodesWidget
         entries = self._load_inline_codes()
         _inline_codes.set_active(entries)
-        return InlineCodesWidget(lambda: entries, self._save_inline_codes)
+        # Tag protection in the target cell (issue #113), on unless switched off
+        try:
+            self.protect_tags_in_target = bool(
+                self.load_general_settings().get(_tag_protection.SETTINGS_KEY, True))
+        except Exception:
+            self.protect_tags_in_target = True
+        widget = InlineCodesWidget(lambda: entries, self._save_inline_codes,
+                                   protect_tags=self.protect_tags_in_target,
+                                   on_protect_tags=self._save_tag_protection)
+        set_help_topic(widget, HelpTopics.SETTINGS_INLINE_CODES)  # F1 opens its help page
+        return widget
+
+    def _save_tag_protection(self, enabled: bool):
+        self.protect_tags_in_target = bool(enabled)
+        settings = self.load_general_settings()
+        settings[_tag_protection.SETTINGS_KEY] = self.protect_tags_in_target
+        self.save_general_settings(settings)
 
     def _load_inline_codes(self) -> list:
         try:
@@ -20765,8 +21050,9 @@ class SupervertalerQt(QMainWindow):
         # and triage — terms they just added but realised were wrong.
         # The Delete button moved from col 7 → col 8.
         terms_table = QTableWidget()
-        terms_table.setColumnCount(9)
-        terms_table.setHorizontalHeaderLabels(["Source Term", "Target Term", "Domain", "Notes", "Project", "Client", "Forbidden", "Created", ""])
+        # Issue #114: read-only Synonyms column at 8; Delete moved to 9.
+        terms_table.setColumnCount(10)
+        terms_table.setHorizontalHeaderLabels(["Source Term", "Target Term", "Domain", "Notes", "Project", "Client", "Forbidden", "Created", "Synonyms", ""])
         terms_table.horizontalHeader().setStretchLastSection(False)
         terms_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)      # Source – fills remaining space
         terms_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)      # Target – fills remaining space
@@ -20776,14 +21062,16 @@ class SupervertalerQt(QMainWindow):
         terms_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.Interactive)  # Client
         terms_table.horizontalHeader().setSectionResizeMode(6, QHeaderView.ResizeMode.Interactive)  # Forbidden
         terms_table.horizontalHeader().setSectionResizeMode(7, QHeaderView.ResizeMode.Interactive)  # Created
-        terms_table.horizontalHeader().setSectionResizeMode(8, QHeaderView.ResizeMode.Fixed)        # Delete button
+        terms_table.horizontalHeader().setSectionResizeMode(8, QHeaderView.ResizeMode.Interactive)  # Synonyms
+        terms_table.horizontalHeader().setSectionResizeMode(9, QHeaderView.ResizeMode.Fixed)        # Delete button
         terms_table.setColumnWidth(2, 100)  # Domain
         terms_table.setColumnWidth(3, 120)  # Notes
         terms_table.setColumnWidth(4, 100)  # Project
         terms_table.setColumnWidth(5, 100)  # Client
         terms_table.setColumnWidth(6, 70)   # Forbidden
         terms_table.setColumnWidth(7, 130)  # Created (fits "2026-05-17 14:32" with a little slack)
-        terms_table.setColumnWidth(8, 30)   # Delete button
+        terms_table.setColumnWidth(8, 160)  # Synonyms
+        terms_table.setColumnWidth(9, 30)   # Delete button
         terms_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         # v1.10.66: click-to-sort on every data column. We do NOT call
         # setSortingEnabled(True) — that would tell Qt to sort the
@@ -20978,7 +21266,9 @@ class SupervertalerQt(QMainWindow):
                 
                 terms = self.db_manager.cursor.fetchall()
                 terms_table.setRowCount(len(terms))
-                
+                # Synonyms for the whole page in one query (issue #114)
+                page_synonyms = termbase_mgr.synonyms_for_terms([t[0] for t in terms])
+
                 for row, term in enumerate(terms):
                     term_id, source, target, domain, notes, project, client, forbidden, created_raw = term
 
@@ -21029,13 +21319,27 @@ class SupervertalerQt(QMainWindow):
                     created_item.setFlags(created_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                     terms_table.setItem(row, 7, created_item)
 
-                    # Delete button (moved from col 7 → col 8 in v1.10.65)
+                    # Synonyms (read-only; issue #114): "source → target"
+                    syns = page_synonyms.get(int(term_id), {})
+                    src_syns, tgt_syns = syns.get('source', []), syns.get('target', [])
+                    syn_text = ""
+                    if src_syns or tgt_syns:
+                        syn_text = f"{', '.join(src_syns) or '–'}  →  {', '.join(tgt_syns) or '–'}"
+                    syn_item = QTableWidgetItem(syn_text)
+                    syn_item.setFlags(syn_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                    if syn_text:
+                        syn_item.setToolTip(
+                            f"Source synonyms: {', '.join(src_syns) or '(none)'}\n"
+                            f"Target synonyms: {', '.join(tgt_syns) or '(none)'}")
+                    terms_table.setItem(row, 8, syn_item)
+
+                    # Delete button (col 7 → 8 in v1.10.65, → 9 with the Synonyms column)
                     delete_btn = QPushButton("🗑")
                     delete_btn.setFixedSize(24, 24)
                     delete_btn.setToolTip(self.tr("Delete this term"))
                     delete_btn.setStyleSheet("QPushButton { border: none; } QPushButton:hover { background-color: #ffcccc; }")
                     delete_btn.clicked.connect(lambda checked, tid=term_id: delete_term(tid))
-                    terms_table.setCellWidget(row, 8, delete_btn)
+                    terms_table.setCellWidget(row, 9, delete_btn)
                 
                 update_pagination_ui()
                 
@@ -21065,7 +21369,7 @@ class SupervertalerQt(QMainWindow):
                     tgt_header = self._normalize_language_code(tgt_code) if tgt_code else "Target Term"
                     terms_table.setHorizontalHeaderLabels([
                         src_header, tgt_header, "Domain", "Notes",
-                        "Project", "Client", "Forbidden", "Created", ""
+                        "Project", "Client", "Forbidden", "Created", "Synonyms", ""
                     ])
             except Exception:
                 pass
@@ -21167,9 +21471,9 @@ class SupervertalerQt(QMainWindow):
 
             # Skip columns that have widgets or are read-only
             # (Forbidden=6 checkbox, Created=7 read-only timestamp,
-            # Delete=8 button). v1.10.65: Created column inserted at 7;
-            # Delete pushed to 8.
-            if column in (6, 7, 8):
+            # Synonyms=8 read-only, Delete=9 button). v1.10.65: Created
+            # column inserted at 7; issue #114: Synonyms at 8, Delete at 9.
+            if column in (6, 7, 8, 9):
                 return
 
             source_item = terms_table.item(row, 0)
@@ -22590,7 +22894,7 @@ class SupervertalerQt(QMainWindow):
         
         # File dialog
         from PyQt6.QtWidgets import QFileDialog
-        default_filename = f"{tb_name.replace(' ', '_')}.tsv"
+        default_filename = self._project_export_path(f"{tb_name.replace(' ', '_')}.tsv", GLOSSARY_SUBDIR)
         filepath, _ = QFileDialog.getSaveFileName(
             self,
             "Export Termbase",
@@ -23900,7 +24204,7 @@ class SupervertalerQt(QMainWindow):
         
         # File dialog
         from PyQt6.QtWidgets import QFileDialog
-        default_filename = f"{tm_name.replace(' ', '_')}.tmx"
+        default_filename = self._project_export_path(f"{tm_name.replace(' ', '_')}.tmx", TM_SUBDIR)
         filepath, _ = QFileDialog.getSaveFileName(
             self,
             "Export TM to TMX",
@@ -24054,10 +24358,6 @@ class SupervertalerQt(QMainWindow):
         ai_scroll = scroll_area_wrapper(ai_tab)
         settings_tabs.addTab(ai_scroll, self.tr("🤖 AI Settings"))
         self.ai_settings_scroll = ai_scroll  # Store reference for scrolling to API keys
-
-        # ===== TAB: Voice (commands & dictation, lives in Sidekick) =====
-        voice_tab = self._create_voice_settings_tab()
-        settings_tabs.addTab(scroll_area_wrapper(voice_tab), self.tr("🎤 Voice"))
 
         # ===== TAB: Clipboard privacy (issue #246) =====
         clipboard_tab = self._create_clipboard_settings_tab()
@@ -25489,7 +25789,7 @@ class SupervertalerQt(QMainWindow):
 
         mt_key_fields = [
             ("Google Translate:", "google_translate", "AIza...", True),
-            ("DeepL:", "deepl", "your-deepl-key", True),
+            ("DeepL:", "deepl", "API key or CAT-tool key", True),
             ("Microsoft Translate:", "microsoft_translate", "your-azure-key", True),
             ("Microsoft Region:", "microsoft_translate_region", "global", False),
             ("Amazon Access Key:", "amazon_translate", "AKIA...", True),
@@ -25506,6 +25806,9 @@ class SupervertalerQt(QMainWindow):
             key_input.setText(current_keys.get(key_name, ''))
             if is_secret:
                 key_input.setEchoMode(QLineEdit.EchoMode.Password)
+            if key_name == "deepl":
+                from modules.deepl_client import KEY_HELP
+                key_input.setToolTip(KEY_HELP)
             row.addWidget(key_input)
 
             if is_secret:
@@ -26600,6 +26903,24 @@ class SupervertalerQt(QMainWindow):
         auto_fill_confirm_cb.setEnabled(auto_propagate_cb.isChecked())
         auto_propagate_cb.toggled.connect(auto_fill_confirm_cb.setEnabled)
         tm_termbase_layout.addWidget(auto_fill_confirm_cb)
+
+        # --- Fragment matches (issue #193) ---
+        fragment_cb = CheckmarkCheckBox(self.tr("Show fragment matches from the TM"))
+        fragment_cb.setChecked(general_settings.get('tm_fragment_matches', True))
+        fragment_cb.setToolTip(self.tr(
+            "Also show a TM sentence that contains the whole segment, or that is part of it, "
+            "marked ✂ fragment in the Match Panel. For documents segmented differently from the TM."))
+
+        def _save_fragment_setting(checked):
+            self.tm_fragment_matches = bool(checked)
+            settings = self._load_general_settings_from_file() or {}
+            settings['tm_fragment_matches'] = self.tm_fragment_matches
+            self.save_general_settings(settings)
+            # Matches already looked up were cached with (or without) them
+            with self.translation_matches_cache_lock:
+                self.translation_matches_cache.clear()
+        fragment_cb.toggled.connect(_save_fragment_setting)
+        tm_termbase_layout.addWidget(fragment_cb)
 
         # --- Auto-propagate confirmed translations to identical segments ---
         auto_propagate_confirm_parent_cb = CheckmarkCheckBox(self.tr("Auto-propagate confirmed translations to identical segments"))
@@ -29086,84 +29407,13 @@ class SupervertalerQt(QMainWindow):
         self.log(f"✓ User identity saved: translator name = {display}")
         QMessageBox.information(self, "Settings Saved", f"User identity saved.\nTranslator name: {display}")
 
-    def _create_voice_settings_tab(self):
-        """Create the Voice info/redirect tab.
-
-        Voice (commands & dictation) lives in Sidekick. This
-        Workbench Settings tab is just a signpost: a brief explanation, a
-        quick-reference card for the hotkeys, and a button that opens
-        Sidekick directly to the Voice tab.
-        """
-        from PyQt6.QtWidgets import QGroupBox, QPushButton
-
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(15)
-
-        header = QLabel(self.tr("🎤 <b>Voice</b> – commands and dictation"))
-        header.setTextFormat(Qt.TextFormat.RichText)
-        header.setStyleSheet("font-size: 14pt; padding: 8px;")
-        layout.addWidget(header)
-
-        info = QLabel(
-            "Voice is Supervertaler's command and dictation system. "
-            "Its full settings panel lives in <b>Supervertaler Sidekick</b>, the "
-            "floating companion window you can summon from anywhere on your "
-            "computer.<br><br>"
-            "<b>Why is it there and not here?</b><br>"
-            "Sidekick stays accessible even when Workbench is hidden – and "
-            "Voice's Always-On listening + global hotkeys are designed to "
-            "work across every app on your computer (Word, Trados, memoQ, "
-            "browsers, etc.), not just inside Workbench."
-        )
-        info.setTextFormat(Qt.TextFormat.RichText)
-        info.setWordWrap(True)
-        info.setStyleSheet(
-            "font-size: 9pt; color: #444; padding: 12px;"
-            " background-color: #E3F2FD; border-radius: 4px;"
-        )
-        layout.addWidget(info)
-
-        open_btn = QPushButton(self.tr("🎤  Open Voice"))
-        open_btn.setStyleSheet(
-            "background-color: #4CAF50; color: white; font-weight: bold;"
-            " padding: 12px; font-size: 11pt; border: none;"
-        )
-        open_btn.clicked.connect(self._open_voice_in_workbench)
-        layout.addWidget(open_btn)
-
-        quick_ref_group = QGroupBox(self.tr("📖 Quick Reference"))
-        quick_ref_layout = QVBoxLayout()
-        quick_ref = QLabel(
-            "<b>Dictation hotkey</b> (default <b>Ctrl+Shift+Space</b>) – "
-            "hold to dictate, release to transcribe. Works in the "
-            "Workbench grid and in any other app on your computer.<br>"
-            "<b>Always-On</b> – toggleable in Sidekick → Voice tab; "
-            "listens continuously, hands-free.<br>"
-            "<b>Voice commands</b> – say a phrase to execute keystrokes, "
-            "AutoHotkey scripts, or built-in actions. Editable in Sidekick.<br><br>"
-            "Rebind the dictation hotkey to any key you like "
-            "(numpad+, a function key, anything) in "
-            "<b>Settings → Keyboard Shortcuts → Special → Voice dictation</b>."
-        )
-        quick_ref.setTextFormat(Qt.TextFormat.RichText)
-        quick_ref.setWordWrap(True)
-        quick_ref.setStyleSheet("font-size: 9pt; color: #555; padding: 8px;")
-        quick_ref_layout.addWidget(quick_ref)
-        quick_ref_group.setLayout(quick_ref_layout)
-        layout.addWidget(quick_ref_group)
-
-        layout.addStretch()
-        return tab
-
     def _open_voice_in_workbench(self):
         """Open Workbench's Voice top tab from a Settings link / tray menu.
 
         Method was renamed from _open_voice_in_sidekick in v1.10.10
-        when Sidekick was retired. The two existing call sites
-        (Voice settings link and Always-On tray menu) were updated
-        to match.
+        when Sidekick was retired. The Settings → Voice signpost page that
+        also called it was removed once Voice became a top tab (#199); the
+        Always-On tray menu still uses it.
         """
         try:
             if hasattr(self, '_ensure_voice_top_tab'):
@@ -31559,6 +31809,24 @@ class SupervertalerQt(QMainWindow):
         self._proofreading_comments_list_layout.addWidget(_pc_initial_empty)
         self._proofreading_comments_list_layout.addStretch()
 
+        # Filter by origin (#242 tier 2): AI proofreading, a second model's
+        # cross-review flags (XR) and the translating model's own ⟦TC⟧ comments
+        _pc_filter_row = QHBoxLayout()
+        _pc_filter_row.setContentsMargins(0, 0, 0, 2)
+        _pc_filter_row.addWidget(QLabel(self.tr("Show:")))
+        self._pc_origin_combo = QComboBox()
+        for _label, _origin in ((self.tr("All comments"), "all"),
+                                (self.tr("AI proofreading"), "proofreading"),
+                                (self.tr("Cross-model review (XR)"), "XR"),
+                                (self.tr("Translator comments (TC)"), "TC")):
+            self._pc_origin_combo.addItem(_label, _origin)
+        self._pc_origin_filter = "all"
+        self._pc_origin_combo.currentIndexChanged.connect(
+            lambda _i: self._set_proofreading_origin_filter(self._pc_origin_combo.currentData()))
+        _pc_filter_row.addWidget(self._pc_origin_combo)
+        _pc_filter_row.addStretch()
+        proofreading_notes_layout.addLayout(_pc_filter_row)
+
         proofreading_list_scroll = _QScrollArea()
         proofreading_list_scroll.setWidgetResizable(True)
         proofreading_list_scroll.setFrameShape(_QFrame.Shape.NoFrame)
@@ -33230,7 +33498,7 @@ class SupervertalerQt(QMainWindow):
         # them into whatever folder the user saves into. Default on.
         subfolder_check = CheckmarkCheckBox(
             self.tr("📁 Create a dedicated folder for this project"))
-        subfolder_check.setChecked(getattr(self, 'create_project_subfolder', True))
+        subfolder_check.setChecked(self._create_project_subfolder_pref())
         subfolder_check.setToolTip(self.tr(
             "When you first save, place the .svproj in its own folder so its "
             "source/ and target/ subfolders stay self-contained."))
@@ -33257,8 +33525,15 @@ class SupervertalerQt(QMainWindow):
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
 
-        # Remember the folder preference for the first save (and future Save As).
+        # Remember the folder preference for the first save and future Save As
+        # – across sessions too (issue #228).
         self.create_project_subfolder = subfolder_check.isChecked()
+        try:
+            _gs = self.load_general_settings()
+            _gs['create_project_subfolder'] = self.create_project_subfolder
+            self.save_general_settings(_gs)
+        except Exception as e:
+            self.log(f"⚠ Could not remember the project folder preference: {e}")
 
         # Create project
         project_name = name_input.text().strip() or "Untitled Project"
@@ -33864,13 +34139,22 @@ class SupervertalerQt(QMainWindow):
             QApplication.processEvents()
 
             # Try UTF-8 first, fall back to latin-1 if it fails
+            recovered_from_backup = False
             try:
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-            except UnicodeDecodeError:
-                self.log(f"⚠ UTF-8 decoding failed, trying latin-1 encoding...")
-                with open(file_path, 'r', encoding='latin-1') as f:
-                    data = json.load(f)
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                except UnicodeDecodeError:
+                    self.log(f"⚠ UTF-8 decoding failed, trying latin-1 encoding...")
+                    with open(file_path, 'r', encoding='latin-1') as f:
+                        data = json.load(f)
+            except json.JSONDecodeError as damaged:
+                # A damaged project file: offer the copy kept at the last good
+                # save (<name>.svproj.bak, issue #228)
+                data = self._offer_project_backup(file_path, damaged, progress)
+                if data is None:
+                    raise
+                recovered_from_backup = True
             
             # If no name in file, use filename
             if 'name' not in data:
@@ -33878,7 +34162,20 @@ class SupervertalerQt(QMainWindow):
             
             self.current_project = Project.from_dict(data)
             self.project_file_path = file_path
-            self.project_modified = False
+            # Forget the round-trip state of any project opened before this one.
+            # Exports prefer these over the paths stored in the project, so a
+            # memoQ/Trados/… file loaded for an earlier project was used to
+            # export this one – its structure, filled with these segments.
+            for _attr in ('trados_source_file', 'trados_handler', 'memoq_source_file',
+                          'memoq_rtf_source_file', 'memoq_rtf_handler', 'mqxliff_source_file',
+                          'mqxliff_handler', 'cafetran_source_file', 'cafetran_handler',
+                          'phrase_source_file', 'phrase_handler', 'po_source_file', 'po_handler',
+                          'dejavu_source_file', 'dejavu_handler', 'sdlppx_source_file',
+                          'sdlppx_handler', 'sdlxliff_source_files', 'sdlxliff_handler'):
+                setattr(self, _attr, None)
+            # Opened from the backup: mark it modified so the next save repairs
+            # the damaged file
+            self.project_modified = recovered_from_backup
 
             # Clear the previous project's per-segment comment/notes editors up
             # front, so opening this project directly (without closing the last
@@ -34019,6 +34316,18 @@ class SupervertalerQt(QMainWindow):
                 else:
                     self.log(f"⚠️ Original DOCX not found (export will rebuild from segments): {stored_source}")
             
+            # Round-trip sources (memoQ, Trados, CafeTran, SDLPPX, …) whose
+            # original is gone – the project folder was moved, or opened on
+            # another computer – are taken from their copies in source/ (#228).
+            try:
+                switched = restore_round_trip_sources(
+                    self.current_project, os.path.dirname(os.path.abspath(file_path)),
+                    self.current_project.bundled_sources)
+                if switched:
+                    self.log(f"✓ Using the copies in the project's source/ folder for: {', '.join(switched)}")
+            except Exception as restore_exc:
+                self.log(f"⚠ Could not check the project's source/ copies: {restore_exc}")
+
             # Restore SDLPPX handler for Trados package projects
             if hasattr(self.current_project, 'sdlppx_source_path') and self.current_project.sdlppx_source_path:
                 sdlppx_path = self.current_project.sdlppx_source_path
@@ -34385,6 +34694,30 @@ class SupervertalerQt(QMainWindow):
                 progress.close()
             except Exception:
                 pass
+
+    def _offer_project_backup(self, file_path: str, error, progress=None):
+        """The project file will not parse: offer the backup copy from the
+        last good save. Returns its data, or None to report the error."""
+        found = read_backup(file_path)
+        if found is None:
+            return None
+        data, saved_at = found
+        if progress is not None:
+            progress.hide()
+        when = datetime.fromtimestamp(saved_at).strftime('%Y-%m-%d %H:%M')
+        reply = QMessageBox.question(
+            self, "Project file damaged",
+            f"{os.path.basename(file_path)} is damaged and cannot be read:\n{error}\n\n"
+            f"A backup copy from the previous save ({when}) is available. "
+            "Open the backup? Saving then replaces the damaged file.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes)
+        if progress is not None:
+            progress.show()
+        if reply != QMessageBox.StandardButton.Yes:
+            return None
+        self.log(f"♻ Opened the backup copy of {os.path.basename(file_path)} (saved {when})")
+        return data
 
     def _load_synonyms_bulk(self):
         """Load every synonym from ``termbase_synonyms`` in one query,
@@ -34888,20 +35221,23 @@ class SupervertalerQt(QMainWindow):
                     'translation': term['target_term'],
                     'matched_via_abbreviation': False,
                 })
-            elif syn_hits:
-                # v1.10.199: main term didn't substring-hit but a
-                # source synonym did. Register the term with the
-                # matched synonym as the displayed surface form. The
-                # translation is still the main term's target. This
-                # mirrors what TermLens already does when displaying
-                # an entry whose main form matched — synonyms appear
-                # in the tooltip; here we just promote one to the
-                # primary "source" field because the segment used
-                # that surface form rather than the main term.
-                first_syn_text, _first_syn_lower = syn_hits[0]
-                matches[term_id] = dict(base, **{
-                    'source': first_syn_text,
-                    'translation': term['target_term'],
+            # Issue #114: every source synonym the segment uses gets a chip
+            # of its own at its own position – also when the main term is
+            # in the same segment ("methyl-ethylketoxime (MEKO)"), which
+            # before only showed the main term. A synonym chip offers the
+            # identical target synonym when there is one (MEKO → MEKO),
+            # otherwise the main target term; the rest stay alternatives.
+            # v1.10.199: with no main-term hit, the first synonym takes the
+            # term's own key.
+            from modules.termbase_manager import synonym_chip_translation
+            for i, (syn_text, _syn_lower) in enumerate(syn_hits):
+                translation, alternatives = synonym_chip_translation(
+                    syn_text, term['target_term'], term.get('target_synonyms', []))
+                key = term_id if (i == 0 and not main_matched) else f"syn_{term_id}_{i}"
+                matches[key] = dict(base, **{
+                    'source': syn_text,
+                    'translation': translation,
+                    'target_synonyms': alternatives,
                     'matched_via_abbreviation': False,
                     'matched_via_synonym': True,
                 })
@@ -35757,7 +36093,7 @@ class SupervertalerQt(QMainWindow):
                 file_path += '.svproj'
             # Optionally tuck the project into its own folder so its source/ and
             # target/ subfolders stay self-contained (project-folder model, #228).
-            if getattr(self, 'create_project_subfolder', True):
+            if self._create_project_subfolder_pref():
                 try:
                     file_path = nest_in_own_folder(file_path)
                 except Exception as exc:
@@ -35770,6 +36106,16 @@ class SupervertalerQt(QMainWindow):
             self.project_file_path = file_path
             self.add_to_recent_projects(file_path)
     
+    def _create_project_subfolder_pref(self) -> bool:
+        """"Create a dedicated folder for this project" (issue #228): this
+        session's choice, else the one remembered in the settings (default on)."""
+        if hasattr(self, 'create_project_subfolder'):
+            return bool(self.create_project_subfolder)
+        try:
+            return bool(self.load_general_settings().get('create_project_subfolder', True))
+        except Exception:
+            return True
+
     def save_project_to_file(self, file_path: str):
         """Save project to specified file"""
         try:
@@ -35908,6 +36254,18 @@ class SupervertalerQt(QMainWindow):
                     # Directory source (multi-file / folder project): legacy path.
                     self.current_project.original_docx_path = original_path
 
+            # The bilingual files and packages the project exports back into
+            # (memoQ, Trados, CafeTran, SDLPPX, …) get a copy in source/ as
+            # well. The project keeps using the originals; the copies stand in
+            # when the originals are gone, e.g. after the folder was moved.
+            try:
+                self.current_project.bundled_sources = bundle_round_trip_sources(
+                    self.current_project, os.path.dirname(os.path.abspath(file_path)),
+                    previous=self.current_project.bundled_sources,
+                    main_copy=getattr(self, 'original_docx', None)) or None
+            except Exception as bundle_exc:
+                self.log(f"⚠ Could not copy the round-trip source files into the project folder: {bundle_exc}")
+
             # IMPORTANT: Always save segments in original document order, not sorted order
             # Store current sort state and temporarily restore original order
             current_sort_state = getattr(self, 'current_sort', None)
@@ -35926,11 +36284,17 @@ class SupervertalerQt(QMainWindow):
                 if seg.target:
                     seg.target = strip_invisible_markers(seg.target)
 
-            with open(file_path, 'w', encoding='utf-8') as f:
-                json.dump(self.current_project.to_dict(), f, indent=2, ensure_ascii=False)
-
-            # Restore the current (sorted) order after saving
-            self.current_project.segments = current_segments
+            try:
+                # Serialise first, then write through a temporary file that
+                # replaces the project in one step, keeping the previous
+                # version as <name>.svproj.bak (issue #228). Writing straight
+                # into the .svproj left it truncated when a save failed half-way.
+                payload = json.dumps(self.current_project.to_dict(), indent=2, ensure_ascii=False)
+                write_project_file(file_path, payload)
+            finally:
+                # Restore the current (sorted) order after saving – also when
+                # the save failed
+                self.current_project.segments = current_segments
             
             self.project_modified = False
             self.update_window_title()
@@ -36020,10 +36384,19 @@ class SupervertalerQt(QMainWindow):
             # Save project.json
             self.save_project_to_file(self.project_file_path)
 
-            # Export TMX to same folder as project
+            # Export the TMX into the project's tm/ folder (issue #228). A
+            # backup left in the project folder itself by an older version is
+            # moved there first.
             project_dir = Path(self.project_file_path).parent
             project_name = Path(self.project_file_path).stem
-            tmx_file_path = project_dir / f"{project_name}_backup.tmx"
+            tmx_file_path = project_dir / TM_SUBDIR / f"{project_name}_backup.tmx"
+            tmx_file_path.parent.mkdir(parents=True, exist_ok=True)
+            legacy_tmx = project_dir / f"{project_name}_backup.tmx"
+            if legacy_tmx.exists() and not tmx_file_path.exists():
+                try:
+                    os.replace(legacy_tmx, tmx_file_path)
+                except OSError:
+                    pass
 
             # Prepare segments for TMX export
             source_segments = []
@@ -36061,6 +36434,296 @@ class SupervertalerQt(QMainWindow):
 
         except Exception as e:
             self.log(f"⚠️ Auto backup failed: {e}")
+
+    # ------------------------------------------------------------------
+    # Project packages (.svpkg) – issue #156
+    # ------------------------------------------------------------------
+    def export_project_package(self):
+        """Pack the open project – its folder, plus the TMs, glossaries and
+        prompt it uses – into one .svpkg file (modules/svpkg.py)."""
+        from modules import svpkg
+        title = self.tr("Pack Project")
+        if not self.current_project:
+            QMessageBox.information(self, title, self.tr("Open a project first."))
+            return
+        if not getattr(self, 'project_file_path', None):
+            QMessageBox.information(self, title, self.tr(
+                "Save the project first (Project → Save): a package is made from the saved project."))
+            return
+        # The package should hold the latest work
+        if getattr(self, 'project_modified', False):
+            self.save_project_to_file(self.project_file_path)
+        svproj = os.path.abspath(self.project_file_path)
+        project_dir = os.path.dirname(svproj)
+        name = getattr(self.current_project, 'name', '') or Path(svproj).stem
+        default = os.path.join(os.path.dirname(project_dir), f"{svpkg.safe_name(name)}.svpkg")
+        path, _ = QFileDialog.getSaveFileName(self, title, default,
+                                              "Supervertaler package (*.svpkg);;All Files (*.*)")
+        if not path:
+            return
+        if not path.lower().endswith('.svpkg'):
+            path += '.svpkg'
+
+        import tempfile
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                resources = self._package_resources(tmp)
+                info = {
+                    'name': name,
+                    'source_lang': getattr(self.current_project, 'source_lang', ''),
+                    'target_lang': getattr(self.current_project, 'target_lang', ''),
+                    'segments': len(self.current_project.segments or []),
+                }
+                manifest = svpkg.build_package(path, project_dir, svproj, resources, info, __version__)
+        except Exception as exc:
+            QApplication.restoreOverrideCursor()
+            self.log(f"❌ Could not pack the project: {exc}")
+            QMessageBox.critical(self, title, f"Could not pack the project:\n\n{exc}")
+            return
+        QApplication.restoreOverrideCursor()
+
+        kinds = [r['kind'] for r in manifest['resources']]
+        size_mb = os.path.getsize(path) / (1024 * 1024)
+        self.log(f"📦 Packed {name} into {path} ({size_mb:.1f} MB)")
+        QMessageBox.information(self, title, self.tr(
+            "The project is packed:\n\n{path}\n\n"
+            "Size: {size:.1f} MB\n"
+            "TMs: {tms}   Glossaries: {tbs}   Prompts: {prompts}\n\n"
+            "On the other computer, use Project → Open Package to unpack it.").format(
+                path=path, size=size_mb, tms=kinds.count('tm'),
+                tbs=kinds.count('glossary'), prompts=kinds.count('prompt')))
+
+    def _package_resources(self, tmp_dir):
+        """Export the project's TMs, glossaries and prompts into ``tmp_dir``
+        for the package: the ones switched on (Read) for the project."""
+        resources = []
+        proj = self.current_project
+        pid = getattr(proj, 'id', None)
+
+        mgr = getattr(self, 'tm_metadata_mgr', None)
+        if mgr and pid:
+            from modules.tmx_generator import TMXGenerator
+            all_tms = {t['tm_id']: t for t in mgr.get_all_tms()}
+            for tm_id in mgr.get_active_tm_ids(pid) or []:
+                tm = all_tms.get(tm_id)
+                if not tm:
+                    continue
+                rows = self.db_manager.cursor.execute(
+                    "SELECT source_text, target_text FROM translation_units WHERE tm_id = ? ORDER BY id",
+                    (tm_id,)).fetchall()
+                if not rows:
+                    continue
+                gen = TMXGenerator(log_callback=self.log)
+                src = tm.get('source_lang') or proj.source_lang
+                tgt = tm.get('target_lang') or proj.target_lang
+                tree = gen.generate_tmx(source_segments=[r[0] for r in rows],
+                                        target_segments=[r[1] for r in rows],
+                                        source_lang=src, target_lang=tgt)
+                f = os.path.join(tmp_dir, f"tm_{len(resources)}.tmx")
+                if gen.save_tmx(tree, f):
+                    resources.append({'kind': 'tm', 'name': tm['name'], 'path': f, 'tm_id': tm_id,
+                                      'source_lang': src, 'target_lang': tgt, 'entries': len(rows)})
+
+        tbm = getattr(self, 'termbase_mgr', None)
+        if tbm and pid:
+            from modules.termbase_import_export import TermbaseExporter
+            exporter = TermbaseExporter(self.db_manager, tbm)
+            for tb_id in tbm.get_active_termbase_ids(pid) or []:
+                tb = tbm.get_termbase(tb_id) or {}
+                f = os.path.join(tmp_dir, f"glossary_{tb_id}.tsv")
+                ok, _msg = exporter.export_tsv(tb_id, f)
+                if ok:
+                    resources.append({'kind': 'glossary', 'name': tb.get('name') or f"Glossary {tb_id}",
+                                      'path': f, 'termbase_id': tb_id,
+                                      'source_lang': tb.get('source_lang'), 'target_lang': tb.get('target_lang'),
+                                      'priority': tbm.get_termbase_priority(tb_id, pid)})
+
+        pm = getattr(self, 'prompt_manager_qt', None)
+        lib = getattr(pm, 'library', None)
+        if lib is not None:
+            wanted = [('primary', getattr(lib, 'active_primary_prompt_path', None))]
+            wanted += [('attached', p) for p in (getattr(lib, 'attached_prompt_paths', None) or [])]
+            for role, rel in wanted:
+                if not rel:
+                    continue
+                if rel.startswith('[EXTERNAL] '):
+                    fp, lib_path = rel[len('[EXTERNAL] '):], None
+                else:
+                    fp, lib_path = (lib.prompts.get(rel) or {}).get('_filepath'), rel
+                if fp and os.path.isfile(fp):
+                    resources.append({'kind': 'prompt', 'name': Path(fp).stem, 'path': fp,
+                                      'library_path': lib_path, 'role': role})
+        return resources
+
+    def open_project_package(self):
+        """Unpack a .svpkg into a new project folder, bring its TMs,
+        glossaries and prompts into this computer's database and library, and
+        open the project."""
+        from modules import svpkg
+        title = self.tr("Open Package")
+        pkg, _ = QFileDialog.getOpenFileName(self, title, "",
+                                             "Supervertaler package (*.svpkg);;All Files (*.*)")
+        if not pkg:
+            return
+        try:
+            manifest = svpkg.read_manifest(pkg)
+        except svpkg.PackageError as exc:
+            QMessageBox.warning(self, title, str(exc))
+            return
+        parent = QFileDialog.getExistingDirectory(
+            self, self.tr("Where should the project folder go?"), os.path.dirname(os.path.abspath(pkg)))
+        if not parent:
+            return
+
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            project_dir, svproj, manifest = svpkg.extract_package(pkg, parent)
+            tm_map, tb_map, prompt_map, report = self._import_package_resources(manifest, pkg)
+            svpkg.remap_project_settings(svproj, tm_map, tb_map, prompt_map)
+        except Exception as exc:
+            QApplication.restoreOverrideCursor()
+            self.log(f"❌ Could not open the package: {exc}")
+            QMessageBox.critical(self, title, f"Could not open the package:\n\n{exc}")
+            return
+        QApplication.restoreOverrideCursor()
+
+        self.log(f"📦 Unpacked {os.path.basename(pkg)} into {project_dir}")
+        for line in report:
+            self.log(f"  {line}")
+        self.load_project(svproj)
+        QMessageBox.information(self, title, self.tr(
+            "The package is unpacked into:\n{folder}\n\n{report}").format(
+                folder=project_dir, report="\n".join(report) or self.tr("(no TMs, glossaries or prompts)")))
+
+    def _import_package_resources(self, manifest, pkg_path):
+        """Bring a package's TMs, glossaries and prompts into this computer.
+
+        A TM or glossary with the same name is added to (entries already in it
+        are not duplicated); otherwise a new one is made. The files stay in
+        the project's tm/ and glossary/ folders. Returns the id maps for
+        svpkg.remap_project_settings and a report, one line per resource.
+        """
+        tm_map, tb_map, prompt_map, report = {}, {}, {}, []
+        resources = manifest.get('resources', [])
+        project_dir = None
+        for res in resources:
+            path = res.get('local_path')
+            if not path or not os.path.isfile(path):
+                continue
+            project_dir = os.path.dirname(os.path.dirname(os.path.dirname(path)))
+            kind, name = res.get('kind'), res.get('name') or 'Package resource'
+            if kind == 'tm' and getattr(self, 'tm_metadata_mgr', None) and self.tm_database:
+                mgr = self.tm_metadata_mgr
+                existing = next((t for t in mgr.get_all_tms() if t['name'] == name), None)
+                if existing:
+                    tm_id = existing['tm_id']
+                    src = existing.get('source_lang') or res.get('source_lang')
+                    tgt = existing.get('target_lang') or res.get('target_lang')
+                else:
+                    slug = re.sub(r'[^a-z0-9_]', '', name.lower().replace(' ', '_').replace('-', '_')) or 'package_tm'
+                    src, tgt = res.get('source_lang'), res.get('target_lang')
+                    db_id = mgr.create_tm(name=name, tm_id=slug, source_lang=src, target_lang=tgt,
+                                          description=f"From package {os.path.basename(pkg_path)}")
+                    tm_id = (mgr.get_tm(db_id) or {}).get('tm_id', slug) if db_id else None
+                if not tm_id:
+                    report.append(f"TM \u201c{name}\u201d: could not be created")
+                    continue
+                def _entries():
+                    return self.db_manager.cursor.execute(
+                        "SELECT COUNT(*) FROM translation_units WHERE tm_id = ?", (tm_id,)).fetchone()[0]
+                before = _entries()
+                self.tm_database._load_tmx_into_db(path, src, tgt, tm_id, strip_variants=True)
+                added = _entries() - before
+                mgr.update_entry_count(tm_id)
+                tm_map[res.get('tm_id')] = tm_id
+                report.append(f"TM \u201c{name}\u201d: " + (
+                    f"{added:,} new entries added to your TM of that name" if existing
+                    else f"{added:,} entries in a new TM"))
+            elif kind == 'glossary' and getattr(self, 'termbase_mgr', None):
+                from modules.termbase_import_export import TermbaseImporter
+                tbm = self.termbase_mgr
+                existing = next((t for t in tbm.get_all_termbases() if t['name'] == name), None)
+                tb_id = existing['id'] if existing else tbm.create_termbase(
+                    name, res.get('source_lang'), res.get('target_lang'),
+                    description=f"From package {os.path.basename(pkg_path)}")
+                if not tb_id:
+                    report.append(f"Glossary \u201c{name}\u201d: could not be created")
+                    continue
+                result = TermbaseImporter(self.db_manager, tbm).import_tsv(path, tb_id)
+                if res.get('termbase_id') is not None:
+                    tb_map[int(res['termbase_id'])] = tb_id
+                added = getattr(result, 'imported_count', 0) or 0
+                report.append(f"Glossary \u201c{name}\u201d: " + (
+                    f"{added:,} new terms added to your glossary of that name" if existing
+                    else f"{added:,} terms in a new glossary"))
+            elif kind == 'prompt':
+                saved = self._import_package_prompt(res, path)
+                if saved:
+                    if res.get('library_path'):
+                        prompt_map[res['library_path']] = saved
+                    report.append(f"Prompt \u201c{name}\u201d: {saved}")
+
+        # Keep the TMX and glossary files with the project, in tm/ and glossary/
+        if project_dir:
+            res_dir = os.path.join(project_dir, '.svpkg-resources')
+            for sub, dest in (('tm', TM_SUBDIR), ('glossary', GLOSSARY_SUBDIR)):
+                src_dir = os.path.join(res_dir, sub)
+                if os.path.isdir(src_dir):
+                    os.makedirs(os.path.join(project_dir, dest), exist_ok=True)
+                    for fn in os.listdir(src_dir):
+                        target = os.path.join(project_dir, dest, fn)
+                        if not os.path.exists(target):
+                            os.replace(os.path.join(src_dir, fn), target)
+            import shutil
+            shutil.rmtree(res_dir, ignore_errors=True)
+
+        if hasattr(self, 'tm_tab_refresh_callback'):
+            try:
+                self.tm_tab_refresh_callback()
+            except Exception:
+                pass
+        if hasattr(self, 'termbase_tab_refresh_callback'):
+            try:
+                self.termbase_tab_refresh_callback()
+            except Exception:
+                pass
+        return tm_map, tb_map, prompt_map, report
+
+    def _import_package_prompt(self, res, path):
+        """Put a packaged prompt into the library at its original place. A
+        different prompt already there is kept: this one gets
+        "(from package)" added. Returns the library path used, or None."""
+        pm = getattr(self, 'prompt_manager_qt', None)
+        lib = getattr(pm, 'library', None)
+        if lib is None:
+            return None
+        data = lib._parse_markdown(Path(path)) or {}
+        if not data.get('content'):
+            return None
+        rel = res.get('library_path') or f"Packages/{Path(path).stem}.md"
+        existing = lib.prompts.get(rel)
+        if existing and (existing.get('content') or '').strip() == data['content'].strip():
+            return rel
+        if existing:
+            stem, folder = Path(rel).stem, str(Path(rel).parent)
+            n, candidate = 1, None
+            while candidate is None or candidate in lib.prompts:
+                suffix = " (from package)" if n == 1 else f" (from package {n})"
+                candidate = (f"{folder}/{stem}{suffix}.md" if folder not in ('', '.') else f"{stem}{suffix}.md")
+                n += 1
+            rel = candidate
+        data = {k: v for k, v in data.items() if not k.startswith('_')}
+        data.update(default=False, read_only=False)
+        if not lib.save_prompt(rel, data):
+            return None
+        try:
+            lib.load_all_prompts()
+            if hasattr(pm, '_refresh_tree'):
+                pm._refresh_tree()
+        except Exception:
+            pass
+        return rel
 
     def close_project(self):
         """Close current project"""
@@ -37602,7 +38265,7 @@ class SupervertalerQt(QMainWindow):
                 QMessageBox.warning(self, "No Project", "Please open a project with segments first")
                 return
             
-            segments = list(self.current_project.segments)
+            segments = self._segments_in_document_order()
             
             # Check translation status
             translated_count = sum(1 for seg in segments if seg.target and seg.target.strip())
@@ -37788,7 +38451,7 @@ class SupervertalerQt(QMainWindow):
                 QMessageBox.warning(self, "No Project", "Please open a project with segments first")
                 return
             
-            segments = list(self.current_project.segments)
+            segments = self._segments_in_document_order()
             
             # Get language codes
             source_lang = self.current_project.source_lang or "Source"
@@ -40053,7 +40716,7 @@ class SupervertalerQt(QMainWindow):
             from docx import Document
             from docx.shared import RGBColor
             
-            segments = list(self.current_project.segments)
+            segments = self._segments_in_document_order()
             translations = [seg.target for seg in segments]
 
             if not translations or all(not t.strip() for t in translations):
@@ -40171,7 +40834,7 @@ class SupervertalerQt(QMainWindow):
             # Prompt user to save the updated bilingual file
             # Use the same directory as the original import file
             source_path = Path(self.memoq_source_file)
-            default_name = str(source_path.parent / (source_path.stem + "_translated.docx"))
+            default_name = str(self._export_dir_beside(source_path) / (source_path.stem + "_translated.docx"))
             save_path, _ = QFileDialog.getSaveFileName(
                 self,
                 "Save memoQ Bilingual DOCX",
@@ -40427,12 +41090,13 @@ class SupervertalerQt(QMainWindow):
             # Count pretranslated segments
             pretranslated_count = sum(1 for s in mqxliff_segments if s.get('target', '').strip())
 
-            # Convert to internal Segment format
+            # Convert to internal Segment format. The handler already maps
+            # memoQ's status to a Workbench one; the id is the segment's
+            # position, which the export pairs with the file's units.
             segments = []
             for i, mq_seg in enumerate(mqxliff_segments):
-                # Map status from mqxliff
                 status = mq_seg.get('status', 'not_started')
-                if status not in ['not_started', 'pre_translated', 'draft', 'translated', 'confirmed', 'locked']:
+                if status not in STATUSES:
                     status = 'not_started'
 
                 segment = Segment(
@@ -40441,9 +41105,12 @@ class SupervertalerQt(QMainWindow):
                     target=mq_seg.get('target', ''),
                     status=status,
                     match_percent=mq_seg.get('match_percent'),
+                    memoQ_status=mq_seg.get('mq_status', ''),
+                    locked=bool(mq_seg.get('locked')),
                     notes="",
                 )
                 segments.append(segment)
+            doc_count = len({s.get('file') for s in mqxliff_segments})
             
             # Store the handler and original path for round-trip export
             self.mqxliff_handler = handler
@@ -40526,12 +41193,16 @@ class SupervertalerQt(QMainWindow):
 
             # Log success
             self.log(f"✓ Imported {len(segments)} segments from memoQ XLIFF: {Path(file_path).name}")
+            if doc_count > 1:
+                self.log(f"  From {doc_count} documents (memoQ view)")
             self.log(f"  Source: {source_lang}, Target: {target_lang}")
             if pretranslated_count > 0:
                 self.log(f"  Pretranslated: {pretranslated_count} segments with target text")
 
             # Build message with pretranslation info
             msg = f"Successfully imported {len(segments)} segment(s) from memoQ XLIFF.\n\nLanguages: {source_lang} → {target_lang}"
+            if doc_count > 1:
+                msg += f"\n\nDocuments: {doc_count}"
             if pretranslated_count > 0:
                 msg += f"\n\nPretranslated: {pretranslated_count} segment(s) with target text loaded."
 
@@ -40738,7 +41409,7 @@ class SupervertalerQt(QMainWindow):
         try:
             from modules.memoqrtf_handler import MemoQRTFHandler
 
-            segments = list(self.current_project.segments)
+            segments = self._segments_in_document_order()
             translations = [seg.target for seg in segments]
 
             if not translations or all(not t.strip() for t in translations):
@@ -40887,18 +41558,21 @@ class SupervertalerQt(QMainWindow):
             return
         
         try:
-            # Get translations from current segments
-            translations = [seg.target for seg in self.current_project.segments]
-            
+            # Translations and statuses in document order: the handler pairs
+            # the n-th segment with the n-th unit of the file
+            segments = self._segments_in_document_order()
+            translations = [seg.target for seg in segments]
+            statuses = [seg.status for seg in segments]
+
             # Update the handler with translations
-            updated_count = self.mqxliff_handler.update_target_segments(translations)
+            updated_count = self.mqxliff_handler.update_target_segments(translations, statuses)
             
             # Save the updated file
             if self.mqxliff_handler.save(output_path):
-                self.log(f"✓ Exported {updated_count} segments to memoQ XLIFF: {Path(output_path).name}")
+                self.log(f"✓ Exported {updated_count} changed segments to memoQ XLIFF: {Path(output_path).name}")
                 QMessageBox.information(
                     self, "Export Successful",
-                    f"Successfully exported {updated_count} translated segment(s) to memoQ XLIFF.\n\n"
+                    f"Exported to memoQ XLIFF: {updated_count} segment(s) with a new translation or status.\n\n"
                     f"File: {Path(output_path).name}\n\n"
                     f"You can now import this file back into memoQ."
                 )
@@ -41118,7 +41792,7 @@ class SupervertalerQt(QMainWindow):
             return
 
         try:
-            translations = [seg.target for seg in self.current_project.segments]
+            translations = [seg.target for seg in self._segments_in_document_order()]
             updated_count = self.po_handler.update_target_segments(translations)
 
             if self.po_handler.save(output_path):
@@ -41692,7 +42366,7 @@ class SupervertalerQt(QMainWindow):
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "Export Trados Bilingual DOCX",
-            str(source_path.parent / suggested_name),
+            str(self._export_dir_beside(source_path) / suggested_name),
             "Word Documents (*.docx);;All Files (*.*)"
         )
         
@@ -41700,18 +42374,18 @@ class SupervertalerQt(QMainWindow):
             return
         
         try:
-            # Collect translations from grid
+            # Collect translations by segment, not by grid row: the grid may be
+            # sorted, filtered or paginated, and then row n is not table row n
+            # of the review document (and rows on other pages have no editor
+            # at all, so their translations were left out).
+            segments = self._segments_in_document_order()
+            self._sync_grid_targets_to_segments(segments)
             translations = {}
-            for row in range(self.table.rowCount()):
-                target_widget = self.table.cellWidget(row, 3)  # Target column
-                if target_widget:
-                    target_text = target_widget.toPlainText().strip()
-                    # v1.9.306: Strip invisible markers before export
-                    if hasattr(self, 'reverse_invisible_replacements'):
-                        target_text = self.reverse_invisible_replacements(target_text).strip()
-                    if target_text:
-                        # Row index in handler is 1-based (row 0 is header)
-                        translations[row + 1] = target_text
+            for seg in segments:
+                target_text = (seg.target or '').strip()
+                if target_text:
+                    # Segment n came from table row n (row 0 is the header)
+                    translations[int(seg.id)] = target_text
             
             # Update the handler with translations
             updated = self.trados_handler.update_target_segments(translations)
@@ -42223,7 +42897,7 @@ class SupervertalerQt(QMainWindow):
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "Export Trados Return Package (SDLRPX)",
-            str(source_path.parent / suggested_name),
+            str(self._export_dir_beside(source_path) / suggested_name),
             "Trados Return Packages (*.sdlrpx);;All Files (*.*)"
         )
         
@@ -42896,7 +43570,7 @@ class SupervertalerQt(QMainWindow):
             if len(handler.xliff_files) == 1:
                 # Single file – use Save As dialog
                 default_name = Path(source_files[0]).stem + "_translated.sdlxliff"
-                default_dir = str(Path(source_files[0]).parent / default_name)
+                default_dir = str(self._export_dir_beside(source_files[0]) / default_name)
 
                 output_path, _ = QFileDialog.getSaveFileName(
                     self,
@@ -43346,7 +44020,7 @@ class SupervertalerQt(QMainWindow):
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "Export Phrase Bilingual DOCX",
-            str(source_path.parent / suggested_name),
+            str(self._export_dir_beside(source_path) / suggested_name),
             "Word Documents (*.docx);;All Files (*.*)"
         )
 
@@ -43704,7 +44378,7 @@ class SupervertalerQt(QMainWindow):
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "Export Déjà Vu Bilingual RTF",
-            str(source_path.parent / suggested_name),
+            str(self._export_dir_beside(source_path) / suggested_name),
             "RTF Files (*.rtf);;All Files (*.*)"
         )
 
@@ -44107,7 +44781,7 @@ class SupervertalerQt(QMainWindow):
             from modules.statuses import STATUSES, get_status
             from datetime import datetime, timezone
 
-            segments = list(self.current_project.segments)
+            segments = self._segments_in_document_order()
             # Flush any pending grid edits into the segment objects first, so the
             # export matches exactly what's on screen.
             try:
@@ -44126,8 +44800,8 @@ class SupervertalerQt(QMainWindow):
                 "<b>[SEGMENT NNNN]</b> format, with a <code>.svexport.json</code> "
                 "sidecar written alongside it.<br><br>"
                 "Edit the target lines in any text editor or with an LLM, then "
-                "re-import via <b>File → Import → 🔁 Supervertaler Re-importable → "
-                "Bilingual Text (AI-friendly)</b> to update this project."
+                "re-import via <b>Project → Import → 🔁 Supervertaler Re-importable → "
+                "Bilingual Text (AI-friendly) - Update Project…</b> to update this project."
             )
             info.setTextFormat(Qt.TextFormat.RichText)
             info.setWordWrap(True)
@@ -44275,9 +44949,9 @@ class SupervertalerQt(QMainWindow):
                     self, "Copied to Clipboard",
                     f"Copied {len(export_segs)} segment(s) to the clipboard.\n\n"
                     "Paste them into your AI chat. When you have the edited reply, "
-                    "copy it and press " + paste_key + " (File → Import → "
+                    "copy it and press " + paste_key + " (Project → Import → "
                     "🔁 Supervertaler Re-importable → Bilingual Text (AI-friendly) - "
-                    "Update from Pasted Text) to update this project.")
+                    "Update from Pasted Text…) to update this project.")
                 return
 
             side_path = write_export(file_path, md_text, sidecar)
@@ -44288,9 +44962,9 @@ class SupervertalerQt(QMainWindow):
                 self, "Export Complete",
                 f"Exported {len(export_segs)} segment(s) to:\n{os.path.basename(file_path)}\n\n"
                 f"Sidecar: {os.path.basename(side_path)}\n\n"
-                "Edit the target lines, then re-import via File → Import → "
-                "🔁 Supervertaler Re-importable → Bilingual Text (AI-friendly) to "
-                "update this project.")
+                "Edit the target lines, then re-import via Project → Import → "
+                "🔁 Supervertaler Re-importable → Bilingual Text (AI-friendly) - "
+                "Update Project… to update this project.")
 
         except Exception as e:
             QMessageBox.critical(self, "Export Error",
@@ -44709,7 +45383,7 @@ class SupervertalerQt(QMainWindow):
         try:
             from modules.cafetran_docx_handler import CafeTranDOCXHandler
             
-            segments = list(self.current_project.segments)
+            segments = self._segments_in_document_order()
             translations = [seg.target for seg in segments]
             
             if not translations or all(not t.strip() for t in translations):
@@ -44731,7 +45405,7 @@ class SupervertalerQt(QMainWindow):
             
             # Prompt user to save the file
             source_path = Path(self.cafetran_source_file)
-            default_name = str(source_path.parent / (source_path.stem + "_translated.docx"))
+            default_name = str(self._export_dir_beside(source_path) / (source_path.stem + "_translated.docx"))
             save_path, _ = QFileDialog.getSaveFileName(
                 self,
                 "Save CafeTran Bilingual DOCX",
@@ -44802,6 +45476,13 @@ class SupervertalerQt(QMainWindow):
         return set(range(start_row, end_row))
 
     def _populate_single_row(self, row, segment):
+        """Install full source/target editor widgets and metadata for one row
+        (see _populate_single_row_widgets); each editor's stylesheet is applied
+        once, when the row is complete."""
+        with _GridStyleBatch():
+            self._populate_single_row_widgets(row, segment)
+
+    def _populate_single_row_widgets(self, row, segment):
         """Install full source/target editor widgets and metadata for one row.
 
         Extracted from the per-row body of load_segments_to_grid as part of
@@ -45735,6 +46416,7 @@ class SupervertalerQt(QMainWindow):
             tm_name = match.get('tm_name', 'Unknown TM')
             match_pct = match.get('match_pct', 0)
             reverse_match = match.get('reverse_match', False)
+            fragment = match.get('fragment', '')
         else:
             tm_source_text = getattr(match, 'compare_source', '') or getattr(match, 'source', '')
             target_text = getattr(match, 'target', '')
@@ -45742,6 +46424,7 @@ class SupervertalerQt(QMainWindow):
             tm_name = md.get('tm_name', 'Unknown TM')
             match_pct = getattr(match, 'relevance', 0)
             reverse_match = bool(md.get('reverse_match', False))
+            fragment = md.get('fragment', '')
 
         # Update navigation label
         if hasattr(self, 'match_panel_tm_nav_label') and self.match_panel_tm_nav_label:
@@ -45813,10 +46496,17 @@ class SupervertalerQt(QMainWindow):
                 )
             else:
                 self.match_panel_tm_target_label.setToolTip("")
+            # "✂ fragment": the segment is part of this TM entry, or the
+            # other way round (issue #193)
+            fragment_chip = ""
+            if fragment:
+                from modules import tm_fragments
+                fragment_chip = " " + tm_fragments.CHIP_HTML
+                self.match_panel_tm_target_label.setToolTip(tm_fragments.tooltip_html(fragment))
             metadata_html = (
                 f"<span style='font-size:10px'>{tm_name}</span> "
                 f"(<span style='font-size:8px'>{match_pct}%</span>)"
-                f"{reverse_chip}"
+                f"{reverse_chip}{fragment_chip}"
             )
             self.match_panel_tm_target_label.setText(metadata_html)
     
@@ -46292,6 +46982,7 @@ class SupervertalerQt(QMainWindow):
         tm_name = match.get('tm_name', 'TM')
         match_pct = match.get('match_pct', 0)
         reverse_match = bool(match.get('reverse_match', False))
+        fragment = match.get('fragment', '')
 
         # Update metadata labels with emphasis:
         # - TM name: larger
@@ -46318,12 +47009,18 @@ class SupervertalerQt(QMainWindow):
                 "padding:1px 5px; border-radius:6px;'>⇄ reversed</span>"
             )
 
+        # "✂ fragment" chip for a fragment match (issue #193)
+        fragment_chip = ""
+        if fragment:
+            from modules import tm_fragments
+            fragment_chip = " " + tm_fragments.CHIP_HTML
+
         nav_html = (
             f"(<span style='font-size:8px'>{idx}/{total}</span>) "
             f"<span style='font-size:10px'>{tm_name_escaped}</span> "
             f"<span style='font-size:8px'>•</span> "
             f"<span style='font-size:10px; font-weight:700'>{match_pct_display}%</span>"
-            f"{reverse_chip}"
+            f"{reverse_chip}{fragment_chip}"
         )
 
         # Tooltip on both labels (set whether or not chip is present so we
@@ -46340,6 +47037,9 @@ class SupervertalerQt(QMainWindow):
             "normally."
             "</div>"
         ) if reverse_match else ""
+        if fragment:
+            from modules import tm_fragments
+            reverse_tooltip = tm_fragments.tooltip_html(fragment)
 
         if hasattr(self, 'compare_panel_tm_nav_label') and self.compare_panel_tm_nav_label:
             # Avoid a fixed font-size stylesheet overriding rich text emphasis, but keep theme color
@@ -46673,6 +47373,18 @@ class SupervertalerQt(QMainWindow):
         # Track current highlighted segment
         widget.current_highlighted_segment_id = None
 
+        # Hidden previews are not re-rendered on every change (issue #185), so
+        # catch up when this one is shown – tab switch, pop-out window, or the
+        # main window appearing with a project already loaded.
+        widget.preview_sig = None
+
+        def _showEvent(event, _w=widget, _base=widget.showEvent):
+            _base(event)
+            if getattr(_w, 'preview_sig', None) is None:
+                from PyQt6.QtCore import QTimer
+                QTimer.singleShot(0, self._refresh_preview_on_show)
+        widget.showEvent = _showEvent
+
         # Store reference in instance for easy access
         if not hasattr(self, 'preview_widgets'):
             self.preview_widgets = []
@@ -46719,6 +47431,7 @@ class SupervertalerQt(QMainWindow):
 
         try:
             self._render_preview(pv)
+            pv.preview_sig = self._preview_content_signature()
         except Exception:
             pass
         win.show()
@@ -47053,21 +47766,29 @@ class SupervertalerQt(QMainWindow):
                     if hasattr(widget, 'preview_text'):
                         widget.preview_text.clear()
                         widget.segment_positions = {}
-            self._preview_rendered_sig = None
+                        widget.preview_sig = None
             return
 
         if not hasattr(self, 'preview_widgets') or not self.preview_widgets:
             return
 
         sig = self._preview_content_signature()
-        widgets = [w for w in self.preview_widgets if hasattr(w, 'preview_text')]
-        all_populated = all(getattr(w, 'segment_positions', None) for w in widgets)
-        if not force and all_populated and sig == getattr(self, '_preview_rendered_sig', None):
-            return  # already current — caller re-applies the current-segment highlight
-
-        for widget in self.preview_widgets:
+        for widget in [w for w in self.preview_widgets if hasattr(w, 'preview_text')]:
+            try:
+                visible = widget.isVisible()
+            except RuntimeError:
+                continue
+            if not visible:
+                # Issue #185: a hidden preview (the usual case – the Match Panel
+                # is in front) is not rendered on every grid load; it renders
+                # when it is shown (see showEvent in _create_preview_tab). On a
+                # 17,000-segment import this render was most of the wait.
+                widget.preview_sig = None
+                continue
+            if not force and widget.segment_positions and getattr(widget, 'preview_sig', None) == sig:
+                continue  # already current – caller re-applies the current-segment highlight
             self._render_preview(widget)
-        self._preview_rendered_sig = sig
+            widget.preview_sig = sig
 
     def _preview_content_signature(self) -> str:
         """A cheap digest of everything the preview render depends on (segment
@@ -47117,7 +47838,31 @@ class SupervertalerQt(QMainWindow):
 
         cursor = preview_text.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.Start)
+        # One edit block for the whole render: the document is laid out once at
+        # the end instead of after every insert (issue #185).
+        cursor.beginEditBlock()
+        try:
+            self._render_preview_segments(widget, preview_text, cursor, zoom)
+        finally:
+            cursor.endEditBlock()
 
+        # Scroll to current segment if we have one
+        if hasattr(widget, 'current_segment_start_pos') and widget.current_segment_start_pos is not None:
+            # Create cursor at the current segment position
+            scroll_cursor = preview_text.textCursor()
+            scroll_cursor.setPosition(widget.current_segment_start_pos)
+            preview_text.setTextCursor(scroll_cursor)
+            # Center the segment in the viewport
+            # Use QTimer to delay centering until after layout is complete
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(0, lambda pt=preview_text: self._center_cursor_in_preview(pt))
+        else:
+            # Set cursor to beginning if no current segment
+            cursor.movePosition(QTextCursor.MoveOperation.Start)
+            preview_text.setTextCursor(cursor)
+
+    def _render_preview_segments(self, widget, preview_text, cursor, zoom):
+        """Insert every segment into the preview at ``cursor`` (see _render_preview)."""
         # Pre-calculate list numbers for numbered list items
         import re
         list_numbers = {}  # {segment_id: list_number}
@@ -47328,21 +48073,6 @@ class SupervertalerQt(QMainWindow):
 
         # Add final newline at end of document
         cursor.insertText("\n")
-
-        # Scroll to current segment if we have one
-        if hasattr(widget, 'current_segment_start_pos') and widget.current_segment_start_pos is not None:
-            # Create cursor at the current segment position
-            scroll_cursor = preview_text.textCursor()
-            scroll_cursor.setPosition(widget.current_segment_start_pos)
-            preview_text.setTextCursor(scroll_cursor)
-            # Center the segment in the viewport
-            # Use QTimer to delay centering until after layout is complete
-            from PyQt6.QtCore import QTimer
-            QTimer.singleShot(0, lambda pt=preview_text: self._center_cursor_in_preview(pt))
-        else:
-            # Set cursor to beginning if no current segment
-            cursor.movePosition(QTextCursor.MoveOperation.Start)
-            preview_text.setTextCursor(cursor)
 
     def _render_formatted_text(self, cursor, text: str, base_format: QTextCharFormat,
                                 list_number: Optional[int] = None):
@@ -47914,9 +48644,19 @@ class SupervertalerQt(QMainWindow):
         viewport = self.table.viewport()
         viewport_width = viewport.width()
 
-        for row, segment in enumerate(segments):
-            if row == 0:
-                continue  # First file has no preceding banner
+        # Only rows on screen get a banner: this runs on every scroll step, and
+        # making a label for every file boundary in the project (300 files →
+        # 300 labels per step) made scrolling and loading slow (issue #185).
+        # The row just below the viewport is included, since its banner sits
+        # above its top edge.
+        first = self.table.rowAt(0)
+        if first < 0:
+            return
+        last = self.table.rowAt(viewport.height() - 1)
+        if last < 0:
+            last = len(segments) - 1
+        for row in range(max(first, 1), min(last + 2, len(segments))):
+            segment = segments[row]
             prev_file_id = getattr(segments[row - 1], 'file_id', None)
             curr_file_id = getattr(segment, 'file_id', None)
             if curr_file_id is None or prev_file_id is None or curr_file_id == prev_file_id:
@@ -47957,10 +48697,14 @@ class SupervertalerQt(QMainWindow):
         width_reduction = 8
 
         # Manually calculate and set row heights for compact display
+        last_pump = time.monotonic()
         for row in range(self.table.rowCount()):
-            # Keep UI responsive during large grid updates
-            if row % 50 == 0:
+            # Keep UI responsive during large grid updates – a few times a
+            # second is enough; pumping every 50 rows cost more than the
+            # resizing itself on a 17,000-row project (issue #185).
+            if time.monotonic() - last_pump > 0.1:
                 QApplication.processEvents()
+                last_pump = time.monotonic()
             self._auto_resize_single_row(row, width_reduction)
 
         self.log("✓ Auto-resized rows to fit content (compact)")
@@ -48074,11 +48818,15 @@ class SupervertalerQt(QMainWindow):
         """
         font = QFont(self.default_font_family, self.default_font_size)
 
-        self.table.setFont(font)
+        # Re-setting an unchanged font still re-lays out every cell editor
+        # (seconds on a big project, issue #185), so only set a real change.
+        if self.table.font() != font:
+            self.table.setFont(font)
 
         # Also update header font - same size as grid content, normal weight
         header_font = QFont(self.default_font_family, self.default_font_size, QFont.Weight.Normal)
-        self.table.horizontalHeader().setFont(header_font)
+        if self.table.horizontalHeader().font() != header_font:
+            self.table.horizontalHeader().setFont(header_font)
 
         if skip_per_row:
             # Fast path for initial load: fonts on individual cells/widgets
@@ -48775,6 +49523,7 @@ class SupervertalerQt(QMainWindow):
         self.auto_insert_100_percent_matches = self.auto_fill_100_matches
         if 'auto_fill_confirm' in settings:
             self.auto_fill_confirm = settings['auto_fill_confirm']
+        self.tm_fragment_matches = bool(settings.get('tm_fragment_matches', True))
         # Auto-propagate-on-confirm settings.
         if 'auto_propagate_on_confirm' in settings:
             self.auto_propagate_on_confirm = settings['auto_propagate_on_confirm']
@@ -50457,6 +51206,7 @@ class SupervertalerQt(QMainWindow):
                                 'tm_id': tm_id,
                                 'match_pct': int(tm.relevance),
                                 'reverse_match': rev,
+                                'fragment': (tm.metadata or {}).get('fragment', ''),
                             })
                         self.set_compare_panel_matches(
                             segment_id,
@@ -51128,6 +51878,16 @@ class SupervertalerQt(QMainWindow):
                     "Re-place each segment's source tags into its translation "
                     "(one AI call per segment). Wording is never changed.")
                 autotag_action.triggered.connect(self.autotag_segments_bulk)
+
+        # Two AI models debate one contested translation (#242 tier 3) – one
+        # segment at a time on purpose, never wholesale
+        if n == 1 and (selected_segments[0].source or "").strip() and (selected_segments[0].target or "").strip():
+            arbitrate_action = menu.addAction("🎭 Arbitrate This Segment (two AI models)...")
+            arbitrate_action.setToolTip(
+                "Have two different AI models debate this translation against the source, prompt, "
+                "glossary and TM, and propose a final version for you to accept or not")
+            arbitrate_action.triggered.connect(
+                lambda checked=False, seg=selected_segments[0]: self.arbitrate_segment(seg))
 
         menu.addSeparator()
 
@@ -53135,7 +53895,7 @@ class SupervertalerQt(QMainWindow):
                         self.tm_display.setHtml(
                             f"<p style='color: #666;'><b>Source:</b> {source_text}</p>"
                             f"<p style='color: #E65100;'><i>No TMs activated for this project.</i></p>"
-                            f"<p style='color: #999; font-size: 9pt;'>Go to <b>Resources → TM</b> to activate translation memories.</p>"
+                            f"<p style='color: #999; font-size: 9pt;'>Go to the <b>💾 TMs</b> tab and tick <b>Read</b> to activate translation memories.</p>"
                         )
                     elif tms_wrong_language:
                         # Show message when TMs are activated but don't match project language pair
@@ -53143,7 +53903,7 @@ class SupervertalerQt(QMainWindow):
                         self.tm_display.setHtml(
                             f"<p style='color: #666;'><b>Source:</b> {source_text}</p>"
                             f"<p style='color: #E65100;'><i>Activated TMs don't match project language ({project_lang_pair}).</i></p>"
-                            f"<p style='color: #999; font-size: 9pt;'>Go to <b>Resources → TM</b> to activate TMs for this language pair.</p>"
+                            f"<p style='color: #999; font-size: 9pt;'>Go to the <b>💾 TMs</b> tab and tick <b>Read</b> to activate TMs for this language pair.</p>"
                         )
                     else:
                         self.tm_display.setHtml(
@@ -54451,13 +55211,78 @@ class SupervertalerQt(QMainWindow):
                 get_segments=lambda: self.current_project.segments if self.current_project else [],
                 navigate=self._navigate_to_segment_by_id,
                 on_sets_changed=_reload_fr_sets,
-                extract_tags=extract_all_tags)
+                extract_tags=extract_all_tags,
+                export_dir=self._project_subdir(REPORTS_SUBDIR))
+            set_help_topic(dlg, HelpTopics.QA_CHECKS)  # F1 opens its help page
             self._qa_checks_dialog = dlg
         else:
             dlg.refresh_sets()
         dlg.show()
         dlg.raise_()
         dlg.activateWindow()
+
+    def open_in_xbench(self):
+        """QA → Open in Xbench (issue #146): write the project as XLIFF, the terms
+        of its glossaries as key terms, and an Xbench project (.xbp) listing both,
+        then open the .xbp as a double-click would, which starts Xbench."""
+        from PyQt6.QtCore import QUrl
+        from PyQt6.QtGui import QDesktopServices
+        from modules import xbench_export
+        from modules import language_codes as lc
+
+        project = self.current_project
+        if not project or not project.segments:
+            QMessageBox.information(self, "Open in Xbench", "Open a project first.")
+            return
+        if self.project_file_path:
+            folder = os.path.join(os.path.dirname(os.path.abspath(self.project_file_path)),
+                                  xbench_export.XBENCH_FOLDER)
+        else:
+            import tempfile
+            folder = os.path.join(tempfile.gettempdir(), "Supervertaler Xbench",
+                                  xbench_export._safe_name(project.name))
+
+        key_terms = []
+        try:
+            mgr = getattr(self, 'termbase_mgr', None)
+            if mgr is not None and project.id is not None:
+                for tb_id in mgr.get_active_termbase_ids(project.id):
+                    termbase = mgr.get_termbase(tb_id) or {}
+                    key_terms += xbench_export.oriented_terms(
+                        mgr.get_terms(tb_id), termbase.get('source_lang'),
+                        project.source_lang, lc.same_language)
+        except Exception as e:
+            self.log(f"⚠ Xbench: could not read the glossaries: {e}")
+
+        # Document order, whatever the grid is sorted by
+        segments = getattr(self, '_original_segment_order', None) or project.segments
+        try:
+            result = xbench_export.write_xbench_project(
+                folder, project.name, segments,
+                lc.canonical(project.source_lang) or project.source_lang,
+                lc.canonical(project.target_lang) or project.target_lang,
+                key_terms)
+        except OSError as e:
+            QMessageBox.warning(self, "Open in Xbench", f"Could not write the Xbench files:\n\n{e}")
+            return
+        self.log(f"🔬 Xbench project written: {result['xbp']} ({result['segments']} segments, "
+                 f"{result['terms']} key terms)")
+
+        if QDesktopServices.openUrl(QUrl.fromLocalFile(result['xbp'])):
+            self.statusBar().showMessage(
+                f"Opening the project in Xbench – {result['segments']} segments, "
+                f"{result['terms']} key terms", 6000)
+            return
+        reply = QMessageBox.question(
+            self, "Open in Xbench",
+            "The Xbench project is ready, but it could not be opened. Is ApSIC Xbench "
+            "installed? It is available from xbench.net.\n\n"
+            f"The files are in:\n{folder}\n\n"
+            "Open that folder? You can then open the .xbp file in Xbench yourself.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes)
+        if reply == QMessageBox.StandardButton.Yes:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(folder))
 
     def show_languagetool_dialog(self):
         """QA → Check with LanguageTool (issue #233). Non-modal."""
@@ -54476,6 +55301,7 @@ class SupervertalerQt(QMainWindow):
                 load_settings=self.load_general_settings,
                 save_settings=self.save_general_settings,
                 get_proxies=_proxies)
+            set_help_topic(dlg, HelpTopics.QA_LANGUAGETOOL)  # F1 opens its help page
             self._languagetool_dialog = dlg
         else:
             from modules.languagetool_client import lt_language
@@ -59056,16 +59882,24 @@ class SupervertalerQt(QMainWindow):
                 w.deleteLater()
 
         # Collect (seg_id, segment, model, text) in document order.
+        from modules.cross_review import origin_of
+        origin_filter = getattr(self, '_pc_origin_filter', 'all')
         entries = []
+        any_comments = False
         if self.current_project and self.current_project.segments:
             for seg in self.current_project.segments:
                 pn = getattr(seg, 'proofreading_notes', None) or {}
                 for model_name, issue_text in pn.items():
                     if issue_text and str(issue_text).strip():
+                        any_comments = True
+                        if origin_filter != 'all' and origin_of(model_name) != origin_filter:
+                            continue
                         entries.append((seg.id, seg, model_name, issue_text))
 
         if not entries:
             empty = QLabel(
+                "(No comments of this kind. Choose <b>All comments</b> above to see the others.)"
+                if any_comments else
                 "(No proofreading comments yet — run <b>QA ▸ Proofreading ▸ "
                 "Proofread Translation…</b> to generate AI review comments.)")
             empty.setTextFormat(Qt.TextFormat.RichText)
@@ -59190,6 +60024,119 @@ class SupervertalerQt(QMainWindow):
 
             QTimer.singleShot(0, _reveal)
 
+    def _set_proofreading_origin_filter(self, origin):
+        """Show only one origin of proofreading comments ("all", "proofreading",
+        "XR" or "TC"; #242 tier 2) and rebuild the list."""
+        self._pc_origin_filter = origin or "all"
+        combo = getattr(self, '_pc_origin_combo', None)
+        if combo is not None and combo.currentData() != self._pc_origin_filter:
+            combo.blockSignals(True)
+            combo.setCurrentIndex(max(combo.findData(self._pc_origin_filter), 0))
+            combo.blockSignals(False)
+        self._refresh_proofreading_comments_list()
+
+    def show_cross_review_dialog(self, rows=None, translator=None, autostart=False):
+        """QA ▸ Proofreading ▸ Cross-model Review (#242 tier 2): a second model
+        checks the translations against the project's prompt and glossary."""
+        if not self.current_project:
+            QMessageBox.information(self, "No Project", "Please open or create a project first.")
+            return
+        from modules.cross_review_dialog import CrossReviewDialog
+        try:
+            self._sync_grid_targets_to_segments(self.current_project.segments)
+        except Exception:
+            pass
+        CrossReviewDialog(self, self, rows=rows, translator=translator, autostart=autostart).exec()
+
+    def arbitrate_segment(self, segment):
+        """Right-click ▸ Arbitrate This Segment (#242 tier 3): a Duet between
+        two models on one contested translation."""
+        if not self.current_project or segment is None:
+            return
+        try:
+            self._sync_grid_targets_to_segments([segment])
+        except Exception:
+            pass
+        if not (segment.target or "").strip():
+            QMessageBox.information(self, "Arbitrate segment", "This segment has no translation yet.")
+            return
+        from modules.arbitration_dialog import ArbitrationDialog
+        self._arbitration_dialog = ArbitrationDialog(self, self, segment)
+        self._arbitration_dialog.exec()
+
+    def extract_translator_comments(self):
+        """Move ⟦TC: …⟧ (and inline ⟦XR: …⟧) comments out of the target text
+        into proofreading comments (#242 tier 2). AutoPrompt prompts have the
+        AI append a ⟦TC⟧ comment to every segment it silently corrected; left
+        in the target, it would end up in the exported file."""
+        if not self.current_project or not self.current_project.segments:
+            QMessageBox.information(self, "Translator comments", "There is no open project.")
+            return
+        from modules.cross_review import TC, XR, note_key, split_markers
+        try:
+            self._sync_grid_targets_to_segments(self.current_project.segments)
+        except Exception:
+            pass
+        rows = self._rows_by_segment_id()
+        moved = 0
+        changed = []
+        undo_entries = []
+        locked = 0
+        for seg in self.current_project.segments:
+            clean, markers = split_markers(seg.target or "")
+            if not markers:
+                continue
+            if getattr(seg, 'locked', False):
+                locked += 1  # a locked segment isn't edited, not even by this
+                continue
+            notes = seg.proofreading_notes if isinstance(getattr(seg, 'proofreading_notes', None), dict) else {}
+            for kind in (TC, XR):
+                bodies = [b for k, b in markers if k == kind and b]
+                if bodies:
+                    key = note_key(kind, "translator" if kind == TC else "inline")
+                    previous = notes.get(key)
+                    text = "; ".join(bodies)
+                    notes[key] = f"{previous}; {text}" if previous and text not in previous else text
+                    moved += len(bodies)
+            seg.proofreading_notes = notes
+            undo_entries.append((seg.id, seg.target, clean, seg.status, seg.status))
+            seg.target = clean
+            changed.append(seg)
+        locked_note = (f"\n\n{locked} locked segment(s) with comments were left alone: "
+                       f"unlock them to move theirs." if locked else "")
+        if not changed:
+            QMessageBox.information(self, "Translator comments",
+                                    "No ⟦TC: …⟧ comments were found in the target text." + locked_note)
+            return
+        try:
+            self.record_undo_states_batch(undo_entries)
+        except Exception:
+            pass
+        for seg in changed:
+            row = rows.get(seg.id)
+            if row is None:
+                continue
+            editor = self.table.cellWidget(row, 3)
+            if editor is not None and hasattr(editor, 'setPlainText'):
+                display_text = seg.target
+                if getattr(self, 'hide_outer_wrapping_tags', False):
+                    display_text, _ = strip_outer_wrapping_tags(display_text)
+                editor.blockSignals(True)
+                editor.setPlainText(display_text)
+                editor.blockSignals(False)
+            try:
+                self._update_status_cell(row, seg)
+            except Exception:
+                pass
+        self.project_modified = True
+        self.update_window_title()
+        self._set_proofreading_origin_filter(TC)
+        self.log(f"⟦TC⟧ Moved {moved} translator comment(s) out of {len(changed)} target segment(s).")
+        QMessageBox.information(
+            self, "Translator comments",
+            f"Moved {moved} comment(s) out of {len(changed)} segment(s). They are in the "
+            f"Proofreading comments tab, shown as TC. Ctrl+Z puts them back in the text." + locked_note)
+
     def _delete_proofreading_comment(self, seg_id, model_name):
         """Delete one proofreading comment (a single LLM entry) from a segment
         (issue #234 pt.2). Re-running Proofread Translation regenerates it."""
@@ -59278,12 +60225,12 @@ class SupervertalerQt(QMainWindow):
         if existing is not None:
             return existing
         try:
-            from modules.voice_release_poller import KeyReleasePoller, IS_WINDOWS
+            from modules.voice_release_poller import KeyReleasePoller, POLLING_SUPPORTED
         except Exception as e:
             self.log(f"⚠ Voice release poller unavailable: {e}")
             self._voice_release_poller = None
             return None
-        if not IS_WINDOWS:
+        if not POLLING_SUPPORTED:  # Windows and macOS (#188)
             self._voice_release_poller = None
             return None
         poller = KeyReleasePoller(parent=self)
@@ -59324,13 +60271,13 @@ class SupervertalerQt(QMainWindow):
         if existing is not None:
             return existing
         try:
-            from modules.voice_release_poller import KeyReleasePoller, IS_WINDOWS
+            from modules.voice_release_poller import KeyReleasePoller, POLLING_SUPPORTED
         except Exception as e:
             self.log(f"⚠ Command-PTT release poller unavailable: {e}")
             self._command_ptt_release_poller = None
             return None
-        if not IS_WINDOWS:
-            # Non-Windows: no release polling. The listener stays on
+        if not POLLING_SUPPORTED:
+            # Linux: no release polling. The listener stays on
             # until the user toggles always-on off manually. Graceful
             # degradation rather than a broken feature.
             self._command_ptt_release_poller = None
@@ -59898,6 +60845,16 @@ class SupervertalerQt(QMainWindow):
                     ptt_engine = 'faster_whisper'
             elif ptt_engine == 'local':  # very old legacy alias
                 ptt_engine = 'faster_whisper'
+            if ptt_engine == 'parakeet':
+                # NVIDIA Parakeet V3 (#198): needs its model downloaded first
+                from modules.voice_engines import parakeet as _parakeet
+                if not _parakeet.is_installed(self.user_data_path):
+                    QMessageBox.information(
+                        self, "Parakeet V3 not downloaded",
+                        "Dictation is set to use Parakeet V3, but its model isn't "
+                        "downloaded yet.\n\nOpen the Voice tab and click Download in the "
+                        "Dictation group, or switch the engine back to faster-whisper.")
+                    return
             use_api = ptt_engine == 'api'
             api_key = None
             if use_api:
@@ -59970,6 +60927,8 @@ class SupervertalerQt(QMainWindow):
                 mic_device=mic_device,
                 initial_prompt=self.build_voice_initial_prompt(),
                 replacements=vocab_settings.get('replacements', []),
+                engine='parakeet' if ptt_engine == 'parakeet' else 'faster_whisper',
+                user_data_path=str(self.user_data_path),
             )
 
             # Connect signals
@@ -59986,6 +60945,8 @@ class SupervertalerQt(QMainWindow):
             # Start recording
             if use_api:
                 self.log(f"▶️ Starting dictation thread (OpenAI Whisper API, language={lang_code}, duration={max_duration}s)...")
+            elif ptt_engine == 'parakeet':
+                self.log(f"▶️ Starting dictation thread (Parakeet V3, language detected automatically, duration={max_duration}s)...")
             else:
                 self.log(f"▶️ Starting dictation thread (local Whisper model={model_name}, language={lang_code}, duration={max_duration}s)...")
             # Visual cue so the user knows the hotkey was received and the
@@ -61763,8 +62724,14 @@ class SupervertalerQt(QMainWindow):
         Reverses invisible character display replacements and restores
         stripped outer wrapping tags to get clean text for export.
         """
+        # One pass over the grid instead of a row search per segment, which
+        # was quadratic: minutes for a 17,000-segment package export.
+        rows = self._rows_by_segment_id()
         for segment in segments:
-            row = self._find_row_for_segment(segment.id)
+            try:
+                row = rows.get(int(segment.id), -1)
+            except (TypeError, ValueError):
+                row = -1
             if row >= 0:
                 target_widget = self.table.cellWidget(row, 3)
                 if target_widget:
@@ -61792,6 +62759,20 @@ class SupervertalerQt(QMainWindow):
                 except (ValueError, AttributeError):
                     continue
         return -1
+
+    def _rows_by_segment_id(self) -> Dict[int, int]:
+        """``{segment id: grid row}`` for the rows in the grid, in one pass."""
+        rows = {}
+        if not hasattr(self, 'table') or not self.table:
+            return rows
+        for row in range(self.table.rowCount()):
+            id_item = self.table.item(row, 0)
+            if id_item:
+                try:
+                    rows.setdefault(int(id_item.text()), row)
+                except (ValueError, AttributeError):
+                    continue
+        return rows
 
     def insert_termlens_text(self, text: str):
         """Insert text from TermLens into the currently active target field"""
@@ -62109,15 +63090,29 @@ class SupervertalerQt(QMainWindow):
         # (switching display modes changes widget content which could trigger textChanged)
         self._suppress_target_change_handlers = True
 
+        # One id → segment map for the whole pass: looking each row up with
+        # _segment_for_grid_row scanned the segment list per row, which took
+        # 16 s on a 17,000-segment project (issue #185).
+        segments_by_id = {s.id: s for s in self.current_project.segments}
+
         # Get current visible rows
         for row in range(self.table.rowCount()):
+            # Rows not built yet (another page, or not scrolled to) have no
+            # editors to update – they are built in the current mode later.
+            source_widget = self.table.cellWidget(row, 2)
+            target_widget = self.table.cellWidget(row, 3)
+            if source_widget is None and target_widget is None:
+                continue
             # Resolve the segment via the id in column 0 — NOT segments[row].
             # The table row index only equals the list position in unsorted,
             # unfiltered, single-page view; under a sort/filter/pagination the
             # positional lookup rendered each cell from the WRONG segment, so
             # toggling the view mode appeared to "not update" (or showed stale
             # text). The id-based lookup is correct in every view state.
-            segment, _seg_idx = self._segment_for_grid_row(row)
+            try:
+                segment = segments_by_id.get(int(self.table.item(row, 0).text()))
+            except (AttributeError, ValueError, TypeError):
+                segment = None
             if segment is None:
                 continue
 
@@ -62148,12 +63143,10 @@ class SupervertalerQt(QMainWindow):
             show_tags_for_cell = (mode in ('tags', 'compact'))
 
             # Update source cell (column 2)
-            source_widget = self.table.cellWidget(row, 2)
             if source_widget and hasattr(source_widget, 'update_display_mode'):
                 source_widget.update_display_mode(source_for_display, show_tags_for_cell)
 
             # Update target cell (column 3)
-            target_widget = self.table.cellWidget(row, 3)
             if target_widget and hasattr(target_widget, 'update_display_mode'):
                 target_widget.update_display_mode(target_for_display, show_tags_for_cell)
                 # Store tag map for reverse-expanding on save
@@ -65496,6 +66489,25 @@ class SupervertalerQt(QMainWindow):
             fuzzy_fixer_checkbox.setChecked(getattr(self, 'fuzzy_fixer_enabled', False))
             options_layout.addWidget(fuzzy_fixer_checkbox)
 
+            # Translate–edit–proofread with two models (#242 tier 2)
+            from modules.cross_review_dialog import load_settings as _load_xr_settings
+            from modules.duet_dialog import PROVIDERS as _XR_PROVIDERS
+            _xr_saved = _load_xr_settings(self)
+            cross_review_checkbox = CheckmarkCheckBox(self.tr(
+                "🔀 Then have a second AI model review the translations (cross-model review)"))
+            _xr_reviewer = (f"{dict(_XR_PROVIDERS).get(_xr_saved.get('provider'), _xr_saved.get('provider'))} "
+                            f"({_xr_saved.get('model')})" if _xr_saved.get('model')
+                            else self.tr("a model you choose"))
+            cross_review_checkbox.setToolTip(self.tr(
+                "AI translation only. When the batch is done, a second model checks every\n"
+                "translation against its source and this project's prompt and glossary, and\n"
+                "flags problems as XR proofreading comments. It doesn't change translations.\n\n"
+                "Reviewer: {}. Change it in QA ▸ Proofreading ▸ Cross-model Review…").format(_xr_reviewer))
+            cross_review_checkbox.setChecked(bool(_xr_saved.get('after_batch', False)))
+            cross_review_checkbox.setEnabled(llm_checkbox.isChecked())
+            llm_checkbox.toggled.connect(cross_review_checkbox.setEnabled)
+            options_layout.addWidget(cross_review_checkbox)
+
             _estimates = {}
 
             def update_cost_estimate(*_):
@@ -65567,6 +66579,10 @@ class SupervertalerQt(QMainWindow):
             tm_exact_only = tm_exact_only_checkbox.isChecked()
             auto_confirm_tm = auto_confirm_checkbox.isChecked()
             use_fuzzy_fixer = fuzzy_fixer_checkbox.isChecked()
+            self._batch_cross_review = cross_review_checkbox.isChecked() and llm_checkbox.isChecked()
+            if cross_review_checkbox.isEnabled():
+                from modules.cross_review_dialog import save_settings as _save_xr_settings
+                _save_xr_settings(self, {'after_batch': cross_review_checkbox.isChecked()})
 
             # Store retry setting for recursive calls
             self._batch_retry_enabled = retry_until_complete
@@ -66082,6 +67098,17 @@ class SupervertalerQt(QMainWindow):
         
         # Wait for worker to finish
         worker.wait()
+
+        # Cross-model review of the batch (#242 tier 2). Retry passes run nested
+        # inside the first pass's dialog, so by now they have all finished.
+        if (not is_retry_pass and translation_provider_type == 'LLM'
+                and getattr(self, '_batch_cross_review', False)
+                and not getattr(worker, '_cancelled', False)):
+            self._batch_cross_review = False
+            reviewed = [(row, seg) for row, seg in segments_to_translate if (seg.target or '').strip()]
+            if reviewed:
+                self.show_cross_review_dialog(rows=reviewed, translator=(translation_provider_name, model),
+                                              autostart=True)
         
         return  # batch translation runs on PreTranslationWorker (above)
 
@@ -66394,9 +67421,10 @@ class SupervertalerQt(QMainWindow):
             return f"[Google Translate error: {str(e)}]"
     
     def call_deepl(self, text: str, source_lang: str, target_lang: str, api_key: str = None) -> str:
-        """Call DeepL API"""
+        """Call DeepL with a DeepL API key or with the CAT-tool key of a DeepL
+        Pro Advanced/Ultimate subscription (issue #135; see modules/deepl_client)."""
         try:
-            import deepl
+            from modules import deepl_client
 
             if not api_key:
                 api_keys = self.load_api_keys()
@@ -66405,62 +67433,8 @@ class SupervertalerQt(QMainWindow):
             if not api_key:
                 return "[DeepL requires API key]"
 
-            translator = deepl.Translator(api_key, proxy=self._get_proxy_dict())
-
-            # Map full language names to ISO codes
-            lang_name_to_code = {
-                'english': 'en', 'dutch': 'nl', 'german': 'de', 'french': 'fr',
-                'spanish': 'es', 'italian': 'it', 'portuguese': 'pt', 'russian': 'ru',
-                'chinese': 'zh', 'japanese': 'ja', 'korean': 'ko', 'arabic': 'ar',
-                'polish': 'pl', 'swedish': 'sv', 'norwegian': 'no', 'danish': 'da',
-                'finnish': 'fi', 'greek': 'el', 'turkish': 'tr', 'czech': 'cs',
-                'hungarian': 'hu', 'romanian': 'ro', 'bulgarian': 'bg', 'ukrainian': 'uk',
-            }
-
-            # Convert source language - try name mapping first, then code extraction
-            src_lower = source_lang.lower().strip()
-            src_base = lang_name_to_code.get(src_lower, src_lower.split('-')[0].split('_')[0])
-            src_code = src_base.upper()
-
-            # Convert target language - try name mapping first, then handle DeepL variants
-            tgt_lower = target_lang.lower().strip()
-            tgt_base = lang_name_to_code.get(tgt_lower, tgt_lower)
-            tgt_upper = tgt_base.upper().replace('_', '-')
-
-            # DeepL target language mapping - some require specific variants
-            deepl_target_map = {
-                # English variants (EN alone is deprecated)
-                'EN': 'EN-US',      # Default to US English
-                'EN-US': 'EN-US',
-                'EN-GB': 'EN-GB',
-                'EN-AU': 'EN-GB',   # Map Australian to British
-                'EN-CA': 'EN-US',   # Map Canadian to US
-                # Portuguese variants
-                'PT': 'PT-PT',      # Default to European Portuguese
-                'PT-PT': 'PT-PT',
-                'PT-BR': 'PT-BR',
-                # Chinese variants
-                'ZH': 'ZH-HANS',    # Default to Simplified
-                'ZH-CN': 'ZH-HANS',
-                'ZH-TW': 'ZH-HANT',
-                'ZH-HANS': 'ZH-HANS',
-                'ZH-HANT': 'ZH-HANT',
-            }
-
-            # Check if full code matches first, then base code
-            if tgt_upper in deepl_target_map:
-                tgt_code = deepl_target_map[tgt_upper]
-            else:
-                # Extract base code and check
-                base_code = tgt_upper.split('-')[0]
-                if base_code in deepl_target_map:
-                    tgt_code = deepl_target_map[base_code]
-                else:
-                    # Use base code as-is for other languages
-                    tgt_code = base_code
-
-            result = translator.translate_text(text, source_lang=src_code, target_lang=tgt_code)
-            return result.text
+            return deepl_client.translate(text, source_lang, target_lang, api_key,
+                                          proxies=self._get_proxy_dict())
 
         except ImportError:
             return "[DeepL requires: pip install deepl]"
@@ -67173,8 +68147,8 @@ class SupervertalerQt(QMainWindow):
                             self._warned_no_active_tm_for_project = project_id
                             self.log(
                                 "ℹ️ No TM is switched on for this project, so no TM "
-                                "matches can be shown. Tick 'Read' for the TM you want in "
-                                "Resources → TM. (A new project starts with every TM off.)"
+                                "matches can be shown. Tick 'Read' for the TM you want on "
+                                "the 💾 TMs tab. (A new project starts with every TM off.)"
                             )
                     else:
                         # Strip outer structural tags if setting is enabled (for cleaner TM matching)
@@ -67197,7 +68171,8 @@ class SupervertalerQt(QMainWindow):
                             target_lang=self.tm_database.target_lang,
                             fuzzy_threshold=self.tm_database.fuzzy_threshold,
                             max_matches=10,
-                            tm_metadata=self.tm_database.tm_metadata
+                            tm_metadata=self.tm_database.tm_metadata,
+                            fragment_matches=getattr(self, 'tm_fragment_matches', True),
                         )
                         # Store segment reference for result handler
                         self._tm_search_pending_segment = segment
@@ -67268,6 +68243,8 @@ class SupervertalerQt(QMainWindow):
                         # Explicit flag for the Match Panel chip renderer
                         # (md.get('reverse_match', False) in the renderer).
                         'reverse_match': reverse_match,
+                        # 'in_tm' / 'in_segment' for a fragment match (#193)
+                        'fragment': match.get('fragment', ''),
                     },
                     match_type='TM',
                     compare_source=match.get('source', ''),
@@ -67318,6 +68295,7 @@ class SupervertalerQt(QMainWindow):
                         'tm_id': tm_id,
                         'match_pct': int(tm.relevance),
                         'reverse_match': rev,
+                        'fragment': (tm.metadata or {}).get('fragment', ''),
                     })
                 self._compare_panel_tm_matches = tm_matches_for_panel
                 self.set_compare_panel_matches(
@@ -67341,9 +68319,11 @@ class SupervertalerQt(QMainWindow):
                             self._auto_insert_tm_match(segment, best_match.target, None)
                             self._play_sound_effect('tm_100_percent_match')
 
-                # Play fuzzy match sound
+                # Play fuzzy match sound (a fragment match is not a fuzzy match)
                 has_100_match = any(float(tm.relevance) >= 99.5 for tm in tm_match_objects)
-                has_fuzzy_match = any(float(tm.relevance) < 99.5 and float(tm.relevance) >= 50 for tm in tm_match_objects)
+                has_fuzzy_match = any(float(tm.relevance) < 99.5 and float(tm.relevance) >= 50
+                                      and not (tm.metadata or {}).get('fragment')
+                                      for tm in tm_match_objects)
                 if has_fuzzy_match and not has_100_match:
                     self._play_sound_effect('tm_fuzzy_match')
 
@@ -70249,15 +71229,15 @@ class SuperlookupTab(QWidget):
 
         # v1.10.168: Removed the per-SuperLookup Termbase + TM checkbox
         # sub-tabs. Selection now lives in one place per resource: the
-        # main TMs tab's Read column for translation memories, and the
-        # main Termbases tab's Read column for termbases. A short note
-        # below explains where users should go.
+        # 🔍 SuperLookup column of the main TMs and Termbases tabs (since
+        # v1.10.247 independent of Read). A short note below explains
+        # where users should go.
         resource_info = QLabel(
             "<b>Translation Memories &amp; Termbases:</b> SuperLookup searches every TM and "
-            "termbase that has its <b>Read</b> flag enabled on the main <b>TMs</b> and "
-            "<b>Termbases</b> tabs. To include or exclude a resource from SuperLookup, "
-            "toggle its Read flag there. There used to be a second set of checkboxes here "
-            "in SuperLookup Settings — they were redundant and confusing, so they're gone."
+            "termbase ticked in the <b>🔍 SuperLookup</b> column of the main <b>TMs</b> and "
+            "<b>Termbases</b> tabs – whether or not it is also ticked <b>Read</b> for the "
+            "current project. To include or exclude a resource from SuperLookup, tick or "
+            "untick it in that column."
         )
         resource_info.setWordWrap(True)
         resource_info.setTextFormat(Qt.TextFormat.RichText)
@@ -71887,13 +72867,21 @@ class SuperlookupTab(QWidget):
         if self.main_window and hasattr(self.main_window, 'user_data_path'):
             from pathlib import Path
             user_data = Path(self.main_window.user_data_path)
-            self._search_history_file = user_data / "settings" / "superlookup_history.json"
-            
+            # Beside the other settings files in workbench/settings/. It used to
+            # be read and written in <data>/settings/, the folder those files
+            # were moved out of; a history still there is read once and then
+            # saved in the right place.
+            self._search_history_file = user_data / "workbench" / "settings" / "superlookup_history.json"
+            history_file = self._search_history_file
+            legacy_file = user_data / "settings" / "superlookup_history.json"
+            if not history_file.exists() and legacy_file.exists():
+                history_file = legacy_file
+
             # Load existing history
-            if self._search_history_file.exists():
+            if history_file.exists():
                 try:
                     import json
-                    with open(self._search_history_file, 'r', encoding='utf-8') as f:
+                    with open(history_file, 'r', encoding='utf-8') as f:
                         data = json.load(f)
                         self.search_history = data.get('searches', [])[:20]
                 except Exception:
@@ -72648,9 +73636,15 @@ class SuperlookupTab(QWidget):
                     self.hotkey_registered = True
                     failed = getattr(manager, 'failed_hotkeys', [])
                     if failed:
-                        _log(f"\u26A0 [Global Hotkeys] Failed to register: {', '.join(failed)} (claimed by another app)")
+                        _why = ("a key macOS global hotkeys can't use" if manager._backend == 'nsevent'
+                                else "claimed by another app")
+                        _log(f"\u26A0 [Global Hotkeys] Failed to register: {', '.join(failed)} ({_why})")
                     ok_keys = [s for s, _ in _to_register if s not in failed]
                     _log(f"\u2328 [Global Hotkeys] Registered via {manager._backend}: {', '.join(ok_keys)}")
+                    if getattr(manager, 'permission_missing', False):
+                        _log("\u26A0 [Global Hotkeys] macOS hasn't granted Accessibility, so the "
+                             "hotkeys won't fire from other apps.")
+                        QTimer.singleShot(2500, self._show_mac_accessibility_notice)
                     return
                 else:
                     _log("[Global Hotkeys] manager.start() returned False")
@@ -72959,6 +73953,7 @@ class SuperlookupTab(QWidget):
                         sm = getattr(mw, 'shortcut_manager', None)
                         chord_str = sm.get_shortcut('voice_dictate') if sm else ''
                         if chord_str and poller.set_chord(chord_str):
+                            self._arm_release_keycode(poller)
                             poller.start()
             else:
                 print("[Voice] Workbench unavailable for push-to-talk")
@@ -73040,9 +74035,60 @@ class SuperlookupTab(QWidget):
                     sm = getattr(mw, 'shortcut_manager', None)
                     chord_str = sm.get_shortcut('voice_command_ptt') if sm else ''
                     if chord_str and poller.set_chord(chord_str):
+                        self._arm_release_keycode(poller)
                         poller.start()
         except Exception as e:
             print(f"[Voice] Error in command-PTT press handler: {e}")
+
+    def _arm_release_keycode(self, poller):
+        """macOS: have the release poller watch the physical key that fired
+        the hotkey – on a non-US layout it isn't the US key the shortcut
+        string names (#188). No-op elsewhere."""
+        manager = getattr(self, '_hotkey_manager', None)
+        if manager is not None and hasattr(poller, 'set_trigger_keycode'):
+            try:
+                poller.set_trigger_keycode(manager.last_trigger_keycode())
+            except Exception:
+                pass
+
+    def _show_mac_accessibility_notice(self):
+        """macOS: the global hotkeys are registered, but Accessibility isn't
+        granted, so macOS sends them no keystrokes from other apps (#188).
+        Say so once, with a way to the right System Settings page."""
+        from modules.platform_helpers import (
+            MAC_ACCESSIBILITY_SETTINGS_URL, mac_accessibility_trusted)
+        mw = self.main_window
+        try:
+            gs = mw._load_general_settings_from_file() if mw else {}
+            if gs.get('mac_accessibility_notice_off'):
+                return
+        except Exception:
+            gs = None
+        box = QMessageBox(mw or self)
+        box.setIcon(QMessageBox.Icon.Information)
+        box.setWindowTitle("Global hotkeys need Accessibility")
+        box.setText("Supervertaler's global hotkeys won't work in other apps yet.")
+        box.setInformativeText(
+            "macOS only passes keystrokes to Supervertaler after you allow it in "
+            "System Settings → Privacy & Security → Accessibility. Switch on "
+            "Supervertaler there (or Terminal / iTerm2, if you start Supervertaler "
+            "from a terminal), then restart Supervertaler.\n\n"
+            "Hold-to-talk dictation also needs Input Monitoring, on the same page.\n\n"
+            "Inside Supervertaler, the shortcuts work without this.")
+        open_btn = box.addButton("Open System Settings", QMessageBox.ButtonRole.AcceptRole)
+        box.addButton("Not Now", QMessageBox.ButtonRole.RejectRole)
+        never = QCheckBox("Don't show this again")
+        box.setCheckBox(never)
+        box.exec()
+        if box.clickedButton() is open_btn:
+            mac_accessibility_trusted(prompt=True)  # lists the app on that page
+            QDesktopServices.openUrl(QUrl(MAC_ACCESSIBILITY_SETTINGS_URL))
+        if never.isChecked() and gs is not None:
+            try:
+                gs['mac_accessibility_notice_off'] = True
+                mw.save_general_settings(gs)
+            except Exception:
+                pass
 
     def _try_ahk_library_method(self):
         """Try to register hotkey using ahk Python library

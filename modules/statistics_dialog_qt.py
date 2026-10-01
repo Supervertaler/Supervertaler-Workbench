@@ -10,6 +10,7 @@ in per-TM as each completes. Results can be exported to HTML.
 from __future__ import annotations
 
 import html
+import os
 import re
 from typing import Dict, List
 
@@ -35,7 +36,7 @@ class StatisticsDialog(QDialog):
 
     def __init__(self, parent, db_manager, segments, source_lang, target_lang,
                  tm_choices: List[dict], preselected_tm_ids: List[str],
-                 project_name: str = ""):
+                 project_name: str = "", export_dir: str = None):
         """
         Args:
             db_manager: the app's DatabaseManager (for db_path)
@@ -44,6 +45,8 @@ class StatisticsDialog(QDialog):
             tm_choices: [{'tm_id', 'name', 'entry_count'}, ...]
             preselected_tm_ids: TM ids ticked by default (project's active TMs)
             project_name: the open project's name (shown in the header and exports)
+            export_dir: folder the Export dialog opens in (the project's
+                reports/ folder); created when you export
         """
         super().__init__(parent)
         self.setWindowTitle("Statistics – Analyse Against TM")
@@ -55,6 +58,7 @@ class StatisticsDialog(QDialog):
         self._tgt_lang     = target_lang
         self._tm_choices   = tm_choices
         self._project_name = project_name or ""
+        self._export_dir   = export_dir
         self._worker       = None
         self._results: List[TMResult] = []
         self._tm_checks: Dict[str, CheckmarkCheckBox] = {}
@@ -380,6 +384,12 @@ class StatisticsDialog(QDialog):
         # export lands as e.g. "BRANTS (TRAX-005-BE-EP) - statistics.html".
         base = self._safe_filename(self._project_name) or "supervertaler"
         default_name = f"{base} - statistics.html"
+        if self._export_dir:
+            try:
+                os.makedirs(self._export_dir, exist_ok=True)
+                default_name = os.path.join(self._export_dir, default_name)
+            except OSError:
+                pass
         path, selected = QFileDialog.getSaveFileName(
             self, "Export statistics", default_name,
             ";;".join([html_flt, xlsx_flt, csv_flt]))

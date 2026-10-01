@@ -156,6 +156,8 @@ class Topics:
     QA_SPELLCHECK       = "workbench/qa/spellcheck/"
     QA_TAGS             = "workbench/qa/tag-validation/"
     QA_NT               = "workbench/qa/non-translatables/"
+    QA_CHECKS           = "workbench/qa/qa-checks/"
+    QA_LANGUAGETOOL     = "workbench/qa/languagetool/"
 
     # Voice, Clipboard Manager, and Chat — the old "Companion Tabs"
     # grouping was dropped (2026-05-21). Voice and Clipboard Manager are
@@ -194,9 +196,12 @@ class Topics:
     SETTINGS_SHORTCUTS  = "workbench/settings/shortcuts/"
     SETTINGS_THEME      = "workbench/settings/theme/"
     SETTINGS_FONTS      = "workbench/settings/fonts/"
+    SETTINGS_SEGMENTATION = "workbench/settings/segmentation-rules/"
+    SETTINGS_INLINE_CODES = "workbench/settings/inline-codes/"
 
     # Troubleshooting
     TROUBLESHOOTING     = "workbench/troubleshooting/common-issues/"
+    TROUBLESHOOTING_TM  = "workbench/troubleshooting/tm-matches/"
 
 
 class _HelpEventFilter(QObject):

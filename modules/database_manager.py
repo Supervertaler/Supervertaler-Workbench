@@ -2101,6 +2101,71 @@ class DatabaseManager:
         
         return results
     
+    def search_fragment_matches(self, source: str, tm_ids: List[str] = None,
+                                source_lang: str = None, target_lang: str = None,
+                                max_results: int = 3, exclude_sources=()) -> List[Dict]:
+        """TM entries whose source contains this whole segment, or whose whole
+        source occurs in it – *fragment matches* (issue #193, see
+        ``modules/tm_fragments.py``). Best first; each has ``fragment`` set.
+
+        Two candidate queries on the word index, both cheap: the segment's
+        words as one phrase (TM sentences that contain it, shortest first),
+        and any pair of adjacent words of it as a phrase (a TM entry of two
+        or more words inside the segment has at least one), by relevance and
+        no longer than the segment. Single-word OR queries, as the fuzzy search
+        uses, cost 3–10× more on a 300,000-entry TM. The exact word-run check
+        happens in Python. Space-less (CJK) text is skipped.
+        """
+        from modules import tm_fragments as frag
+        from modules.tmx_generator import get_lang_match_variants
+
+        seg_words = frag.words(source)
+        if len(seg_words) < frag.MIN_WORDS or _dbm_contains_cjk(source):
+            return []
+
+        filters, params = "", []
+        if tm_ids:
+            filters += f" AND tu.tm_id IN ({','.join('?' * len(tm_ids))})"
+            params.extend(tm_ids)
+        for column, lang in (("source_lang", source_lang), ("target_lang", target_lang)):
+            if not lang:
+                continue
+            conditions = []
+            for variant in get_lang_match_variants(lang):
+                conditions.append(f"tu.{column} = ? COLLATE NOCASE")
+                conditions.append(f"tu.{column} LIKE ?")
+                params.extend([variant, f"{variant}-%"])
+            filters += f" AND ({' OR '.join(conditions)})"
+
+        def quote(word):
+            return '"' + word.replace('"', '""') + '"'
+
+        # Only the source column: a word found in a TM entry's translation
+        # says nothing about its source
+        pairs = list(dict.fromkeys(
+            quote(f"{a} {b}") for a, b in zip(seg_words, seg_words[1:])))[:40]
+        queries = [
+            ('source_text : ' + quote(' '.join(seg_words)),
+             "", [], "length(tu.source_text)", 200),
+            ('source_text : (' + ' OR '.join(pairs) + ')',
+             " AND length(tu.source_text) <= ?", [len(source) * 2 + 20],
+             "bm25(translation_units_fts)", 300),
+        ]
+        candidates = []
+        for fts_query, extra, extra_params, order, limit in queries:
+            try:
+                self.cursor.execute(
+                    f"SELECT tu.* FROM translation_units tu "
+                    f"JOIN translation_units_fts ON tu.id = translation_units_fts.rowid "
+                    f"WHERE translation_units_fts MATCH ?{filters}{extra} "
+                    f"ORDER BY {order} LIMIT {limit}",
+                    [fts_query] + params + extra_params)
+                candidates.extend(dict(row) for row in self.cursor.fetchall())
+            except Exception as e:
+                self.log(f"[TM] Fragment search failed: {e}")
+        return frag.pick(source, candidates, max_results=max_results,
+                         exclude_sources=exclude_sources)
+
     def search_all(self, source: str, tm_ids: List[str] = None, enabled_only: bool = True,
                    threshold: float = 0.75, max_results: int = 10) -> List[Dict]:
         """

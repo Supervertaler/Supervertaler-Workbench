@@ -78,6 +78,33 @@ class SDLSegment:
     comments: list = field(default_factory=list)  # Trados comments: [{"id", "text", "user", "date", "severity"}]
 
 
+def _deferred_xml_property(name: str) -> property:
+    """``source_xml``/``target_xml`` may be given as a zero-argument callable,
+    which is called – and its result kept – the first time the value is read.
+
+    Serialising every segment's XML with ElementTree was a quarter of the time
+    it takes to parse a package (issue #185), and nothing reads it during an
+    import, so the parser hands over callables instead of strings.
+    """
+    attr = '_' + name
+
+    def fget(self):
+        value = self.__dict__.get(attr, "")
+        if callable(value):
+            value = value()
+            self.__dict__[attr] = value
+        return value
+
+    def fset(self, value):
+        self.__dict__[attr] = value
+
+    return property(fget, fset)
+
+
+SDLSegment.source_xml = _deferred_xml_property('source_xml')
+SDLSegment.target_xml = _deferred_xml_property('target_xml')
+
+
 @dataclass
 class SDLXLIFFFile:
     """Represents an SDLXLIFF file within a package"""
@@ -239,14 +266,14 @@ class SDLXLIFFParser:
             segments = self._parse_segmented_unit(tu, tu_id, seg_source, target_elem, file_path)
         else:
             # Single segment
-            source_xml = self._element_to_string(source_elem)
+            source_xml = lambda e=source_elem: self._element_to_string(e)
             source_text = self._extract_text(source_elem)
 
             target_xml = ""
             target_text = ""
             if target_elem is not None:
                 self._current_segment_comments = []
-                target_xml = self._element_to_string(target_elem)
+                target_xml = lambda e=target_elem: self._element_to_string(e)
                 target_text = self._extract_text(target_elem)
 
             # Get SDL-specific attributes
@@ -319,7 +346,8 @@ class SDLXLIFFParser:
             if not ''.join(source_mrk.itertext()).strip():
                 continue
 
-            source_xml = self._element_inner_xml(source_mrk)
+            # Serialised only if read (see _deferred_xml_property)
+            source_xml = lambda e=source_mrk: self._element_inner_xml(e)
             source_text = self._extract_text(source_mrk)
             
             target_mrk = target_mrk_map.get(mid)
@@ -327,7 +355,7 @@ class SDLXLIFFParser:
             target_text = ""
             self._current_segment_comments = []
             if target_mrk is not None:
-                target_xml = self._element_inner_xml(target_mrk)
+                target_xml = lambda e=target_mrk: self._element_inner_xml(e)
                 target_text = self._extract_text(target_mrk)
 
             # Capture any comments found during target text extraction

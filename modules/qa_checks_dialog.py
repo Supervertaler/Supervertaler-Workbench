@@ -5,6 +5,7 @@ segment. The dialog stays open while you fix things; Run again refreshes it.
 """
 
 import csv
+import os
 import html
 
 from PyQt6.QtCore import Qt
@@ -20,12 +21,13 @@ class QAChecksDialog(QDialog):
     COLUMNS = ["Segment", "Check", "In", "Found", "Context"]
 
     def __init__(self, parent, sets_dir, get_segments, navigate, on_sets_changed=None,
-                 extract_tags=None):
+                 extract_tags=None, export_dir=None):
         """``get_segments()`` returns the project's segments; ``navigate(id)``
         selects a segment in the grid; ``on_sets_changed()`` is called after the
         dialog writes a set (so an open F&R Sets list can reload);
         ``extract_tags(text)`` lists a text's inline tags and codes, for the
-        built-in tag check (issue #194)."""
+        built-in tag check (issue #194). ``export_dir`` is where Export opens
+        (the project's reports/ folder)."""
         super().__init__(parent)
         self.setWindowTitle("QA Checks")
         self.resize(900, 520)
@@ -34,6 +36,7 @@ class QAChecksDialog(QDialog):
         self._navigate = navigate
         self._on_sets_changed = on_sets_changed
         self._extract_tags = extract_tags
+        self._export_dir = export_dir
         self._findings = []
 
         intro = QLabel(
@@ -189,7 +192,14 @@ class QAChecksDialog(QDialog):
         if not self._findings:
             QMessageBox.information(self, "QA Checks", "Run the checks first.")
             return
-        path, _ = QFileDialog.getSaveFileName(self, "Export QA findings", "qa-findings.csv",
+        default = "qa-findings.csv"
+        if self._export_dir:
+            try:
+                os.makedirs(self._export_dir, exist_ok=True)
+                default = os.path.join(self._export_dir, default)
+            except OSError:
+                pass
+        path, _ = QFileDialog.getSaveFileName(self, "Export QA findings", default,
                                               "CSV file (*.csv)")
         if not path:
             return

@@ -67,6 +67,10 @@ sounddevice>=0.4.6
 # with "Vosk is not installed". Users who'd rather use Whisper API or
 # faster-whisper can switch the engine in the Voice tab.
 vosk>=0.3.44
+# NVIDIA Parakeet V3 – optional faster dictation engine (Voice tab → Dictation
+# → Engine). The model (~650 MB) downloads only when you click Download.
+onnx-asr>=0.12.0
+onnxruntime>=1.18.1
 # Optional (offline/local speech recognition). Heavy dependency (PyTorch).
 # Install only if you want Local Whisper mode:
 #   pip install supervertaler[local-whisper]

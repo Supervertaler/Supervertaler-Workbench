@@ -53,9 +53,14 @@ class QuickDictationThread(QThread):
     model_loading_started = pyqtSignal(str)  # Model name being loaded/downloaded
     model_loading_finished = pyqtSignal()  # Model loaded successfully
 
-    def __init__(self, model_name="base", language="auto", duration=10, use_api: bool = False, api_key: str | None = None, mic_device: str | None = None, initial_prompt: str | None = None, replacements: list | None = None):
+    def __init__(self, model_name="base", language="auto", duration=10, use_api: bool = False, api_key: str | None = None, mic_device: str | None = None, initial_prompt: str | None = None, replacements: list | None = None,
+                 engine: str = "faster_whisper", user_data_path: str | None = None):
         super().__init__()
         self.model_name = model_name
+        # "faster_whisper" (default), "api", or "parakeet" (issue #198:
+        # NVIDIA Parakeet V3 via onnx-asr, model in <user_data>/voice-models)
+        self.engine = "api" if use_api else engine
+        self.user_data_path = user_data_path
         self.language = None if language == "auto" else language
         self.duration = duration  # Max recording duration
         self.use_api = use_api
@@ -93,13 +98,13 @@ class QuickDictationThread(QThread):
             import sounddevice as sd
             import numpy as np
 
-            # Local Whisper needs FFmpeg; API mode does not.
-            if not self.use_api:
+            # Local Whisper needs FFmpeg; the API and Parakeet (which reads
+            # the WAV itself) don't.
+            if self.engine == "faster_whisper":
                 if not ensure_ffmpeg_available():
                     self.error_occurred.emit(
                         "FFmpeg not found. Local Whisper requires FFmpeg.\n\n"
-                        "Option A (recommended): Switch to 'OpenAI Whisper API' in Sidekick → Voice.\n\n"
-                        "Option B: Install FFmpeg (PowerShell as Admin):\n"
+                        "Install FFmpeg (PowerShell as Admin):\n"
                         "winget install FFmpeg  (or)  choco install ffmpeg"
                     )
                     return
@@ -192,6 +197,8 @@ class QuickDictationThread(QThread):
 
                 self.status_update.emit("🎤 Using OpenAI Whisper API (fast & accurate)")
                 text = self._transcribe_with_api(temp_path)
+            elif self.engine == "parakeet":
+                text = self._transcribe_with_parakeet(temp_path)
             else:
                 text = self._transcribe_with_local(temp_path)
 
@@ -250,8 +257,7 @@ class QuickDictationThread(QThread):
                 msg = (
                     "faster-whisper is not installed in this environment.\n\n"
                     "Re-install Supervertaler:\n"
-                    "  pip install --upgrade supervertaler\n\n"
-                    "Or switch to 'OpenAI Whisper API' in Sidekick → Voice."
+                    "  pip install --upgrade supervertaler"
                 )
                 self.error_occurred.emit(msg)
                 return ""
@@ -292,6 +298,35 @@ class QuickDictationThread(QThread):
             return self._apply_replacements(text.strip())
         except Exception as e:
             self.error_occurred.emit(f"Local transcription error: {e}")
+            return ""
+
+    def _transcribe_with_parakeet(self, audio_path: str) -> str:
+        """Transcribe with NVIDIA Parakeet V3 (issue #198). The model stays
+        loaded between dictations. Parakeet detects the language itself and
+        has no vocabulary prompt, so only the replacement table applies."""
+        try:
+            from modules.voice_engines import parakeet
+            if not parakeet.is_available():
+                self.error_occurred.emit(
+                    "Parakeet needs the onnx-asr and onnxruntime packages:\n\n"
+                    "  pip install --upgrade supervertaler")
+                return ""
+            if not parakeet.is_installed(self.user_data_path or ""):
+                self.error_occurred.emit(
+                    "The Parakeet V3 model isn't downloaded yet.\n\n"
+                    "Download it in the Voice tab → Dictation, or switch the engine "
+                    "back to faster-whisper.")
+                return ""
+            if not parakeet._loaded:
+                self.model_loading_started.emit(parakeet.PARAKEET_V3.name)
+                self.status_update.emit("⏳ Loading Parakeet V3...")
+                parakeet.load(self.user_data_path)
+                self.model_loading_finished.emit()
+            self.status_update.emit("⏳ Transcribing audio...")
+            text = parakeet.transcribe(audio_path, self.user_data_path)
+            return self._apply_replacements(text)
+        except Exception as e:
+            self.error_occurred.emit(f"Parakeet transcription error: {e}")
             return ""
 
     def _apply_replacements(self, text: str) -> str:
