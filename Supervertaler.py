@@ -11801,6 +11801,21 @@ class SupervertalerQt(QMainWindow):
 
         file_menu.addSeparator()
 
+        # Project packages: the whole project, with its TMs, glossaries and
+        # prompt, in one file (issue #156)
+        pack_action = QAction(self.tr("📦 &Pack Project (.svpkg)..."), self)
+        pack_action.setToolTip(self.tr("Put the project, its TMs, glossaries and prompt into one file, "
+                                       "to carry on with it on another computer"))
+        pack_action.triggered.connect(self.export_project_package)
+        file_menu.addAction(pack_action)
+
+        unpack_action = QAction(self.tr("📦 Open Pac&kage (.svpkg)..."), self)
+        unpack_action.setToolTip(self.tr("Unpack a project package and open the project"))
+        unpack_action.triggered.connect(self.open_project_package)
+        file_menu.addAction(unpack_action)
+
+        file_menu.addSeparator()
+
         close_action = QAction(self.tr("&Close Project"), self)
         close_action.triggered.connect(self.close_project)
         file_menu.addAction(close_action)
@@ -36385,6 +36400,296 @@ class SupervertalerQt(QMainWindow):
 
         except Exception as e:
             self.log(f"⚠️ Auto backup failed: {e}")
+
+    # ------------------------------------------------------------------
+    # Project packages (.svpkg) – issue #156
+    # ------------------------------------------------------------------
+    def export_project_package(self):
+        """Pack the open project – its folder, plus the TMs, glossaries and
+        prompt it uses – into one .svpkg file (modules/svpkg.py)."""
+        from modules import svpkg
+        title = self.tr("Pack Project")
+        if not self.current_project:
+            QMessageBox.information(self, title, self.tr("Open a project first."))
+            return
+        if not getattr(self, 'project_file_path', None):
+            QMessageBox.information(self, title, self.tr(
+                "Save the project first (Project → Save): a package is made from the saved project."))
+            return
+        # The package should hold the latest work
+        if getattr(self, 'project_modified', False):
+            self.save_project_to_file(self.project_file_path)
+        svproj = os.path.abspath(self.project_file_path)
+        project_dir = os.path.dirname(svproj)
+        name = getattr(self.current_project, 'name', '') or Path(svproj).stem
+        default = os.path.join(os.path.dirname(project_dir), f"{svpkg.safe_name(name)}.svpkg")
+        path, _ = QFileDialog.getSaveFileName(self, title, default,
+                                              "Supervertaler package (*.svpkg);;All Files (*.*)")
+        if not path:
+            return
+        if not path.lower().endswith('.svpkg'):
+            path += '.svpkg'
+
+        import tempfile
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                resources = self._package_resources(tmp)
+                info = {
+                    'name': name,
+                    'source_lang': getattr(self.current_project, 'source_lang', ''),
+                    'target_lang': getattr(self.current_project, 'target_lang', ''),
+                    'segments': len(self.current_project.segments or []),
+                }
+                manifest = svpkg.build_package(path, project_dir, svproj, resources, info, __version__)
+        except Exception as exc:
+            QApplication.restoreOverrideCursor()
+            self.log(f"❌ Could not pack the project: {exc}")
+            QMessageBox.critical(self, title, f"Could not pack the project:\n\n{exc}")
+            return
+        QApplication.restoreOverrideCursor()
+
+        kinds = [r['kind'] for r in manifest['resources']]
+        size_mb = os.path.getsize(path) / (1024 * 1024)
+        self.log(f"📦 Packed {name} into {path} ({size_mb:.1f} MB)")
+        QMessageBox.information(self, title, self.tr(
+            "The project is packed:\n\n{path}\n\n"
+            "Size: {size:.1f} MB\n"
+            "TMs: {tms}   Glossaries: {tbs}   Prompts: {prompts}\n\n"
+            "On the other computer, use Project → Open Package to unpack it.").format(
+                path=path, size=size_mb, tms=kinds.count('tm'),
+                tbs=kinds.count('glossary'), prompts=kinds.count('prompt')))
+
+    def _package_resources(self, tmp_dir):
+        """Export the project's TMs, glossaries and prompts into ``tmp_dir``
+        for the package: the ones switched on (Read) for the project."""
+        resources = []
+        proj = self.current_project
+        pid = getattr(proj, 'id', None)
+
+        mgr = getattr(self, 'tm_metadata_mgr', None)
+        if mgr and pid:
+            from modules.tmx_generator import TMXGenerator
+            all_tms = {t['tm_id']: t for t in mgr.get_all_tms()}
+            for tm_id in mgr.get_active_tm_ids(pid) or []:
+                tm = all_tms.get(tm_id)
+                if not tm:
+                    continue
+                rows = self.db_manager.cursor.execute(
+                    "SELECT source_text, target_text FROM translation_units WHERE tm_id = ? ORDER BY id",
+                    (tm_id,)).fetchall()
+                if not rows:
+                    continue
+                gen = TMXGenerator(log_callback=self.log)
+                src = tm.get('source_lang') or proj.source_lang
+                tgt = tm.get('target_lang') or proj.target_lang
+                tree = gen.generate_tmx(source_segments=[r[0] for r in rows],
+                                        target_segments=[r[1] for r in rows],
+                                        source_lang=src, target_lang=tgt)
+                f = os.path.join(tmp_dir, f"tm_{len(resources)}.tmx")
+                if gen.save_tmx(tree, f):
+                    resources.append({'kind': 'tm', 'name': tm['name'], 'path': f, 'tm_id': tm_id,
+                                      'source_lang': src, 'target_lang': tgt, 'entries': len(rows)})
+
+        tbm = getattr(self, 'termbase_mgr', None)
+        if tbm and pid:
+            from modules.termbase_import_export import TermbaseExporter
+            exporter = TermbaseExporter(self.db_manager, tbm)
+            for tb_id in tbm.get_active_termbase_ids(pid) or []:
+                tb = tbm.get_termbase(tb_id) or {}
+                f = os.path.join(tmp_dir, f"glossary_{tb_id}.tsv")
+                ok, _msg = exporter.export_tsv(tb_id, f)
+                if ok:
+                    resources.append({'kind': 'glossary', 'name': tb.get('name') or f"Glossary {tb_id}",
+                                      'path': f, 'termbase_id': tb_id,
+                                      'source_lang': tb.get('source_lang'), 'target_lang': tb.get('target_lang'),
+                                      'priority': tbm.get_termbase_priority(tb_id, pid)})
+
+        pm = getattr(self, 'prompt_manager_qt', None)
+        lib = getattr(pm, 'library', None)
+        if lib is not None:
+            wanted = [('primary', getattr(lib, 'active_primary_prompt_path', None))]
+            wanted += [('attached', p) for p in (getattr(lib, 'attached_prompt_paths', None) or [])]
+            for role, rel in wanted:
+                if not rel:
+                    continue
+                if rel.startswith('[EXTERNAL] '):
+                    fp, lib_path = rel[len('[EXTERNAL] '):], None
+                else:
+                    fp, lib_path = (lib.prompts.get(rel) or {}).get('_filepath'), rel
+                if fp and os.path.isfile(fp):
+                    resources.append({'kind': 'prompt', 'name': Path(fp).stem, 'path': fp,
+                                      'library_path': lib_path, 'role': role})
+        return resources
+
+    def open_project_package(self):
+        """Unpack a .svpkg into a new project folder, bring its TMs,
+        glossaries and prompts into this computer's database and library, and
+        open the project."""
+        from modules import svpkg
+        title = self.tr("Open Package")
+        pkg, _ = QFileDialog.getOpenFileName(self, title, "",
+                                             "Supervertaler package (*.svpkg);;All Files (*.*)")
+        if not pkg:
+            return
+        try:
+            manifest = svpkg.read_manifest(pkg)
+        except svpkg.PackageError as exc:
+            QMessageBox.warning(self, title, str(exc))
+            return
+        parent = QFileDialog.getExistingDirectory(
+            self, self.tr("Where should the project folder go?"), os.path.dirname(os.path.abspath(pkg)))
+        if not parent:
+            return
+
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            project_dir, svproj, manifest = svpkg.extract_package(pkg, parent)
+            tm_map, tb_map, prompt_map, report = self._import_package_resources(manifest, pkg)
+            svpkg.remap_project_settings(svproj, tm_map, tb_map, prompt_map)
+        except Exception as exc:
+            QApplication.restoreOverrideCursor()
+            self.log(f"❌ Could not open the package: {exc}")
+            QMessageBox.critical(self, title, f"Could not open the package:\n\n{exc}")
+            return
+        QApplication.restoreOverrideCursor()
+
+        self.log(f"📦 Unpacked {os.path.basename(pkg)} into {project_dir}")
+        for line in report:
+            self.log(f"  {line}")
+        self.load_project(svproj)
+        QMessageBox.information(self, title, self.tr(
+            "The package is unpacked into:\n{folder}\n\n{report}").format(
+                folder=project_dir, report="\n".join(report) or self.tr("(no TMs, glossaries or prompts)")))
+
+    def _import_package_resources(self, manifest, pkg_path):
+        """Bring a package's TMs, glossaries and prompts into this computer.
+
+        A TM or glossary with the same name is added to (entries already in it
+        are not duplicated); otherwise a new one is made. The files stay in
+        the project's tm/ and glossary/ folders. Returns the id maps for
+        svpkg.remap_project_settings and a report, one line per resource.
+        """
+        tm_map, tb_map, prompt_map, report = {}, {}, {}, []
+        resources = manifest.get('resources', [])
+        project_dir = None
+        for res in resources:
+            path = res.get('local_path')
+            if not path or not os.path.isfile(path):
+                continue
+            project_dir = os.path.dirname(os.path.dirname(os.path.dirname(path)))
+            kind, name = res.get('kind'), res.get('name') or 'Package resource'
+            if kind == 'tm' and getattr(self, 'tm_metadata_mgr', None) and self.tm_database:
+                mgr = self.tm_metadata_mgr
+                existing = next((t for t in mgr.get_all_tms() if t['name'] == name), None)
+                if existing:
+                    tm_id = existing['tm_id']
+                    src = existing.get('source_lang') or res.get('source_lang')
+                    tgt = existing.get('target_lang') or res.get('target_lang')
+                else:
+                    slug = re.sub(r'[^a-z0-9_]', '', name.lower().replace(' ', '_').replace('-', '_')) or 'package_tm'
+                    src, tgt = res.get('source_lang'), res.get('target_lang')
+                    db_id = mgr.create_tm(name=name, tm_id=slug, source_lang=src, target_lang=tgt,
+                                          description=f"From package {os.path.basename(pkg_path)}")
+                    tm_id = (mgr.get_tm(db_id) or {}).get('tm_id', slug) if db_id else None
+                if not tm_id:
+                    report.append(f"TM \u201c{name}\u201d: could not be created")
+                    continue
+                def _entries():
+                    return self.db_manager.cursor.execute(
+                        "SELECT COUNT(*) FROM translation_units WHERE tm_id = ?", (tm_id,)).fetchone()[0]
+                before = _entries()
+                self.tm_database._load_tmx_into_db(path, src, tgt, tm_id, strip_variants=True)
+                added = _entries() - before
+                mgr.update_entry_count(tm_id)
+                tm_map[res.get('tm_id')] = tm_id
+                report.append(f"TM \u201c{name}\u201d: " + (
+                    f"{added:,} new entries added to your TM of that name" if existing
+                    else f"{added:,} entries in a new TM"))
+            elif kind == 'glossary' and getattr(self, 'termbase_mgr', None):
+                from modules.termbase_import_export import TermbaseImporter
+                tbm = self.termbase_mgr
+                existing = next((t for t in tbm.get_all_termbases() if t['name'] == name), None)
+                tb_id = existing['id'] if existing else tbm.create_termbase(
+                    name, res.get('source_lang'), res.get('target_lang'),
+                    description=f"From package {os.path.basename(pkg_path)}")
+                if not tb_id:
+                    report.append(f"Glossary \u201c{name}\u201d: could not be created")
+                    continue
+                result = TermbaseImporter(self.db_manager, tbm).import_tsv(path, tb_id)
+                if res.get('termbase_id') is not None:
+                    tb_map[int(res['termbase_id'])] = tb_id
+                added = getattr(result, 'imported_count', 0) or 0
+                report.append(f"Glossary \u201c{name}\u201d: " + (
+                    f"{added:,} new terms added to your glossary of that name" if existing
+                    else f"{added:,} terms in a new glossary"))
+            elif kind == 'prompt':
+                saved = self._import_package_prompt(res, path)
+                if saved:
+                    if res.get('library_path'):
+                        prompt_map[res['library_path']] = saved
+                    report.append(f"Prompt \u201c{name}\u201d: {saved}")
+
+        # Keep the TMX and glossary files with the project, in tm/ and glossary/
+        if project_dir:
+            res_dir = os.path.join(project_dir, '.svpkg-resources')
+            for sub, dest in (('tm', TM_SUBDIR), ('glossary', GLOSSARY_SUBDIR)):
+                src_dir = os.path.join(res_dir, sub)
+                if os.path.isdir(src_dir):
+                    os.makedirs(os.path.join(project_dir, dest), exist_ok=True)
+                    for fn in os.listdir(src_dir):
+                        target = os.path.join(project_dir, dest, fn)
+                        if not os.path.exists(target):
+                            os.replace(os.path.join(src_dir, fn), target)
+            import shutil
+            shutil.rmtree(res_dir, ignore_errors=True)
+
+        if hasattr(self, 'tm_tab_refresh_callback'):
+            try:
+                self.tm_tab_refresh_callback()
+            except Exception:
+                pass
+        if hasattr(self, 'termbase_tab_refresh_callback'):
+            try:
+                self.termbase_tab_refresh_callback()
+            except Exception:
+                pass
+        return tm_map, tb_map, prompt_map, report
+
+    def _import_package_prompt(self, res, path):
+        """Put a packaged prompt into the library at its original place. A
+        different prompt already there is kept: this one gets
+        "(from package)" added. Returns the library path used, or None."""
+        pm = getattr(self, 'prompt_manager_qt', None)
+        lib = getattr(pm, 'library', None)
+        if lib is None:
+            return None
+        data = lib._parse_markdown(Path(path)) or {}
+        if not data.get('content'):
+            return None
+        rel = res.get('library_path') or f"Packages/{Path(path).stem}.md"
+        existing = lib.prompts.get(rel)
+        if existing and (existing.get('content') or '').strip() == data['content'].strip():
+            return rel
+        if existing:
+            stem, folder = Path(rel).stem, str(Path(rel).parent)
+            n, candidate = 1, None
+            while candidate is None or candidate in lib.prompts:
+                suffix = " (from package)" if n == 1 else f" (from package {n})"
+                candidate = (f"{folder}/{stem}{suffix}.md" if folder not in ('', '.') else f"{stem}{suffix}.md")
+                n += 1
+            rel = candidate
+        data = {k: v for k, v in data.items() if not k.startswith('_')}
+        data.update(default=False, read_only=False)
+        if not lib.save_prompt(rel, data):
+            return None
+        try:
+            lib.load_all_prompts()
+            if hasattr(pm, '_refresh_tree'):
+                pm._refresh_tree()
+        except Exception:
+            pass
+        return rel
 
     def close_project(self):
         """Close current project"""

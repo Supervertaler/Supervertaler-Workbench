@@ -7,6 +7,17 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ## Unreleased
 
+### Added (Projects · pack a project into one file and open it elsewhere)
+
+**Project → 📦 Pack Project (.svpkg)…** puts the open project into one file (issue #156): the project, its folder (`source/`, `target/`, `tm/`, `glossary/`, `reports/`, `qa/`), and the TMs, glossaries and prompt the project uses. Use it to carry on with a project on another computer, for example from a Windows laptop to a Mac, or to hand it to a colleague.
+
+**Project → 📦 Open Package (.svpkg)…** unpacks it into a new project folder wherever you choose, and opens the project:
+- **TMs and glossaries** are added to the ones with the same name on that computer, without duplicating what they already contain, or created there. They are switched on for the project as before, and a copy stays in the project's `tm/` and `glossary/` folders.
+- **The prompt** goes into the prompt library at the same place. If that computer has a different prompt under that name, both are kept: the package's gets "(from package)" added, and the project uses it.
+- **Nothing is overwritten.** A project folder that already exists gets "(2)" added.
+
+Only the project file and its own subfolders are packed, never other files that happen to sit next to the project. The package is a zip file with a manifest. Sharing packages online, mentioned in the issue, isn't part of this.
+
 ### Added (AI · Duet review: two models improve a prompt together)
 
 In the **Prompt Manager**, right-click a prompt and choose **🎭 Duet review…** (issue #242). Two different AI models, for example Claude and GPT, review the prompt against the open project, and one of them writes the improved version.
