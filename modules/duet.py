@@ -19,6 +19,10 @@ here (from the ``duet.py`` prototype) keeps them honest:
 - at the round limit the synthesis is forced, and the disagreements are listed
   under Unresolved instead of being resolved.
 
+The same engine arbitrates one contested segment (tier 3, right-click →
+Arbitrate this segment): ``build_segment_brief`` with ARBITRATION_PROTOCOL and
+ARBITRATION_SYNTHESIS, and the deliverable is the segment's final translation.
+
 The engine has no Qt and no provider code: a participant is any callable
 ``ask(system_prompt, prompt, max_tokens) -> (text, usage)``, so Workbench,
 the MCP server or the Trados side can drive it with their own LLM clients.
@@ -86,6 +90,22 @@ After the end marker, add a section headed "## {UNRESOLVED_HEADING}" listing eve
 FORCED = ("The round limit has been reached without agreement. Keep every change both "
           "reviewers accepted, and list every remaining disagreement under Unresolved.")
 
+# Tier 3: arbitration of one contested segment. No "three problems" quota –
+# one segment may have a single real problem, or none.
+ARBITRATION_PROTOCOL = """You are one of two AI translators arbitrating the translation of ONE segment. The other is a different AI model. A human translator will read the whole exchange and decide.
+
+Rules for every turn:
+1. Check every claim the other model made against the source, the context, the instructions, the glossary and the TM matches attached, and quote the evidence. Reject what the material does not support.
+2. Argue about substance only: meaning, terminology, numbers, references, grammar, register, the instructions. An equally correct alternative wording is not a problem: say so and drop it.
+3. Keep a numbered register headed "OPEN ISSUES". Carry over every unresolved issue, add new ones, and close an issue only by writing its resolution next to it.
+4. Never change terminology that the glossary or the TM matches confirm, unless you quote evidence that it is wrong. Keep inline tags such as <1>…</1> exactly as they are in the source.
+5. End your turn with exactly one line, the last line: "VERDICT: CONTINUE" or "VERDICT: AGREED". You may only say AGREED when your OPEN ISSUES register is empty."""
+
+ARBITRATION_SYNTHESIS = f"""You now write the result of this arbitration.
+
+Write the final translation of the segment – the translation only, with the source's inline tags and without comments or notes – between a line containing only {START_MARKER} and a line containing only {END_MARKER}.
+After the end marker, add a section headed "## {UNRESOLVED_HEADING}" listing every point the two of you did not agree on, or "None." if there are none. Do not add a VERDICT line."""
+
 
 def parse_verdict(text: str) -> Optional[str]:
     """``"AGREED"``, ``"CONTINUE"`` or None – the last VERDICT line counts."""
@@ -122,6 +142,34 @@ def build_brief(artefact_name: str, artefact: str, material: str, task: str = ""
         parts.append(f"# Attached material\n{material.strip()}")
     parts.append(f"# The artefact: {artefact_name}\n\n{artefact.strip()}")
     return "\n\n".join(parts)
+
+
+def build_segment_brief(source: str, target: str, *, source_lang: str = "", target_lang: str = "",
+                        question: str = "", context: Optional[List[Tuple[str, str]]] = None,
+                        instructions: str = "", terms: Optional[List[Tuple[str, str]]] = None,
+                        tm: Optional[List[Tuple[str, str, int]]] = None,
+                        comments: Optional[List[str]] = None) -> str:
+    """The brief for arbitrating one segment (tier 3): the source, the
+    contested translation and what to check it against."""
+    pair = f" from {source_lang} to {target_lang}" if source_lang and target_lang else ""
+    task = (f"Decide the best translation of this segment{pair}. The current translation is "
+            f"contested. Check it against the source and the attached material, and agree on "
+            f"the final translation – which may be the current one, unchanged.")
+    if question.strip():
+        task += f"\n\nWhat the translator wants settled:\n{question.strip()}"
+    material = [f"## Source\n{source.strip()}"]
+    if context:
+        material.append("## Context (neighbouring segments, source → translation)\n"
+                        + "\n".join(f"- {s}  →  {t or '(not translated)'}" for s, t in context))
+    if instructions.strip():
+        material.append(f"## Translation instructions for this project\n{instructions.strip()}")
+    if terms:
+        material.append("## Glossary terms in this segment\n" + "\n".join(f"- {s} = {t}" for s, t in terms))
+    if tm:
+        material.append("## TM matches\n" + "\n".join(f"- {pct}%: {s}  →  {t}" for s, t, pct in tm))
+    if comments:
+        material.append("## Comments on the current translation\n" + "\n".join(f"- {c}" for c in comments))
+    return build_brief("Current translation", target or "(empty)", "\n\n".join(material), task)
 
 
 def _turn_prompt(brief: str, turns: List[Turn], label: str) -> str:
@@ -177,12 +225,16 @@ def run_duet(a: Participant, b: Participant, brief: str, *,
              should_stop: Optional[Callable[[], bool]] = None,
              attempts: int = 3, backoff: float = 15.0,
              sleep: Callable[[float], None] = time.sleep,
-             on_retry: Optional[Callable[[int, Exception], None]] = None) -> DuetResult:
-    """Run the review and return its result. See the module docstring."""
+             on_retry: Optional[Callable[[int, Exception], None]] = None,
+             protocol: str = PROTOCOL, synthesis: str = SYNTHESIS,
+             title: str = "Duet review", synthesis_tokens: int = 8000) -> DuetResult:
+    """Run the review and return its result. See the module docstring.
+    ``protocol``/``synthesis`` swap the rules and the final instruction (the
+    arbitration of one segment uses ARBITRATION_PROTOCOL/ARBITRATION_SYNTHESIS)."""
     speakers = {"A": a, "B": b}
     order = ["A", "B"] if opener.upper() != "B" else ["B", "A"]
     header = "\n".join([
-        f"# Duet review – {datetime.now():%Y-%m-%d %H:%M}",
+        f"# {title} – {datetime.now():%Y-%m-%d %H:%M}",
         "",
         f"- **Model A:** {a.label}",
         f"- **Model B:** {b.label}",
@@ -209,7 +261,7 @@ def run_duet(a: Participant, b: Participant, brief: str, *,
                 break
             who = speakers[key]
             text, usage = _call_with_retry(
-                who.ask, PROTOCOL, _turn_prompt(brief, turns, f"{who.label}, reviewer {key}"),
+                who.ask, protocol, _turn_prompt(brief, turns, f"{who.label}, reviewer {key}"),
                 max_tokens, attempts, backoff, sleep, on_retry)
             turn = Turn(rnd, key, who.label, text, parse_verdict(text), usage)
             turns.append(turn)
@@ -234,9 +286,9 @@ def run_duet(a: Participant, b: Participant, brief: str, *,
 
     synth_key = synthesiser.upper() if synthesiser.upper() in speakers else "A"
     who = speakers[synth_key]
-    instruction = SYNTHESIS if consensus else SYNTHESIS + "\n\n" + FORCED
+    instruction = synthesis if consensus else synthesis + "\n\n" + FORCED
     prompt = _turn_prompt(brief, turns, f"{who.label}, synthesis") + "\n\n" + instruction
-    text, usage = _call_with_retry(who.ask, PROTOCOL, prompt, max(max_tokens, 8000),
+    text, usage = _call_with_retry(who.ask, protocol, prompt, max(max_tokens, synthesis_tokens),
                                    attempts, backoff, sleep, on_retry)
     deliverable, unresolved = extract_deliverable(text)
     turn = Turn(rounds_done, "synthesis", who.label, text, None, usage)
@@ -256,12 +308,12 @@ def _usage_line(usage: Dict) -> str:
 
 
 def estimate_tokens(brief_chars: int, max_rounds: int, max_tokens: int,
-                    avg_output_tokens: int = 1200) -> Tuple[List[int], List[int]]:
+                    avg_output_tokens: int = 1200, protocol: str = PROTOCOL) -> Tuple[List[int], List[int]]:
     """Rough input and output tokens per turn, A and B alternating, plus the
     synthesis. The whole review so far is re-sent every turn, so input grows
     with every turn – the cost grows roughly with the square of the rounds."""
     out_per_turn = min(avg_output_tokens, max_tokens)
-    base = (brief_chars + len(PROTOCOL)) // 4 + 50
+    base = (brief_chars + len(protocol)) // 4 + 50
     inputs, outputs = [], []
     for i in range(2 * max_rounds):
         inputs.append(base + i * out_per_turn)
@@ -273,10 +325,11 @@ def estimate_tokens(brief_chars: int, max_rounds: int, max_tokens: int,
 
 def estimate_cost(a: Participant, b: Participant, brief_chars: int, max_rounds: int,
                   max_tokens: int, opener: str = "A", synthesiser: str = "A",
-                  price: Optional[Callable[[str, str, int, int], Optional[float]]] = None) -> Dict:
+                  price: Optional[Callable[[str, str, int, int], Optional[float]]] = None,
+                  avg_output_tokens: int = 1200, protocol: str = PROTOCOL) -> Dict:
     """Tokens and (when ``price`` knows the models) USD cost of a full review
     that runs to the round limit – the worst case."""
-    inputs, outputs = estimate_tokens(brief_chars, max_rounds, max_tokens)
+    inputs, outputs = estimate_tokens(brief_chars, max_rounds, max_tokens, avg_output_tokens, protocol)
     order = [a, b] if opener.upper() != "B" else [b, a]
     who = [order[i % 2] for i in range(2 * max_rounds)] + [a if synthesiser.upper() != "B" else b]
     total, known = 0.0, True

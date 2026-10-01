@@ -88,6 +88,57 @@ def _yaml_safe(text: str) -> str:
     return re.sub(r"\s+", " ", (text or "").replace('"', "'")).strip()
 
 
+def default_model(app, settings: Dict, provider: str) -> str:
+    """The model Settings → AI Settings has for ``provider``."""
+    if hasattr(app, '_resolve_provider_model'):
+        try:
+            from modules.llm_clients import LLMClient
+            default = LLMClient.DEFAULT_MODELS.get(provider, "")
+            return app._resolve_provider_model(settings, provider, default) or default
+        except Exception:
+            pass
+    return settings.get(f"{provider}_model", "")
+
+
+def make_ask(app, settings: Dict, provider: str, model: str):
+    """``ask(system, prompt, max_tokens) -> (text, usage)`` for the engines in
+    duet.py and cross_review.py, on the app's own LLM client."""
+    client = app.create_llm_client(provider, model, app.load_api_keys(), settings)
+
+    def ask(system, prompt, max_tokens):
+        return client.translate_with_usage(text="", custom_prompt=prompt, system_prompt=system,
+                                           max_tokens=max_tokens, skip_cleaning=True)
+    return ask
+
+
+def model_picker(providers: List[Tuple[str, str]], model_for: Callable[[str], str],
+                 preferred: str = "", fallback_index: int = 0, avoid: str = ""):
+    """A provider combo and a model field side by side: ``(widget, combo, edit)``.
+    Selects ``preferred`` if offered, else the first provider other than
+    ``avoid`` (when given), else the one at ``fallback_index``."""
+    combo, edit = QComboBox(), QLineEdit()
+    for key, name in providers:
+        combo.addItem(name, key)
+    idx = combo.findData(preferred) if preferred else -1
+    if idx < 0 and avoid:
+        idx = next((i for i in range(combo.count()) if combo.itemData(i) != avoid), -1)
+    if idx < 0 and combo.count() > fallback_index:
+        idx = fallback_index
+    combo.setCurrentIndex(max(idx, 0))
+
+    def fill():
+        key = combo.currentData()
+        edit.setText(model_for(key) if key else "")
+    combo.currentIndexChanged.connect(fill)
+    fill()
+    w = QWidget()
+    row = QHBoxLayout(w)
+    row.setContentsMargins(0, 0, 0, 0)
+    row.addWidget(combo)
+    row.addWidget(edit, 1)
+    return w, combo, edit
+
+
 class DuetWorker(QThread):
     turn_done = pyqtSignal(object)
     retrying = pyqtSignal(int, str)
@@ -230,33 +281,14 @@ class DuetDialog(QDialog):
             self.start_btn.setEnabled(False)
 
     def _model_row(self, form, label, preferred):
-        combo, edit = QComboBox(), QLineEdit()
-        for key, name in self.providers:
-            combo.addItem(name, key)
-        idx = combo.findData(preferred)
-        if idx < 0 and combo.count() > 1 and preferred == "openai":
-            idx = 1  # a second, different provider for model B
-        combo.setCurrentIndex(max(idx, 0))
-
-        def fill():
-            key = combo.currentData()
-            edit.setText(self._model_for(key) if key else "")
-        combo.currentIndexChanged.connect(fill)
-        fill()
-        row = QHBoxLayout(); row.addWidget(combo); row.addWidget(edit, 1)
-        w = QWidget(); w.setLayout(row); row.setContentsMargins(0, 0, 0, 0)
+        # a second, different provider for model B
+        w, combo, edit = model_picker(self.providers, self._model_for, preferred,
+                                      fallback_index=1 if preferred == "openai" else 0)
         form.addRow(label, w)
         return combo, edit
 
     def _model_for(self, provider):
-        if hasattr(self.app, '_resolve_provider_model'):
-            try:
-                from modules.llm_clients import LLMClient
-                default = LLMClient.DEFAULT_MODELS.get(provider, "")
-                return self.app._resolve_provider_model(self._settings, provider, default) or default
-            except Exception:
-                pass
-        return self._settings.get(f"{provider}_model", "")
+        return default_model(self.app, self._settings, provider)
 
     # ------------------------------------------------------- material/cost
     def _segments(self):
@@ -332,12 +364,7 @@ class DuetDialog(QDialog):
         return out
 
     def _make_ask(self, provider, model):
-        client = self.app.create_llm_client(provider, model, self.app.load_api_keys(), self._settings)
-
-        def ask(system, prompt, max_tokens):
-            return client.translate_with_usage(text="", custom_prompt=prompt, system_prompt=system,
-                                               max_tokens=max_tokens, skip_cleaning=True)
-        return ask
+        return make_ask(self.app, self._settings, provider, model)
 
     def _update_estimate(self):
         try:

@@ -140,3 +140,36 @@ def test_dialog_helpers():
     assert dd.count_points("None.") == 0 and dd.count_points("- a\n- b\n3. c") == 3
     assert dd.count_points("Whether to keep it") == 1
     assert dd._yaml_safe('He said "x"\nand y') == "He said 'x' and y"
+
+
+def test_segment_arbitration(tmp_path):
+    brief = duet.build_segment_brief(
+        "The luminance factor is 0.8.", "De luminantiecoëfficiënt is 0,8.",
+        source_lang="English", target_lang="Dutch", question="XR · gpt-5.5: wrong CIE quantity",
+        context=[("Previous.", "Vorige."), ("Next.", "")], instructions="Patent style.",
+        terms=[("luminance factor", "luminantiefactor")],
+        tm=[("The luminance factor is 0.7.", "De luminantiefactor is 0,7.", 92)])
+    assert "from English to Dutch" in brief and "wrong CIE quantity" in brief
+    assert "- Next.  →  (not translated)" in brief and "- 92%: The luminance factor is 0.7." in brief
+    assert "- luminance factor = luminantiefactor" in brief and "Patent style." in brief
+    assert brief.rstrip().endswith("De luminantiecoëfficiënt is 0,8.")
+    calls = []
+    final = (f"{duet.START_MARKER}\nDe luminantiefactor is 0,8.\n{duet.END_MARKER}\n\n"
+             f"## {duet.UNRESOLVED_HEADING}\nNone.")
+    a = scripted("A1", ["1. wrong quantity\nVERDICT: CONTINUE", "VERDICT: AGREED"], calls)
+    b = scripted("B1", ["Agreed, TM 92% confirms.\nVERDICT: AGREED", final], calls)
+    systems = []
+    for p in (a, b):
+        inner = p.ask
+        p.ask = (lambda inner: lambda s, pr, m: (systems.append(s), inner(s, pr, m))[1])(inner)
+    path = tmp_path / "arb.md"
+    result = duet.run_duet(a, b, brief, max_rounds=3, max_tokens=1500, synthesiser="B",
+                           transcript_path=str(path), protocol=duet.ARBITRATION_PROTOCOL,
+                           synthesis=duet.ARBITRATION_SYNTHESIS, title="Arbitration of segment 7",
+                           synthesis_tokens=2000)
+    # A says CONTINUE, B AGREED, A AGREED → consensus in round 2; B writes the result
+    assert result.consensus and result.deliverable == "De luminantiefactor is 0,8."
+    assert set(systems) == {duet.ARBITRATION_PROTOCOL}
+    assert calls[-1][0] == "B1" and calls[-1][2] == 2000 and duet.ARBITRATION_SYNTHESIS in calls[-1][1]
+    assert path.read_text(encoding="utf-8").startswith("# Arbitration of segment 7 – ")
+    assert "three substantive problems" not in duet.ARBITRATION_PROTOCOL

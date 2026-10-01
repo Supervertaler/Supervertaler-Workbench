@@ -7,6 +7,25 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ## Unreleased
 
+### Added (QA · a second AI model reviews the translations)
+
+**QA → Proofreading → 🔀 Cross-model Review…** has a second AI model check translations made by another one, for example Claude checking GPT (issue #242, tier 2). A model easily overlooks its own mistakes; a different one doesn't share its blind spots.
+- **Against the same instructions.** The reviewer checks every translation against its source, the project's prompt and attached prompts, and the terms of the project's glossaries found in the segments, including forbidden terms. It answers each segment with *pass* or a flag saying what is wrong and how to fix it.
+- **It never changes a translation.** Flags become proofreading comments named *XR · model*, kept apart from AI proofreading and from translator comments. A segment that passes a later review by the same model loses its old flag.
+- **Straight after a batch.** The Batch Translate dialog has a new option, **🔀 Then have a second AI model review the translations**, which reviews the new translations when the batch is done.
+- **A record of the review.** A report with every flag goes to the project's `reports/cross-review/` folder.
+- **Cost:** the dialog shows the estimated cost before you start. The segments go in batches of 20, and a failed call is retried after 15 and 30 seconds.
+
+The **✅ Proofreading** comments list has a new **Show:** filter: all comments, AI proofreading, cross-model review (XR), or translator comments (TC).
+
+### Added (QA · move ⟦TC⟧ translator comments out of the target text)
+
+A prompt made with AutoPrompt has the AI correct obvious mistakes in the source and mark each such segment with a comment at the end of the translation, such as `⟦TC: "verzekerd" corrected to "verzekert"⟧`. Those comments were left in the target text, so they ended up in the exported document. **QA → Proofreading → ⟦TC⟧ Move Translator Comments out of the Target Text** moves them into proofreading comments named *TC · translator* (issue #242). Ctrl+Z puts them back, and locked segments are left alone.
+
+### Added (Grid · two AI models settle one contested translation)
+
+Right-click a segment and choose **🎭 Arbitrate This Segment (two AI models)…** (issue #242, tier 3). Two different models debate the translation under the Duet rules: they check each other's claims against the source, the neighbouring segments, the project's prompt, the glossary terms and the TM matches, and against the segment's review comments, which are filled in as the question. When they agree, or at the round limit (default 3), one writes the final translation and lists anything still disputed. Nothing changes until you click **✔ Use this translation**, and Ctrl+Z undoes it. The debate is saved in the project's `reports/arbitration/` folder. It works on one segment at a time only, on purpose.
+
 ### Added (Projects · pack a project into one file and open it elsewhere)
 
 **Project → 📦 Pack Project (.svpkg)…** puts the open project into one file (issue #156): the project, its folder (`source/`, `target/`, `tm/`, `glossary/`, `reports/`, `qa/`), and the TMs, glossaries and prompt the project uses. Use it to carry on with a project on another computer, for example from a Windows laptop to a Mac, or to hand it to a colleague.

@@ -12399,6 +12399,22 @@ class SupervertalerQt(QMainWindow):
         proofread_action.triggered.connect(self.show_proofread_dialog)
         proofreading_submenu.addAction(proofread_action)
 
+        # A second model reviews the translations against the project's own
+        # prompt and glossary – the translate–edit–proofread pattern (#242 tier 2)
+        cross_review_action = QAction(self.tr("🔀 Cross-model &Review..."), self)
+        cross_review_action.setToolTip(self.tr(
+            "Have a second AI model check the translations against their source and the "
+            "project's prompt and glossary; its flags appear as XR proofreading comments"))
+        cross_review_action.triggered.connect(lambda: self.show_cross_review_dialog())
+        proofreading_submenu.addAction(cross_review_action)
+
+        extract_tc_action = QAction(self.tr("⟦TC⟧ Move &Translator Comments out of the Target Text"), self)
+        extract_tc_action.setToolTip(self.tr(
+            "Move the ⟦TC: …⟧ comments an AutoPrompt prompt has the AI add to its translations "
+            "into proofreading comments, so they can't end up in the exported file"))
+        extract_tc_action.triggered.connect(self.extract_translator_comments)
+        proofreading_submenu.addAction(extract_tc_action)
+
         # (The separate "Proofreading Results" pop-up window was removed in
         # v1.10.327 — issue #234 follow-up. It's superseded by the Proofreading
         # comments tab, which lists every result with working navigation and
@@ -31792,6 +31808,24 @@ class SupervertalerQt(QMainWindow):
         _pc_initial_empty.setWordWrap(True)
         self._proofreading_comments_list_layout.addWidget(_pc_initial_empty)
         self._proofreading_comments_list_layout.addStretch()
+
+        # Filter by origin (#242 tier 2): AI proofreading, a second model's
+        # cross-review flags (XR) and the translating model's own ⟦TC⟧ comments
+        _pc_filter_row = QHBoxLayout()
+        _pc_filter_row.setContentsMargins(0, 0, 0, 2)
+        _pc_filter_row.addWidget(QLabel(self.tr("Show:")))
+        self._pc_origin_combo = QComboBox()
+        for _label, _origin in ((self.tr("All comments"), "all"),
+                                (self.tr("AI proofreading"), "proofreading"),
+                                (self.tr("Cross-model review (XR)"), "XR"),
+                                (self.tr("Translator comments (TC)"), "TC")):
+            self._pc_origin_combo.addItem(_label, _origin)
+        self._pc_origin_filter = "all"
+        self._pc_origin_combo.currentIndexChanged.connect(
+            lambda _i: self._set_proofreading_origin_filter(self._pc_origin_combo.currentData()))
+        _pc_filter_row.addWidget(self._pc_origin_combo)
+        _pc_filter_row.addStretch()
+        proofreading_notes_layout.addLayout(_pc_filter_row)
 
         proofreading_list_scroll = _QScrollArea()
         proofreading_list_scroll.setWidgetResizable(True)
@@ -51845,6 +51879,16 @@ class SupervertalerQt(QMainWindow):
                     "(one AI call per segment). Wording is never changed.")
                 autotag_action.triggered.connect(self.autotag_segments_bulk)
 
+        # Two AI models debate one contested translation (#242 tier 3) – one
+        # segment at a time on purpose, never wholesale
+        if n == 1 and (selected_segments[0].source or "").strip() and (selected_segments[0].target or "").strip():
+            arbitrate_action = menu.addAction("🎭 Arbitrate This Segment (two AI models)...")
+            arbitrate_action.setToolTip(
+                "Have two different AI models debate this translation against the source, prompt, "
+                "glossary and TM, and propose a final version for you to accept or not")
+            arbitrate_action.triggered.connect(
+                lambda checked=False, seg=selected_segments[0]: self.arbitrate_segment(seg))
+
         menu.addSeparator()
 
         # Clear translations action
@@ -59838,16 +59882,24 @@ class SupervertalerQt(QMainWindow):
                 w.deleteLater()
 
         # Collect (seg_id, segment, model, text) in document order.
+        from modules.cross_review import origin_of
+        origin_filter = getattr(self, '_pc_origin_filter', 'all')
         entries = []
+        any_comments = False
         if self.current_project and self.current_project.segments:
             for seg in self.current_project.segments:
                 pn = getattr(seg, 'proofreading_notes', None) or {}
                 for model_name, issue_text in pn.items():
                     if issue_text and str(issue_text).strip():
+                        any_comments = True
+                        if origin_filter != 'all' and origin_of(model_name) != origin_filter:
+                            continue
                         entries.append((seg.id, seg, model_name, issue_text))
 
         if not entries:
             empty = QLabel(
+                "(No comments of this kind. Choose <b>All comments</b> above to see the others.)"
+                if any_comments else
                 "(No proofreading comments yet — run <b>QA ▸ Proofreading ▸ "
                 "Proofread Translation…</b> to generate AI review comments.)")
             empty.setTextFormat(Qt.TextFormat.RichText)
@@ -59971,6 +60023,119 @@ class SupervertalerQt(QMainWindow):
                     pass
 
             QTimer.singleShot(0, _reveal)
+
+    def _set_proofreading_origin_filter(self, origin):
+        """Show only one origin of proofreading comments ("all", "proofreading",
+        "XR" or "TC"; #242 tier 2) and rebuild the list."""
+        self._pc_origin_filter = origin or "all"
+        combo = getattr(self, '_pc_origin_combo', None)
+        if combo is not None and combo.currentData() != self._pc_origin_filter:
+            combo.blockSignals(True)
+            combo.setCurrentIndex(max(combo.findData(self._pc_origin_filter), 0))
+            combo.blockSignals(False)
+        self._refresh_proofreading_comments_list()
+
+    def show_cross_review_dialog(self, rows=None, translator=None, autostart=False):
+        """QA ▸ Proofreading ▸ Cross-model Review (#242 tier 2): a second model
+        checks the translations against the project's prompt and glossary."""
+        if not self.current_project:
+            QMessageBox.information(self, "No Project", "Please open or create a project first.")
+            return
+        from modules.cross_review_dialog import CrossReviewDialog
+        try:
+            self._sync_grid_targets_to_segments(self.current_project.segments)
+        except Exception:
+            pass
+        CrossReviewDialog(self, self, rows=rows, translator=translator, autostart=autostart).exec()
+
+    def arbitrate_segment(self, segment):
+        """Right-click ▸ Arbitrate This Segment (#242 tier 3): a Duet between
+        two models on one contested translation."""
+        if not self.current_project or segment is None:
+            return
+        try:
+            self._sync_grid_targets_to_segments([segment])
+        except Exception:
+            pass
+        if not (segment.target or "").strip():
+            QMessageBox.information(self, "Arbitrate segment", "This segment has no translation yet.")
+            return
+        from modules.arbitration_dialog import ArbitrationDialog
+        self._arbitration_dialog = ArbitrationDialog(self, self, segment)
+        self._arbitration_dialog.exec()
+
+    def extract_translator_comments(self):
+        """Move ⟦TC: …⟧ (and inline ⟦XR: …⟧) comments out of the target text
+        into proofreading comments (#242 tier 2). AutoPrompt prompts have the
+        AI append a ⟦TC⟧ comment to every segment it silently corrected; left
+        in the target, it would end up in the exported file."""
+        if not self.current_project or not self.current_project.segments:
+            QMessageBox.information(self, "Translator comments", "There is no open project.")
+            return
+        from modules.cross_review import TC, XR, note_key, split_markers
+        try:
+            self._sync_grid_targets_to_segments(self.current_project.segments)
+        except Exception:
+            pass
+        rows = self._rows_by_segment_id()
+        moved = 0
+        changed = []
+        undo_entries = []
+        locked = 0
+        for seg in self.current_project.segments:
+            clean, markers = split_markers(seg.target or "")
+            if not markers:
+                continue
+            if getattr(seg, 'locked', False):
+                locked += 1  # a locked segment isn't edited, not even by this
+                continue
+            notes = seg.proofreading_notes if isinstance(getattr(seg, 'proofreading_notes', None), dict) else {}
+            for kind in (TC, XR):
+                bodies = [b for k, b in markers if k == kind and b]
+                if bodies:
+                    key = note_key(kind, "translator" if kind == TC else "inline")
+                    previous = notes.get(key)
+                    text = "; ".join(bodies)
+                    notes[key] = f"{previous}; {text}" if previous and text not in previous else text
+                    moved += len(bodies)
+            seg.proofreading_notes = notes
+            undo_entries.append((seg.id, seg.target, clean, seg.status, seg.status))
+            seg.target = clean
+            changed.append(seg)
+        locked_note = (f"\n\n{locked} locked segment(s) with comments were left alone: "
+                       f"unlock them to move theirs." if locked else "")
+        if not changed:
+            QMessageBox.information(self, "Translator comments",
+                                    "No ⟦TC: …⟧ comments were found in the target text." + locked_note)
+            return
+        try:
+            self.record_undo_states_batch(undo_entries)
+        except Exception:
+            pass
+        for seg in changed:
+            row = rows.get(seg.id)
+            if row is None:
+                continue
+            editor = self.table.cellWidget(row, 3)
+            if editor is not None and hasattr(editor, 'setPlainText'):
+                display_text = seg.target
+                if getattr(self, 'hide_outer_wrapping_tags', False):
+                    display_text, _ = strip_outer_wrapping_tags(display_text)
+                editor.blockSignals(True)
+                editor.setPlainText(display_text)
+                editor.blockSignals(False)
+            try:
+                self._update_status_cell(row, seg)
+            except Exception:
+                pass
+        self.project_modified = True
+        self.update_window_title()
+        self._set_proofreading_origin_filter(TC)
+        self.log(f"⟦TC⟧ Moved {moved} translator comment(s) out of {len(changed)} target segment(s).")
+        QMessageBox.information(
+            self, "Translator comments",
+            f"Moved {moved} comment(s) out of {len(changed)} segment(s). They are in the "
+            f"Proofreading comments tab, shown as TC. Ctrl+Z puts them back in the text." + locked_note)
 
     def _delete_proofreading_comment(self, seg_id, model_name):
         """Delete one proofreading comment (a single LLM entry) from a segment
@@ -66310,6 +66475,25 @@ class SupervertalerQt(QMainWindow):
             fuzzy_fixer_checkbox.setChecked(getattr(self, 'fuzzy_fixer_enabled', False))
             options_layout.addWidget(fuzzy_fixer_checkbox)
 
+            # Translate–edit–proofread with two models (#242 tier 2)
+            from modules.cross_review_dialog import load_settings as _load_xr_settings
+            from modules.duet_dialog import PROVIDERS as _XR_PROVIDERS
+            _xr_saved = _load_xr_settings(self)
+            cross_review_checkbox = CheckmarkCheckBox(self.tr(
+                "🔀 Then have a second AI model review the translations (cross-model review)"))
+            _xr_reviewer = (f"{dict(_XR_PROVIDERS).get(_xr_saved.get('provider'), _xr_saved.get('provider'))} "
+                            f"({_xr_saved.get('model')})" if _xr_saved.get('model')
+                            else self.tr("a model you choose"))
+            cross_review_checkbox.setToolTip(self.tr(
+                "AI translation only. When the batch is done, a second model checks every\n"
+                "translation against its source and this project's prompt and glossary, and\n"
+                "flags problems as XR proofreading comments. It doesn't change translations.\n\n"
+                "Reviewer: {}. Change it in QA ▸ Proofreading ▸ Cross-model Review…").format(_xr_reviewer))
+            cross_review_checkbox.setChecked(bool(_xr_saved.get('after_batch', False)))
+            cross_review_checkbox.setEnabled(llm_checkbox.isChecked())
+            llm_checkbox.toggled.connect(cross_review_checkbox.setEnabled)
+            options_layout.addWidget(cross_review_checkbox)
+
             _estimates = {}
 
             def update_cost_estimate(*_):
@@ -66381,6 +66565,10 @@ class SupervertalerQt(QMainWindow):
             tm_exact_only = tm_exact_only_checkbox.isChecked()
             auto_confirm_tm = auto_confirm_checkbox.isChecked()
             use_fuzzy_fixer = fuzzy_fixer_checkbox.isChecked()
+            self._batch_cross_review = cross_review_checkbox.isChecked() and llm_checkbox.isChecked()
+            if cross_review_checkbox.isEnabled():
+                from modules.cross_review_dialog import save_settings as _save_xr_settings
+                _save_xr_settings(self, {'after_batch': cross_review_checkbox.isChecked()})
 
             # Store retry setting for recursive calls
             self._batch_retry_enabled = retry_until_complete
@@ -66896,6 +67084,17 @@ class SupervertalerQt(QMainWindow):
         
         # Wait for worker to finish
         worker.wait()
+
+        # Cross-model review of the batch (#242 tier 2). Retry passes run nested
+        # inside the first pass's dialog, so by now they have all finished.
+        if (not is_retry_pass and translation_provider_type == 'LLM'
+                and getattr(self, '_batch_cross_review', False)
+                and not getattr(worker, '_cancelled', False)):
+            self._batch_cross_review = False
+            reviewed = [(row, seg) for row, seg in segments_to_translate if (seg.target or '').strip()]
+            if reviewed:
+                self.show_cross_review_dialog(rows=reviewed, translator=(translation_provider_name, model),
+                                              autostart=True)
         
         return  # batch translation runs on PreTranslationWorker (above)
 
