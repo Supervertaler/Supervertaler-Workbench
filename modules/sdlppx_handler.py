@@ -34,6 +34,7 @@ from typing import List, Dict, Tuple, Optional, Any
 from dataclasses import dataclass, field
 from datetime import datetime
 from xml.etree import ElementTree as ET
+from xml.sax.saxutils import escape as xml_escape
 from copy import deepcopy
 
 # Namespaces used in SDLXLIFF
@@ -366,7 +367,9 @@ class SDLXLIFFParser:
     
     def _element_inner_xml(self, elem: ET.Element) -> str:
         """Get inner XML of an element (content without the element itself)."""
-        result = elem.text or ""
+        # The leading text must be escaped like the children (tostring
+        # escapes those), or "R&D" at the start of a segment is not XML.
+        result = xml_escape(elem.text or "")
         for child in elem:
             result += ET.tostring(child, encoding='unicode')
         return result
