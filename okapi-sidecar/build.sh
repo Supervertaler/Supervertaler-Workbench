@@ -19,13 +19,13 @@ PORT="${PORT:-8090}"
 build_jar() {
     echo "🔨 Building $JAR_NAME..."
     mvn package -DskipTests -B
-    echo "✅ Built: target/$JAR_NAME-0.1.8.jar"
+    echo "✅ Built: target/$JAR_NAME-0.1.9.jar"
 }
 
 run_local() {
     build_jar
     echo "🚀 Starting sidecar on port $PORT..."
-    java -jar "target/$JAR_NAME-0.1.8.jar" --port="$PORT"
+    java -jar "target/$JAR_NAME-0.1.9.jar" --port="$PORT"
 }
 
 build_docker() {
@@ -76,7 +76,7 @@ build_jlink() {
     echo "📦 Creating dist/ bundle..."
     rm -rf dist
     mkdir -p dist/jre
-    cp "target/$JAR_NAME-0.1.8.jar" dist/okapi-sidecar.jar
+    cp "target/$JAR_NAME-0.1.9.jar" dist/okapi-sidecar.jar
     cp -r "$OUTPUT_DIR/"* dist/jre/
     echo "✅ Distribution ready: dist/"
     echo "   JAR: dist/okapi-sidecar.jar"

@@ -6,7 +6,7 @@
 
     <groupId>com.supervertaler</groupId>
     <artifactId>okapi-sidecar</artifactId>
-    <version>0.1.8</version>
+    <version>0.1.9</version>
     <packaging>jar</packaging>
 
     <name>Supervertaler Okapi Sidecar</name>

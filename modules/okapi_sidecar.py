@@ -65,7 +65,7 @@ class OkapiSidecar:
     # version, start() will ask it to shut down and spawn a fresh one.
     # Bump this whenever the sidecar JAR is rebuilt with meaningful
     # changes (keep it in sync with pom.xml / App.java).
-    EXPECTED_VERSION = "0.1.8"
+    EXPECTED_VERSION = "0.1.9"
 
     # URLs for lazy-downloading the sidecar when running from a pip
     # install (no JAR + JRE bundled next to the application). Pinned to

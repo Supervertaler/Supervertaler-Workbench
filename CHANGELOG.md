@@ -7,6 +7,18 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ## Unreleased
 
+### Fixed (DOCX import · italic, underline, subscript and superscript kept as tags)
+
+Some Word formatting was lost or hidden when a DOCX was imported:
+- **Bold italic** text came in as `<b>` only, so the translation lost its italic.
+- **Underline**, **subscript** and **superscript** came in as anonymous tags such as `<g1>`, instead of `<u>`, `<sub>` and `<sup>`. The export kept the formatting, but the grid, the WYSIWYG view and the AI saw a meaningless tag, and an AI translation could easily drop it.
+
+They now come in as `<b><i>`, `<u>`, `<sub>` and `<sup>`. The cause was the Okapi sidecar (the engine Workbench uses for DOCX): Okapi lists a run's formatting as "bold;italic;underline", and the sidecar only recognised the first item. It now reads all of them (sidecar v0.1.9).
+
+Projects imported before this fix still export correctly: their `<b>` and `<g1>` tags are still recognised, and the exported file has all of its formatting. A run where a bold paragraph style is switched off still shows as a `<gN>` tag, because the export needs it to keep that text from turning bold. Hyperlinks are unchanged.
+
+The problem was found with the new developer tool `tools/filter_compare.py`. It compares how Trados Studio, memoQ and Workbench extract the same documents, and reports text, segment boundaries and tags that differ.
+
 ### Changed (AI · OpenAI's three current models)
 
 The OpenAI models offered in Settings, the AI Assistant's model menu, QuickTrans and PDF Rescue are now OpenAI's three current ones, one per tier:

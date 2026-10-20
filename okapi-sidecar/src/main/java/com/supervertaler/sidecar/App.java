@@ -87,7 +87,7 @@ public class App {
             Map<String, Object> health = new LinkedHashMap<>();
             health.put("status", "ok");
             health.put("service", "supervertaler-okapi-sidecar");
-            health.put("version", "0.1.8");
+            health.put("version", "0.1.9");
             health.put("okapi_version", filterService.getOkapiVersion());
             ctx.json(health);
         });

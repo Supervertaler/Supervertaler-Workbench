@@ -678,7 +678,7 @@ public class FilterService {
         // function used to return fragment.toText() and the LLM would see
         // raw Okapi placeholders like [#$dp13] which then leaked into the
         // merged output as literal text. The merge path knows how to round
-        // trip <gN>/<xN/> tags back to source codes via getTagNameForCode().
+        // trip <gN>/<xN/> tags back to source codes via tagNamesForCode().
         // Map: code ID → [openingTags, closingTags]
         Map<Integer, String[]> codeIdTags = new HashMap<>();
 
@@ -800,66 +800,96 @@ public class FilterService {
      * @return String[2]: [0] = opening tags, [1] = closing tags
      */
     private String[] analyzeCodeType(String codeType) {
-        if (codeType == null || codeType.isEmpty()) return new String[]{"", ""};
-
-        String t = codeType.toLowerCase();
-        // Split on semicolons to get individual properties
-        String[] parts = t.split(";");
-
+        CodeFormat f = CodeFormat.parse(codeType);
         StringBuilder open = new StringBuilder();
         StringBuilder close = new StringBuilder();
-
-        String fontName = null;
-        String colorHex = null;
-
-        for (String part : parts) {
-            String p = part.trim();
-            if (p.isEmpty()) continue;
-
-            switch (p) {
-                case "x-bold":
-                    open.append("<b>"); close.insert(0, "</b>");
-                    break;
-                case "x-italic":
-                    open.append("<i>"); close.insert(0, "</i>");
-                    break;
-                case "x-underlined":
-                    open.append("<u>"); close.insert(0, "</u>");
-                    break;
-                case "x-strikethrough":
-                    open.append("<s>"); close.insert(0, "</s>");
-                    break;
-                case "x-superscript":
-                    open.append("<sup>"); close.insert(0, "</sup>");
-                    break;
-                case "x-subscript":
-                    open.append("<sub>"); close.insert(0, "</sub>");
-                    break;
-                default:
-                    if (p.startsWith("color:")) {
-                        colorHex = p.substring(6).trim();
-                    } else if (p.startsWith("fonts:")) {
-                        fontName = p.substring(6).trim();
-                    }
-                    break;
-            }
-        }
 
         // Only wrap with <cf> when there is meaningful visual info like
         // color.  Font name alone is usually the paragraph default and just
         // adds noise.  When there IS a color, include the font for context.
-        if (colorHex != null && !colorHex.isEmpty()) {
-            StringBuilder cfOpen = new StringBuilder("<cf color=\"#");
-            cfOpen.append(colorHex).append("\"");
-            if (fontName != null && !fontName.isEmpty()) {
-                cfOpen.append(" font=\"").append(fontName).append("\"");
+        if (f.color != null) {
+            open.append("<cf color=\"#").append(f.color).append("\"");
+            if (f.font != null) {
+                open.append(" font=\"").append(f.font).append("\"");
             }
-            cfOpen.append(">");
-            open.insert(0, cfOpen);
+            open.append(">");
+        }
+        for (String tag : f.tags) {
+            open.append('<').append(tag).append('>');
+        }
+        for (int k = f.tags.size() - 1; k >= 0; k--) {
+            close.append("</").append(f.tags.get(k)).append('>');
+        }
+        if (f.color != null) {
             close.append("</cf>");
         }
-
         return new String[]{open.toString(), close.toString()};
+    }
+
+    /** Formatting tags in nesting order, outermost first. */
+    private static final String[] FORMAT_TAG_ORDER = {"b", "i", "u", "s", "sup", "sub"};
+
+    /**
+     * What an Okapi inline code's type descriptor says about formatting.
+     *
+     * <p>Okapi's OpenXML filter (1.47) writes the descriptor with a single
+     * {@code x-} prefix and {@code ;}-separated properties, e.g.
+     * {@code x-bold;italic;fonts:Arial;underline:single;sub;color:FF0000;}.
+     * Earlier code here expected the prefix on every property and long
+     * names ({@code x-bold;x-italic;x-underlined;x-subscript}), so only the
+     * first property was ever recognised: bold+italic lost its italic, and
+     * underline, subscript and superscript became anonymous {@code <gN>}
+     * tags. Both spellings are accepted.</p>
+     *
+     * <p>Extract ({@link #analyzeCodeType}) and merge
+     * ({@link #tagNamesForCode}) both read formatting through this one
+     * parser, so the tags written out and the tags mapped back cannot
+     * drift apart.</p>
+     *
+     * <p>Hyperlinks keep their earlier rendering (a {@code <cf>} carrying
+     * the link colour, or {@code <gN>}): no formatting tags are derived
+     * for them.</p>
+     */
+    static final class CodeFormat {
+        final List<String> tags = new ArrayList<>();
+        String color;   // hex digits, lower case, no '#'
+        String font;
+        boolean link;
+
+        static CodeFormat parse(String codeType) {
+            CodeFormat f = new CodeFormat();
+            if (codeType == null || codeType.isEmpty()) return f;
+            Set<String> found = new HashSet<>();
+            for (String part : codeType.toLowerCase().split(";")) {
+                String p = part.trim();
+                if (p.startsWith("x-")) p = p.substring(2);
+                if (p.isEmpty()) continue;
+                int colon = p.indexOf(':');
+                String name = colon >= 0 ? p.substring(0, colon).trim() : p;
+                String value = colon >= 0 ? p.substring(colon + 1).trim() : "";
+                switch (name) {
+                    case "bold":          found.add("b"); break;
+                    case "italic":        found.add("i"); break;
+                    case "underline":
+                    case "underlined":    if (!"none".equals(value)) found.add("u"); break;
+                    case "strikethrough": found.add("s"); break;
+                    case "sup":
+                    case "superscript":   found.add("sup"); break;
+                    case "sub":
+                    case "subscript":     found.add("sub"); break;
+                    case "color":         if (!value.isEmpty()) f.color = value; break;
+                    case "fonts":         if (!value.isEmpty()) f.font = value; break;
+                    case "link":          f.link = true; break;
+                    default:              break;
+                }
+            }
+            if (!f.link) {
+                for (String tag : FORMAT_TAG_ORDER) {
+                    if (found.contains(tag)) f.tags.add(tag);
+                }
+            }
+            return f;
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -884,36 +914,83 @@ public class FilterService {
             Pattern.CASE_INSENSITIVE);
 
     /**
-     * Determine the primary HTML-like tag name for a source Code, based
-     * on Okapi's type descriptor (e.g. "x-bold;fonts:Arial;" → "b") or
-     * a generic numbered fallback for codes we don't have a special
-     * analyser for (HTML hyperlinks, buttons, spans, etc.).
+     * Every display-tag name a source Code may appear under in a
+     * translation, preferred first: its formatting tags (from Okapi's type
+     * descriptor, e.g. "x-bold;italic;" → b, i), {@code cf} when it carries
+     * a colour, and the generic numbered {@code gN}. A placeholder is only
+     * ever {@code xN}, which is what {@link #convertCodesToTags} writes for
+     * every placeholder.
      *
-     * <p>The fallback name pairs with {@link #convertCodesToTags} which
-     * emits the same {@code <gN>/<xN/>} tags during extract – so a code
-     * with id {@code 13} becomes {@code <g13>...</g13>} (or
-     * {@code <x13/>} for placeholders) on the way out, and the merge
-     * regex finds the matching source code via {@code tagQueues} on
-     * the way back in.</p>
+     * <p>All names are accepted on the way back in because projects
+     * imported by an older sidecar hold some codes under a different one
+     * of them: an underline or subscript as {@code <g3>}, bold+italic as
+     * {@code <b>} alone. Those must still export with their formatting.</p>
      */
-    private String getTagNameForCode(Code code) {
-        String type = code.getType();
-        if (type != null) {
-            String t = type.toLowerCase();
-            if (t.contains("x-bold"))          return "b";
-            if (t.contains("x-italic"))        return "i";
-            if (t.contains("x-underlined"))    return "u";
-            if (t.contains("x-strikethrough")) return "s";
-            if (t.contains("x-superscript"))   return "sup";
-            if (t.contains("x-subscript"))     return "sub";
-            // Colour/font only (no primary formatting) → <cf>
-            if (t.contains("color:"))          return "cf";
-        }
-        // Generic numbered fallback — pairs with convertCodesToTags above.
+    private List<String> tagNamesForCode(Code code) {
         if (code.getTagType() == TextFragment.TagType.PLACEHOLDER) {
-            return "x" + code.getId();
+            return Collections.singletonList("x" + code.getId());
         }
-        return "g" + code.getId();
+        CodeFormat f = CodeFormat.parse(code.getType());
+        List<String> names = new ArrayList<>(f.tags);
+        if (f.color != null) names.add("cf");
+        names.add("g" + code.getId());
+        return names;
+    }
+
+    /** An entry on the merge's stack of open tags. A {@code null} codeId
+     *  marks the second tag of a code that is already open, such as the
+     *  {@code <i>} in {@code <b><i>} for one bold+italic run. */
+    private static final class OpenTag {
+        final Integer codeId;
+        final String name;
+
+        OpenTag(Integer codeId, String name) {
+            this.codeId = codeId;
+            this.name = name;
+        }
+    }
+
+    /** Next code id in the queue not already placed, or null. */
+    private static Integer pollUnused(Queue<Integer> queue, Set<Integer> used) {
+        if (queue == null) return null;
+        while (!queue.isEmpty()) {
+            Integer id = queue.poll();
+            if (!used.contains(id)) return id;
+        }
+        return null;
+    }
+
+    /** Next unplaced code for a tag name: preferred-name codes first. */
+    private static Integer takeCode(String tagName,
+                                    Map<String, Queue<Integer>> tagQueues,
+                                    Map<String, Queue<Integer>> aliasQueues,
+                                    Set<Integer> used) {
+        Integer id = pollUnused(tagQueues.get(tagName), used);
+        return id != null ? id : pollUnused(aliasQueues.get(tagName), used);
+    }
+
+    /**
+     * True when an opening tag belongs to a code that is already open: the
+     * nearest real code on the stack (below any follow-on tags) carries
+     * this formatting too, was opened under a different name, and has not
+     * had this tag yet. So "<b><i>" for one bold+italic run is one code,
+     * while "<b>bold <i>and italic</i></b>" over two runs, or a bold run
+     * nested in a bold run, stays two.
+     */
+    private static boolean isPartOfOpenCode(String tagName, Deque<OpenTag> openStack,
+                                            Map<Integer, List<String>> namesById) {
+        Set<String> followOns = new HashSet<>();
+        for (OpenTag open : openStack) {
+            if (open.codeId == null) {
+                followOns.add(open.name);
+                continue;
+            }
+            return !tagName.equals(open.name)
+                    && !followOns.contains(tagName)
+                    && namesById.getOrDefault(open.codeId, Collections.emptyList())
+                                .contains(tagName);
+        }
+        return false;
     }
 
     /**
@@ -949,7 +1026,13 @@ public class FilterService {
         //                structural OOXML codes that we don't have a
         //                named formatting tag for. Crucial for keeping
         //                hyperlinks in the merged output.
+        // A code is queued under its preferred name in tagQueues and under
+        // its other names in aliasQueues. A tag takes a code it is the
+        // preferred name of before one it is only an alias of, so a lone
+        // <i> goes to an italic run, not to an earlier bold+italic one.
         Map<String, Queue<Integer>> tagQueues = new LinkedHashMap<>();
+        Map<String, Queue<Integer>> aliasQueues = new LinkedHashMap<>();
+        Map<Integer, List<String>> namesById = new HashMap<>();
         Map<Integer, Code> openingById = new LinkedHashMap<>();
         Map<Integer, Code> closingById = new LinkedHashMap<>();
         Map<Integer, Code> placeholderById = new LinkedHashMap<>();
@@ -958,19 +1041,19 @@ public class FilterService {
         for (Code c : srcCodes) {
             if (c.getTagType() == TextFragment.TagType.OPENING) {
                 openingById.put(c.getId(), c);
-                String tag = getTagNameForCode(c);
-                if (tag != null) {
-                    tagQueues.computeIfAbsent(tag, k -> new LinkedList<>()).add(c.getId());
-                }
             } else if (c.getTagType() == TextFragment.TagType.CLOSING) {
                 closingById.put(c.getId(), c);
             } else {
                 // PLACEHOLDER — track so we can round-trip <xN/> tags
                 // emitted by convertCodesToTags.
                 placeholderById.put(c.getId(), c);
-                String tag = getTagNameForCode(c);
-                if (tag != null) {
-                    tagQueues.computeIfAbsent(tag, k -> new LinkedList<>()).add(c.getId());
+            }
+            if (c.getTagType() != TextFragment.TagType.CLOSING) {
+                List<String> names = tagNamesForCode(c);
+                namesById.put(c.getId(), names);
+                for (int k = 0; k < names.size(); k++) {
+                    (k == 0 ? tagQueues : aliasQueues)
+                            .computeIfAbsent(names.get(k), x -> new LinkedList<>()).add(c.getId());
                 }
             }
 
@@ -982,7 +1065,8 @@ public class FilterService {
 
         // ── Step 2: walk through the translation, replacing tags ───
         TextFragment result = new TextFragment();
-        Deque<Integer> openStack = new ArrayDeque<>();   // stack of open code IDs
+        Deque<OpenTag> openStack = new ArrayDeque<>();   // open tags, innermost first
+        Set<Integer> used = new HashSet<>();             // code ids already placed
         Matcher m = TAG_RE.matcher(taggedTranslation);
         int lastEnd = 0;
 
@@ -1017,48 +1101,50 @@ public class FilterService {
                 // Self-closing tag (<xN/>, <br/>, etc.). Look up by tag
                 // name first – matches the <xN/> placeholders that
                 // convertCodesToTags emits for non-OOXML inline codes.
-                Queue<Integer> queue = tagQueues.get(tagName);
-                if (queue != null && !queue.isEmpty()) {
-                    int codeId = queue.poll();
-                    Code src = placeholderById.get(codeId);
-                    if (src != null) {
-                        result.append(src.clone());
-                    }
+                Integer codeId = takeCode(tagName, tagQueues, aliasQueues, used);
+                Code src = codeId != null ? placeholderById.get(codeId) : null;
+                if (src != null) {
+                    used.add(codeId);
+                    result.append(src.clone());
                 }
                 // else: AI-hallucinated tag with no matching source
                 // code – drop silently so it doesn't end up as
                 // literal text in the output.
             } else if (!isClosing) {
                 // ── OPENING tag ─────────────────────────────────
-                Queue<Integer> queue = tagQueues.get(tagName);
-                if (queue != null && !queue.isEmpty()) {
-                    int codeId = queue.poll();
-                    Code src = openingById.get(codeId);
+                if (isPartOfOpenCode(tagName, openStack, namesById)) {
+                    // e.g. the <i> of "<b><i>" for one bold+italic run:
+                    // that code is already open, so place nothing.
+                    openStack.push(new OpenTag(null, tagName));
+                } else {
+                    Integer codeId = takeCode(tagName, tagQueues, aliasQueues, used);
+                    Code src = codeId != null ? openingById.get(codeId) : null;
                     if (src != null) {
+                        used.add(codeId);
                         Code c = new Code(TextFragment.TagType.OPENING,
                                           src.getType(), src.getData());
                         c.setId(codeId);
                         result.append(c);
-                        openStack.push(codeId);
+                        openStack.push(new OpenTag(codeId, tagName));
                     }
+                    // else: tag not in source → silently drop it
                 }
-                // else: tag not in source → silently drop it
             } else {
                 // ── CLOSING tag ─────────────────────────────────
-                // Find the most-recently-opened code that matches this
-                // tag name. For properly nested tags this is the top.
+                // Find the most-recently-opened tag this closes. For
+                // properly nested tags this is the top.
                 Integer matchedId = null;
-                Iterator<Integer> it = openStack.iterator();
+                Iterator<OpenTag> it = openStack.iterator();
                 while (it.hasNext()) {
-                    int id = it.next();
-                    Code src = openingById.get(id);
-                    if (src != null) {
-                        String srcTag = getTagNameForCode(src);
-                        if (tagName.equals(srcTag)) {
-                            matchedId = id;
-                            it.remove();
-                            break;
-                        }
+                    OpenTag open = it.next();
+                    boolean matches = open.codeId == null
+                            ? open.name.equals(tagName)
+                            : namesById.getOrDefault(open.codeId, Collections.emptyList())
+                                       .contains(tagName);
+                    if (matches) {
+                        matchedId = open.codeId;
+                        it.remove();
+                        break;
                     }
                 }
                 if (matchedId != null) {
