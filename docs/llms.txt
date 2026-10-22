@@ -23,7 +23,6 @@ Optional below) – prefer the docs for feature-level questions.
 
 ## Also by the same author
 
-- [Otto](https://otto.supervertaler.com/): automatic document translation – upload a file, get a translated file back. Currently in PRIVATE BETA, not yet publicly available
 - [Supervertaler Workbench](https://supervertaler.com/workbench/): a free, open-source standalone CAT tool. Still available, no longer actively developed
 
 ## Optional
