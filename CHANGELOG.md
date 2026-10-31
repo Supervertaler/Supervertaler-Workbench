@@ -7,6 +7,20 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ## Unreleased
 
+### Added (Tools · Superbrowser asks all three at once, in private chats if you like)
+
+**Superbrowser** (Tools → 🌐 Superbrowser…) now has a question box under its three columns. Type a question and press Enter, or click **Send to all three ▶**. Superbrowser types the question into ChatGPT, Claude and Gemini and sends it in each. Shift+Enter starts a new line.
+- **New chat for each question** is ticked by default, so every question starts in a new, empty chat and earlier questions can't affect the answers. Untick it to ask follow-ups in the chats that are already open.
+- The question stays in the box after sending. Answers vary from run to run, so asking again takes one key.
+
+**🕶 Private chats** opens each service's own private chat: ChatGPT's Temporary Chat, Claude's incognito chat and Gemini's Temporary chat. These chats aren't saved to your history and don't use or update what the AI remembers about you. That makes Superbrowser a quick way to see how each AI describes you or your business to someone it doesn't know: ask "Who is …?" or "What is …?" in all three at once. You stay signed in, so some account settings, such as ChatGPT's custom instructions, may still apply. Switching Private chats off leaves the open chats alone, because a temporary chat is lost once you leave it.
+
+None of the three services lets other programs do this, so Superbrowser works by operating their web pages, and a change to one of the sites can break it there. When something goes wrong, Superbrowser tells you rather than guessing:
+- A note at the top of each column says what happened: ✓ sent, or ⚠ and the reason.
+- If a column couldn't be reached, your question is put on the clipboard so you can paste it in by hand.
+- If a private chat can't be switched on, that column doesn't get the question at all.
+- Superbrowser can't always tell whether a private chat really started. ChatGPT's and Claude's private chats are opened through web addresses those services don't document, and Gemini's only through its button. Unless Superbrowser can read the private state from the page, the column note asks you to check that the site shows its private-chat sign.
+
 ### Changed (AI · OpenAI's three current models)
 
 The OpenAI models offered in Settings, the AI Assistant's model menu, QuickTrans and PDF Rescue are now OpenAI's three current ones, one per tier:
