@@ -36684,9 +36684,19 @@ class SupervertalerQt(QMainWindow):
             )
             return False
 
-        # Fast path: already running.
+        # Fast path: already running – unless it is an outdated lazy-downloaded
+        # JAR. Start-up (_start_okapi_sidecar) launches whatever JAR is on
+        # disk, so without this check the self-heal below was never reached.
+        # Stop it before updating: on Windows the update replaces the JRE the
+        # running sidecar is using.
         if self.okapi_sidecar.is_running():
-            return True
+            if not self.okapi_sidecar.needs_update():
+                return True
+            self.okapi_sidecar.stop()
+            if self.okapi_sidecar.is_running():
+                # Not ours to stop (e.g. another Workbench window started
+                # it). Keep using it rather than replace files under it.
+                return True
 
         # Path 2: installed but not running. Try to start it.
         if self.okapi_sidecar.is_installed():

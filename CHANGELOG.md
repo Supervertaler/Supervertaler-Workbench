@@ -52,6 +52,10 @@ Projects imported before this fix still export correctly: their `<b>` and `<g1>`
 
 The problem was found with the new developer tool `tools/filter_compare.py`. It compares how Trados Studio, memoQ and Workbench extract the same documents, and reports text, segment boundaries and tags that differ.
 
+### Fixed (Okapi sidecar updates now reach Workbench installed with pip)
+
+If you installed Workbench with pip, it downloads the Okapi sidecar the first time you import a Word file. When a newer Workbench needs a newer sidecar, it was meant to download the update by itself, but it never did: Workbench starts the old sidecar as soon as it opens, and the update check only ran when no sidecar was running. Now, the first time you import a Word file after updating Workbench, it stops the old sidecar and downloads the new one (about 56 MB on Windows, 28 MB on macOS and Linux). If the download fails, for example when you are offline, Workbench carries on with the old sidecar and tries again at the next import. The Windows download of Workbench has the sidecar built in and is not affected.
+
 ### Changed (AI · OpenAI's three current models)
 
 The OpenAI models offered in Settings, the AI Assistant's model menu, QuickTrans and PDF Rescue are now OpenAI's three current ones, one per tier:
