@@ -40,25 +40,17 @@ import traceback
 # ── Config / key resolution ──
 
 def _resolve_api_key(cfg):
-    """Key from the config, else from a referenced settings.json's api_keys section."""
+    """Key from the config (the caller's choice), else Workbench's one reader:
+    the shared keys, then a referenced settings.json's api_keys section."""
     key = (cfg.get("apiKey") or "").strip()
     if key:
         return key
     provider = (cfg.get("provider") or "").strip()
     settings_path = cfg.get("settingsPath")
-    if settings_path and os.path.isfile(settings_path):
-        try:
-            with open(settings_path, "r", encoding="utf-8") as f:
-                settings = json.load(f)
-            api_keys = settings.get("api_keys", settings) or {}
-            k = api_keys.get(provider)
-            if not k and provider == "gemini":
-                k = api_keys.get("google")
-            if k:
-                return k.strip()
-        except Exception:
-            pass
-    return ""
+    if not settings_path:
+        return ""
+    from modules.llm_clients import load_api_keys
+    return (load_api_keys(settings_path).get(provider) or "").strip()
 
 
 def _build_client(cfg):
@@ -69,7 +61,12 @@ def _build_client(cfg):
         raise RuntimeError("could not import LLMClient: " + str(e))
     api_key = _resolve_api_key(cfg)
     if not api_key and (cfg.get("provider") not in ("ollama",)):
-        raise RuntimeError("no API key for provider '" + str(cfg.get("provider")) +
+        problem = None
+        if cfg.get("settingsPath"):
+            # A key that can't be read on this computer says so (M2).
+            from modules.llm_clients import api_key_problem
+            problem = api_key_problem(cfg.get("provider") or "", settings_path=cfg.get("settingsPath"))
+        raise RuntimeError(problem or "no API key for provider '" + str(cfg.get("provider")) +
                            "' (pass apiKey or settingsPath in the job)")
     return LLMClient(
         api_key=api_key,
