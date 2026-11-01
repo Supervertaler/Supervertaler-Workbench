@@ -82,7 +82,7 @@ class OkapiSidecar:
     # per-platform JRE bundles for them — see INSTALLER_URL_JAR_ONLY below.
     INSTALLER_URL_WINDOWS = (
         "https://github.com/Supervertaler/Supervertaler-Workbench/"
-        "releases/download/v1.10.223/okapi-sidecar-windows-v0.1.8.zip"
+        "releases/download/v1.10.373/okapi-sidecar-windows-v0.1.9.zip"
     )
     # All non-Windows platforms (macOS — Intel and Apple Silicon — and
     # Linux) use the cross-platform JAR-only asset with the user's system
@@ -93,7 +93,7 @@ class OkapiSidecar:
     # JRE at build time — that's separate from this lazy-download path.)
     INSTALLER_URL_JAR_ONLY = (
         "https://github.com/Supervertaler/Supervertaler-Workbench/"
-        "releases/download/v1.10.223/okapi-sidecar-v0.1.8.jar"
+        "releases/download/v1.10.373/okapi-sidecar-v0.1.9.jar"
     )
 
     def __init__(self, port: int = DEFAULT_PORT,
