@@ -33705,11 +33705,23 @@ class SupervertalerQt(QMainWindow):
     def _tray_quit(self):
         """Real quit from tray menu – bypasses the close-to-tray hide."""
         self._really_quit = True
-        self.close()  # Triggers closeEvent which now does cleanup, then accepts
-        QApplication.instance().quit()
+        # closeEvent does the cleanup and quits. close() returns False when
+        # the user cancels (unsaved changes → Cancel); quitting anyway would
+        # throw their work away.
+        if self.close():
+            QApplication.instance().quit()
 
     def closeEvent(self, event):
-        """Handle application close - cleanup hotkey processes"""
+        """Close the main window: hide to the tray if the user chose that,
+        otherwise confirm, clean up and quit the whole application.
+
+        Issue #255: this class used to define closeEvent twice. Python keeps
+        only the last definition, so the tray handling, hotkey cleanup and
+        explicit quit() here never ran – and because _setup_tray_icon turns
+        off quit-on-last-window-closed, the window's X hid the window but
+        left the process running. Keep this the only closeEvent in the
+        class (tests/test_main_window_close.py checks).
+        """
         # Close-to-tray: hide instead of quit, unless the tray menu explicitly
         # asked for a real quit. Skipped if the tray icon failed to initialise.
         if (not getattr(self, "_really_quit", False)
@@ -33732,6 +33744,57 @@ class SupervertalerQt(QMainWindow):
                         pass
                     prefs["close_to_tray_hint_shown"] = True
                     self._save_settings_section("ui", prefs)
+                return
+
+        # Check if Whisper model is downloading
+        if getattr(self, 'is_loading_model', False):
+            model_sizes = {
+                'tiny': '75 MB',
+                'base': '142 MB',
+                'small': '466 MB',
+                'medium': '1.5 GB',
+                'large': '2.9 GB'
+            }
+            size = model_sizes.get(self.loading_model_name, 'unknown size')
+
+            reply = QMessageBox.warning(
+                self,
+                "⚠️ Voice Model Downloading",
+                f"Voice is currently downloading the '{self.loading_model_name}' model ({size}).\n\n"
+                f"If you close now, the download will be interrupted and the model\n"
+                f"file may become corrupted. You would need to delete the incomplete\n"
+                f"file manually and re-download.\n\n"
+                f"Download location:\n"
+                f"{self._get_whisper_cache_path()}\n\n"
+                f"Do you want to force quit anyway?",
+                QMessageBox.StandardButton.No | QMessageBox.StandardButton.Yes,
+                QMessageBox.StandardButton.No
+            )
+
+            if reply == QMessageBox.StandardButton.No:
+                event.ignore()
+                self._really_quit = False  # a later X click may hide to tray again
+                return
+
+        # Check for unsaved project changes
+        if getattr(self, 'project_modified', False):
+            reply = QMessageBox.question(
+                self,
+                "Unsaved Changes",
+                "You have unsaved changes. Do you want to save before closing?",
+                QMessageBox.StandardButton.Save |
+                QMessageBox.StandardButton.Discard |
+                QMessageBox.StandardButton.Cancel
+            )
+
+            if reply == QMessageBox.StandardButton.Save:
+                self.save_project()
+            # A cancelled Save As (or a failed save) leaves project_modified
+            # set: stay open rather than lose the work.
+            if reply == QMessageBox.StandardButton.Cancel or (
+                    reply == QMessageBox.StandardButton.Save and self.project_modified):
+                event.ignore()
+                self._really_quit = False
                 return
 
         try:
@@ -33767,14 +33830,19 @@ class SupervertalerQt(QMainWindow):
         except Exception as e:
             print(f"[Superlookup] Error during hotkey cleanup: {e}")
 
+        # Each step guards itself, so one failing can't skip the quit below.
+        self._stop_okapi_sidecar()
+        self._cleanup_web_views()
+        self._close_detached_log_windows()
+
         # Accept the close event.
         event.accept()
         # Because _setup_tray_icon flipped setQuitOnLastWindowClosed to False
         # (so dialogs / hidden windows wouldn't terminate the app), we need
-        # to ask Qt to quit explicitly when close-to-tray is OFF – otherwise
-        # closing the main window would leave a headless process behind.
-        if getattr(self, "_tray_icon", None) is not None:
-            QApplication.instance().quit()
+        # to ask Qt to quit explicitly – otherwise closing the main window
+        # would leave a headless process behind. Unconditional: closing the
+        # main window means quit, even if some other top-level window is open.
+        QApplication.instance().quit()
 
     def open_project(self):
         """Open a project file"""
@@ -63637,66 +63705,8 @@ class SupervertalerQt(QMainWindow):
 
         dialog.exec()
     
-    def closeEvent(self, event):
-        """Handle window close event"""
-        # Check if Whisper model is downloading
-        if self.is_loading_model:
-            model_sizes = {
-                'tiny': '75 MB',
-                'base': '142 MB',
-                'small': '466 MB',
-                'medium': '1.5 GB',
-                'large': '2.9 GB'
-            }
-            size = model_sizes.get(self.loading_model_name, 'unknown size')
-
-            reply = QMessageBox.warning(
-                self,
-                "⚠️ Voice Model Downloading",
-                f"Voice is currently downloading the '{self.loading_model_name}' model ({size}).\n\n"
-                f"If you close now, the download will be interrupted and the model\n"
-                f"file may become corrupted. You would need to delete the incomplete\n"
-                f"file manually and re-download.\n\n"
-                f"Download location:\n"
-                f"{self._get_whisper_cache_path()}\n\n"
-                f"Do you want to force quit anyway?",
-                QMessageBox.StandardButton.No | QMessageBox.StandardButton.Yes,
-                QMessageBox.StandardButton.No
-            )
-
-            if reply == QMessageBox.StandardButton.No:
-                event.ignore()
-                return
-
-        # Check for unsaved project changes
-        if self.project_modified:
-            reply = QMessageBox.question(
-                self,
-                "Unsaved Changes",
-                "You have unsaved changes. Do you want to save before closing?",
-                QMessageBox.StandardButton.Save |
-                QMessageBox.StandardButton.Discard |
-                QMessageBox.StandardButton.Cancel
-            )
-
-            if reply == QMessageBox.StandardButton.Save:
-                self.save_project()
-                self._stop_okapi_sidecar()
-                self._cleanup_web_views()
-                self._close_detached_log_windows()
-                event.accept()
-            elif reply == QMessageBox.StandardButton.Discard:
-                self._stop_okapi_sidecar()
-                self._cleanup_web_views()
-                self._close_detached_log_windows()
-                event.accept()
-            else:
-                event.ignore()
-        else:
-            self._stop_okapi_sidecar()
-            self._cleanup_web_views()
-            self._close_detached_log_windows()
-            event.accept()
+    # closeEvent lives with the tray code (search "def closeEvent"); a second
+    # definition here used to shadow it and stop the app quitting (#255).
 
     def _cleanup_web_views(self):
         """Clean up WebEngine views - DISABLED to prevent crash"""

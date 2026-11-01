@@ -160,7 +160,9 @@ class VoiceTab(QWidget):
         # devices are added / removed). Lookup happens at record time
         # via mic_devices.resolve_device_index – if the saved device is
         # gone, sounddevice silently falls back to the OS default.
-        from modules.mic_devices import list_input_devices, DEFAULT_SENTINEL
+        # The device list itself is filled in on first show – see
+        # _populate_mic_combo for why.
+        from modules.mic_devices import DEFAULT_SENTINEL
         mic_row = QHBoxLayout()
         mic_row.addWidget(QLabel("Microphone:"))
         self._mic_combo = QComboBox()
@@ -168,15 +170,7 @@ class VoiceTab(QWidget):
             "System default (currently selected in Windows)",
             DEFAULT_SENTINEL,
         )
-        for name in list_input_devices():
-            self._mic_combo.addItem(name, name)
-        # Restore saved selection if the device is still attached;
-        # otherwise leave the combo on "System default" (index 0).
-        saved_mic = settings.get('mic_device', DEFAULT_SENTINEL)
-        for i in range(self._mic_combo.count()):
-            if self._mic_combo.itemData(i) == saved_mic:
-                self._mic_combo.setCurrentIndex(i)
-                break
+        self._mic_devices_listed = False
         self._mic_combo.currentIndexChanged.connect(self._on_mic_changed)
         mic_row.addWidget(self._mic_combo, stretch=1)
         # Wrap in a tiny widget so we can give it left/right margins
@@ -797,7 +791,37 @@ class VoiceTab(QWidget):
 
     def showEvent(self, event):
         super().showEvent(event)
+        self._populate_mic_combo()
         self.refresh()
+
+    def _populate_mic_combo(self):
+        """Fill the microphone dropdown, once, when the tab is first shown.
+
+        Listing devices means initialising PortAudio, which opens every
+        audio device on the system to read its capabilities. Workbench
+        builds this tab hidden a few seconds after launch (the top-tab
+        warm-up), and doing the listing then stopped other apps' music
+        playback at every start-up (issue #255). Now it only happens once
+        the user actually opens the Voice tab.
+        """
+        if self._mic_devices_listed:
+            return
+        self._mic_devices_listed = True
+        from modules.mic_devices import list_input_devices, DEFAULT_SENTINEL
+        saved_mic = self._load_settings().get('mic_device', DEFAULT_SENTINEL)
+        # Signals off: filling the list and restoring the saved choice is
+        # not a user change, and must never overwrite the saved mic.
+        self._mic_combo.blockSignals(True)
+        try:
+            for name in list_input_devices():
+                self._mic_combo.addItem(name, name)
+            # Restore saved selection if the device is still attached;
+            # otherwise leave the combo on "System default" (index 0).
+            i = self._mic_combo.findData(saved_mic)
+            if i >= 0:
+                self._mic_combo.setCurrentIndex(i)
+        finally:
+            self._mic_combo.blockSignals(False)
 
     # ------------------------------------------------------------------
     # Voice commands CRUD

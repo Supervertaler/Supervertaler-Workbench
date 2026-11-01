@@ -7,6 +7,14 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ## Unreleased
 
+### Fixed (Start-up stopped other apps' music; closing the window left Workbench running – #255)
+
+Two problems, reported together:
+- **Music stopped a few seconds after Workbench started.** Shortly after launch, Workbench quietly prepares its SuperLookup, Clipboard and Voice tabs so the first hotkey press is instant. Preparing the Voice tab listed your microphones, and listing them makes the audio library open every sound device on the PC. On many PCs that interrupts whatever another program is playing. Workbench now lists microphones only when you open the Voice tab.
+- **Closing the window left Workbench running in the background**, with only its tray icon showing, until it was ended in Task Manager. The part of the code that quits Workbench when its window closes was being skipped, because a second, older copy of the same routine silently replaced it. Clicking X now quits Workbench. If you have ticked "Close to tray (instead of quit)" in the tray icon's menu, X still hides it to the tray, as before.
+
+Also fixed along the way: choosing **Quit** in the tray menu and then **Cancel** at the "unsaved changes" question quit anyway, losing the changes; and choosing **Save** there and then cancelling the Save As box closed the window anyway. Both now keep Workbench open.
+
 ### Fixed (DOCX import · italic, underline, subscript and superscript kept as tags)
 
 Some Word formatting was lost or hidden when a DOCX was imported:
