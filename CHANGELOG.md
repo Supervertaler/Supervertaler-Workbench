@@ -20,6 +20,18 @@ Snippets, Special Characters and Text Conversions are only on that tab, so they 
 
 Both switches take effect at once, without a restart. Automatic deletion keeps clearing expired entries while the Clipboard Manager is off.
 
+### Changed (API keys · shared with the other Supervertaler products, and locked to this computer)
+
+Workbench now uses the same API keys as Supervertaler for Trados, Supervertaler for memoQ and Sidekick: one key per provider, for all four. A key you enter in any of them works in all of them.
+
+- **The first start of this version** adds your Workbench keys to the shared ones where those have none for that provider – it never overwrites one. If your Workbench key for a provider was different from the shared one, the shared one is used from now on, and the status bar says once which providers that was.
+- **Your keys are also locked to this computer.** On Windows they are locked to your Windows sign-in, in `%APPDATA%\Supervertaler\api-keys.locked.json`, outside your data folder. On a Mac they go into your Keychain. For now the plain copies stay as well (`api-keys.json` in your data folder's `settings` folder, and Workbench's own settings), so Supervertaler products that are not updated yet keep working; a later version removes them. Nothing changes in how you enter a key.
+- **A key that can't be read on this computer** – saved under another Windows sign-in, or after your Windows password was reset – is now reported as such, not as a missing key: under its box in **Settings → AI Settings** or **MT Settings**, and by any action that needs it. Paste the key in again.
+- A key you leave untouched in Settings is no longer saved back over a newer one that another Supervertaler product saved in the meantime.
+- The messages that still told you to put your keys in `api_keys.txt`, a file Workbench no longer uses, now point to Settings.
+
+On a Mac without a Keychain Workbench can use (or on Linux without a secret store), Workbench says so once and keeps your keys in its settings file as before.
+
 ### Fixed (Start-up stopped other apps' music; closing the window left Workbench running – #255)
 
 Two problems, reported together:

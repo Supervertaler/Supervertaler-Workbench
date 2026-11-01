@@ -36,97 +36,267 @@ Usage:
 import os
 import sys
 import time
-from typing import Dict, Optional, Literal, List, Tuple
+from typing import Dict, Optional, Literal, List, NamedTuple, Tuple
 from dataclasses import dataclass
 
 
-def load_api_keys() -> Dict[str, str]:
-    """Load API keys from unified settings/settings.json, with legacy api_keys.txt fallback."""
-    import json
+# ─── API keys ────────────────────────────────────────────────────────────────
+#
+# One reader for every key Workbench uses: Supervertaler.py, the AI chat, PDF
+# Rescue, QuickTrans and the headless batch offload all come here (design note
+# §4: the four readers were funnelled into one before anything else changed).
+#
+# Workbench shares its keys with Supervertaler for Trados, for memoQ and
+# Sidekick (decision 1, 30 Oct 2026): one key per provider for all four, in the
+# shared store (modules/api_key_store.py) - the plain api-keys.json in the data
+# folder, then the copy locked to this computer. Workbench's own copy,
+# settings.json's "api_keys", is read last and still written, for older
+# Workbench versions; step 2 removes it.
+
+# Where keys are entered, as the sentences users see name it.
+AI_SETTINGS_PLACE = "Settings → AI Settings"
+MT_SETTINGS_PLACE = "Settings → MT Settings"
+
+# Workbench's key names → the shared ids they are stored under. Non-secret
+# values in the same section (ollama_endpoint, the two regions) stay in
+# settings.json only.
+SHARED_KEY_IDS = {
+    'openai': 'openai', 'claude': 'claude', 'gemini': 'gemini', 'mistral': 'mistral',
+    'deepseek': 'deepseek', 'openrouter': 'openrouter',
+    'google_translate': 'google', 'deepl': 'deepl', 'microsoft_translate': 'microsoft',
+    'modernmt': 'modernmt', 'mymemory': 'mymemory',
+    'amazon_translate': 'amazon_translate', 'amazon_translate_secret': 'amazon_translate_secret',
+}
+_MT_NAMES = {'google_translate', 'deepl', 'microsoft_translate', 'modernmt', 'mymemory',
+             'amazon_translate', 'amazon_translate_secret'}
+
+# Older names in Workbench's own copy. Its 'google' was Gemini's key - the
+# shared 'google' is Google Translate's, so the two never meet.
+_OWN_ALIASES = {'gemini': ('google',), 'microsoft_translate': ('azure_translate',), 'claude': ('anthropic',)}
+_RETIRED_NAMES = {'google', 'azure_translate', 'anthropic'}
+
+PROFILE_KEY_PREFIX = "workbench:custom_openai:"
+
+
+def _own_settings_paths() -> List[str]:
+    """Where Workbench's settings.json may be, newest layout first."""
+    from modules import api_key_store
     script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-    api_keys = {}
-    configured_user_data_path = None
-
-    # Resolve user data pointer path (same cross-platform location as main app)
-    if sys.platform == 'win32':
-        appdata = os.environ.get('APPDATA', os.path.expanduser('~'))
-        pointer_path = os.path.join(appdata, "Supervertaler", "config.json")
-    elif sys.platform == 'darwin':
-        pointer_path = os.path.join(os.path.expanduser('~'), "Library", "Application Support", "Supervertaler", "config.json")
-    else:
-        xdg_config = os.environ.get('XDG_CONFIG_HOME', os.path.expanduser('~/.config'))
-        pointer_path = os.path.join(xdg_config, "Supervertaler", "config.json")
-
-    # Read configured user data path from pointer file (if available)
-    if os.path.exists(pointer_path):
-        try:
-            with open(pointer_path, 'r', encoding='utf-8') as f:
-                pointer_data = json.load(f)
-            configured_user_data_path = pointer_data.get("user_data_path") or None
-        except Exception:
-            configured_user_data_path = None
-
-    # Try unified settings first
-    unified_paths = []
-    if configured_user_data_path:
-        # New layout first, then old layout as fallback
-        unified_paths.append(os.path.join(configured_user_data_path, "workbench", "settings", "settings.json"))
-        unified_paths.append(os.path.join(configured_user_data_path, "settings", "settings.json"))
-    unified_paths.extend([
+    root = api_key_store.data_root()
+    paths = [
+        os.path.join(root, "workbench", "settings", "settings.json"),
+        os.path.join(root, "settings", "settings.json"),  # old layout
         os.path.join(os.path.expanduser('~'), "Supervertaler", "workbench", "settings", "settings.json"),
-        os.path.join(os.path.expanduser('~'), "Supervertaler", "settings", "settings.json"),  # old layout fallback
+        os.path.join(os.path.expanduser('~'), "Supervertaler", "settings", "settings.json"),
         os.path.join(script_dir, "user_data_private", "workbench", "settings", "settings.json"),
-        os.path.join(script_dir, "user_data_private", "settings", "settings.json"),  # old layout fallback
+        os.path.join(script_dir, "user_data_private", "settings", "settings.json"),
         os.path.join(script_dir, "user_data", "workbench", "settings", "settings.json"),
-        os.path.join(script_dir, "user_data", "settings", "settings.json"),  # old layout fallback
-    ])
+        os.path.join(script_dir, "user_data", "settings", "settings.json"),
+    ]
+    return list(dict.fromkeys(paths))
 
-    for settings_path in dict.fromkeys(unified_paths):
-        if os.path.exists(settings_path):
+
+def _read_key_section(path: str) -> Dict[str, str]:
+    """A settings.json's "api_keys" section - or a flat file of keys - as name → value."""
+    import json
+    with open(path, 'r', encoding='utf-8-sig') as f:
+        data = json.load(f)
+    if not isinstance(data, dict):
+        return {}
+    section = data.get("api_keys") if isinstance(data.get("api_keys"), dict) else data
+    return {k: v for k, v in section.items() if isinstance(v, str)}
+
+
+def _read_own_keys(settings_path: Optional[str] = None) -> Dict[str, str]:
+    """Workbench's own copy. ``settings_path`` names the file; without it the
+    usual places are searched, then the legacy api_keys.txt."""
+    if settings_path:
+        try:
+            return _read_key_section(settings_path) if os.path.isfile(settings_path) else {}
+        except Exception:
+            return {}
+
+    for path in _own_settings_paths():
+        if os.path.exists(path):
             try:
-                with open(settings_path, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                api_keys = data.get("api_keys", {})
-                if api_keys:
-                    break
+                keys = _read_key_section(path)
+                if keys:
+                    return keys
             except Exception:
                 pass
 
     # Legacy fallback: api_keys.txt (for backward compatibility)
-    if not api_keys:
-        legacy_paths = []
-        if configured_user_data_path:
-            legacy_paths.append(os.path.join(configured_user_data_path, "api_keys.txt"))
-        legacy_paths.extend([
-            os.path.join(os.path.expanduser('~'), "Supervertaler", "api_keys.txt"),
-            os.path.join(script_dir, "user_data_private", "api_keys.txt"),
-            os.path.join(script_dir, "user_data", "api_keys.txt"),
-            os.path.join(script_dir, "api_keys.txt"),
-        ])
-        for legacy_path in dict.fromkeys(legacy_paths):
-            if os.path.exists(legacy_path):
-                try:
-                    with open(legacy_path, 'r', encoding='utf-8') as f:
-                        for line in f:
-                            line = line.strip()
-                            if line and not line.startswith('#') and '=' in line:
-                                key, value = line.split('=', 1)
-                                api_keys[key.strip()] = value.strip()
-                    if api_keys:
-                        break
-                except Exception:
-                    pass
+    from modules import api_key_store
+    script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    legacy_paths = [
+        os.path.join(api_key_store.data_root(), "api_keys.txt"),
+        os.path.join(os.path.expanduser('~'), "Supervertaler", "api_keys.txt"),
+        os.path.join(script_dir, "user_data_private", "api_keys.txt"),
+        os.path.join(script_dir, "user_data", "api_keys.txt"),
+        os.path.join(script_dir, "api_keys.txt"),
+    ]
+    keys: Dict[str, str] = {}
+    for legacy_path in dict.fromkeys(legacy_paths):
+        if os.path.exists(legacy_path):
+            try:
+                with open(legacy_path, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith('#') and '=' in line:
+                            key, value = line.split('=', 1)
+                            keys[key.strip()] = value.strip()
+                if keys:
+                    break
+            except Exception:
+                pass
+    return keys
 
-    # Migrate legacy 'google' key to canonical 'gemini' key
-    if api_keys.get('google') and not api_keys.get('gemini'):
-        api_keys['gemini'] = api_keys['google']
+
+def _own_value(own: Dict[str, str], name: str) -> str:
+    for n in (name,) + _OWN_ALIASES.get(name, ()):
+        value = (own.get(n) or '').strip()
+        if value:
+            return value
+    return ''
+
+
+def load_api_keys(settings_path: Optional[str] = None) -> Dict[str, str]:
+    """Every key Workbench uses, by Workbench's names - the one reader.
+
+    Each comes from the shared store by the step-1 rule (the plain file, then
+    the locked copy), else from Workbench's own copy (``settings_path``, or
+    found as before). A key the locked copy holds but this computer cannot
+    unlock is left out - never replaced by an older own copy, and never a blank
+    key; ``api_key_problem`` says why. Non-secret values (Ollama's endpoint,
+    the regions) come from the own copy, as before.
+
+    Reads the files on every call, no cache: about a millisecond, and a key
+    changed in another product is seen at once."""
+    from modules import api_key_store
+    own = _read_own_keys(settings_path)
+    found = api_key_store.lookup_many(set(SHARED_KEY_IDS.values()))
+    api_keys = {name: value for name, value in own.items()
+                if name not in SHARED_KEY_IDS and name not in _RETIRED_NAMES}
+    for name, key_id in SHARED_KEY_IDS.items():
+        f = found[key_id]
+        if f.status == api_key_store.PRESENT:
+            api_keys[name] = f.key
+        elif f.status == api_key_store.ABSENT:
+            value = _own_value(own, name)
+            if value:
+                api_keys[name] = value
 
     # Set environment variable for Ollama endpoint if configured
     if api_keys.get('ollama_endpoint'):
         os.environ['OLLAMA_ENDPOINT'] = api_keys['ollama_endpoint']
 
     return api_keys
+
+
+def api_key_problem(name: str, settings_place: Optional[str] = None,
+                    settings_path: Optional[str] = None) -> Optional[str]:
+    """What to tell the user when an action needs this key and has none to use:
+    core's M2 when one is stored but cannot be unlocked here, "No API key set
+    for …" when there is none; None when the key is there, or for a name that is
+    not a shared key (Ollama, custom endpoints)."""
+    from modules import api_key_store
+    name = 'gemini' if name == 'google' else name
+    key_id = SHARED_KEY_IDS.get(name)
+    if key_id is None:
+        return None
+    place = settings_place or (MT_SETTINGS_PLACE if name in _MT_NAMES else AI_SETTINGS_PLACE)
+    found = api_key_store.lookup(key_id)
+    if found.status == api_key_store.PRESENT:
+        return None
+    if found.status == api_key_store.ABSENT and _own_value(_read_own_keys(settings_path), name):
+        return None
+    return api_key_store.when_used(found, key_id, place)
+
+
+def unreadable_key_notes() -> Dict[str, str]:
+    """M1 for each Workbench key name whose key cannot be unlocked here, for the
+    note under its box in Settings."""
+    from modules import api_key_store
+    found = api_key_store.lookup_many(set(SHARED_KEY_IDS.values()))
+    notes = {}
+    for name, key_id in SHARED_KEY_IDS.items():
+        note = api_key_store.unreadable_note(found[key_id], key_id)
+        if note:
+            notes[name] = note
+    return notes
+
+
+def save_api_key(name: str, value: str) -> bool:
+    """Saves one key by its Workbench name into the shared store - the plain
+    file, then the locked copy; empty removes it. False when the save did not
+    take. A non-secret value is not shared (True: nothing to do here); the
+    caller writes Workbench's own copy as well."""
+    from modules import api_key_store
+    key_id = SHARED_KEY_IDS.get(name)
+    return True if key_id is None else api_key_store.set_key(key_id, value)
+
+
+def _profile_keys(profiles) -> Dict[str, str]:
+    from modules import api_key_store
+    keys = {}
+    for p in profiles or []:
+        if isinstance(p, dict) and (p.get('api_key') or '').strip():
+            keys[api_key_store.private_id("workbench", "custom_openai", p.get('name') or '')] = p['api_key'].strip()
+    return keys
+
+
+def save_profile_keys(profiles) -> bool:
+    """Custom OpenAI-compatible profiles: each key also under
+    ``workbench:custom_openai:<profile name>`` in the locked copy (step 1 writes
+    it there as well; settings.json's copy still decides). A removed profile's
+    entry goes."""
+    from modules import api_key_store
+    return api_key_store.set_private_keys(PROFILE_KEY_PREFIX, _profile_keys(profiles))
+
+
+class PreparedKeys(NamedTuple):
+    joined: bool                     # the first-start join ran (mark it done)
+    notices: List[str]               # for the status line and the log: M8, M6
+    keychain_missing: Optional[str]  # M7, to be said once
+
+
+def prepare_api_keys(settings_path: Optional[str], join: bool, profiles=None) -> PreparedKeys:
+    """Once per start, before any key is read.
+
+    ``join`` (Workbench's first step-1 start): its own keys go into the shared
+    store where that has none - never overwriting (core's MigrateFrom rule).
+    Where its own key differs, the shared one wins, and M8 names those
+    providers. Then the step-1 sync: the plain keys, and the profile keys,
+    copied into the locked copy (adding and replacing, never removing)."""
+    from modules import api_key_store
+    import logging
+    log = logging.getLogger(__name__)
+    notices: List[str] = []
+    joined = False
+    if join:
+        own = _read_own_keys(settings_path)
+        mine = {key_id: _own_value(own, name) for name, key_id in SHARED_KEY_IDS.items() if _own_value(own, name)}
+        result = api_key_store.migrate_from(mine)
+        if result is None:
+            log.warning("Workbench's own API keys were not added to the shared ones yet; the next start tries again.")
+        else:
+            joined = True
+            added, differing = result
+            log.info("API keys: %d of Workbench's own added to the shared ones.", added)
+            if differing:
+                names = [api_key_store.display_name(k) for k in differing]
+                listed = names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+                notices.append(
+                    "Workbench now uses the same API keys as Supervertaler for Trados, memoQ and Sidekick. "
+                    + (f"Your Workbench key for {listed} was different; the shared one is used from now on."
+                       if len(names) == 1 else
+                       f"Your Workbench keys for {listed} were different; the shared ones are used from now on."))
+    sync = api_key_store.sync_locked(extra=_profile_keys(profiles))
+    if sync.locked:
+        log.info("API keys: %d locked to this computer.", sync.locked)
+    if sync.notice:
+        notices.append(sync.notice)
+    return PreparedKeys(joined, notices, api_key_store.keychain_missing_notice())
 
 
 # User-chosen Ollama request timeout in seconds (issue #180), or None for the
@@ -614,7 +784,9 @@ class LLMClient:
 
         # Validate API key for cloud providers (not needed for Ollama)
         if self.provider not in ("ollama", "custom_openai") and not self.api_key:
-            raise ValueError(f"API key required for provider: {provider}")
+            # A key that can't be read on this computer says so (M2), so a
+            # missing key is never sent to the provider as a blank one.
+            raise ValueError(api_key_problem(self.provider) or f"API key required for provider: {provider}")
 
         # For Mistral, set the base URL if not already specified
         if self.provider == "mistral" and not self.base_url:
@@ -1846,7 +2018,7 @@ def get_openai_translation(text: str, source_lang: str, target_lang: str, contex
         api_key = _load_api_key('openai')
         print(f"🔍 [DEBUG] OpenAI: API key loaded: {'Yes' if api_key else 'No'}")
         if not api_key:
-            raise ValueError("OpenAI API key not found in api_keys.txt")
+            raise ValueError(api_key_problem('openai') or "No API key set for OpenAI.")
             
         # Create LLM client and get real translation
         print(f"🔍 [DEBUG] OpenAI: Creating LLMClient...")
@@ -1896,7 +2068,7 @@ def get_claude_translation(text: str, source_lang: str, target_lang: str, contex
         api_key = _load_api_key('claude')
         print(f"🔍 [DEBUG] Claude: API key loaded: {'Yes' if api_key else 'No'}")
         if not api_key:
-            raise ValueError("Claude API key not found in api_keys.txt")
+            raise ValueError(api_key_problem('claude') or "No API key set for Anthropic.")
             
         # Create LLM client and get real translation
         print(f"🔍 [DEBUG] Claude: Creating LLMClient...")
@@ -1965,15 +2137,13 @@ def get_google_translation(text: str, source_lang: str, target_lang: str) -> Dic
         Dict with translation, confidence, and metadata
     """
     try:
-        # Load API key from api_keys.txt
         api_keys = load_api_keys()
-        # Try both 'google_translate' and 'google' for backward compatibility
-        google_api_key = api_keys.get('google_translate') or api_keys.get('google')
+        google_api_key = api_keys.get('google_translate')
         
         if not google_api_key:
             return {
                 'translation': None,
-                'error': 'Google Translate API key not found in api_keys.txt (looking for "google_translate" or "google")',
+                'error': api_key_problem('google_translate') or 'No API key set for Google Translate.',
                 'success': False
             }
         

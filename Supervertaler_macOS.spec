@@ -63,6 +63,11 @@ a = Analysis(
         'pynput.keyboard._darwin',
         'pynput.mouse._darwin',
         'PIL',
+        # API keys in the Keychain (modules/api_key_store.py imports the
+        # backend by name, so it must be in the build: without it Workbench
+        # keeps the plain copies and says so, M7)
+        'keyring.backends.macOS',
+        'keyring.backends.macOS.api',
     ] + _llm_hiddenimports,
     hookspath=[],
     hooksconfig={},

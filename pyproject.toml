@@ -113,6 +113,10 @@ dependencies = [
     "ahk>=1.0.0; platform_system == 'Windows'",
     "psutil>=5.9.0",
 
+    # API keys locked to the computer: the Keychain on a Mac, the Secret
+    # Service on Linux (Windows uses its own DPAPI through ctypes)
+    "keyring>=25.0; platform_system != 'Windows'",
+
     # Voice recognition – both engines are now core deps so the Voice tab
     # works out of the box without any "[local-whisper]" extra dance.
     # Vosk is the default always-on engine (lightweight, free, commands-only,

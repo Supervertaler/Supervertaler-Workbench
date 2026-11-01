@@ -9222,6 +9222,7 @@ class SupervertalerQt(QMainWindow):
         if not self._needs_data_location_dialog:
             self._migrate_settings_to_unified()
             self._migrate_to_workbench_layout()
+            self._prepare_api_keys()
 
         # Load the saved source/target language pair NOW, before any UI is
         # built. The Language Pair combo boxes read self.source_language /
@@ -24649,7 +24650,7 @@ class SupervertalerQt(QMainWindow):
 
         custom_key_row = QHBoxLayout()
         custom_key_input = QLineEdit()
-        custom_key_input.setPlaceholderText(self.tr("API key for this endpoint (leave empty to use api_keys.txt)"))
+        custom_key_input.setPlaceholderText(self.tr("API key for this endpoint (leave empty if it needs none)"))
         custom_key_input.setEchoMode(QLineEdit.EchoMode.Password)
         custom_key_input.setEnabled(custom_radio.isChecked())
         custom_key_row.addWidget(custom_key_input)
@@ -24867,6 +24868,8 @@ class SupervertalerQt(QMainWindow):
         api_keys_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
         current_keys = self.load_api_keys()
+        from modules.llm_clients import unreadable_key_notes
+        key_notes = unreadable_key_notes()
         if not hasattr(self, '_api_key_inputs'):
             self._api_key_inputs = {}
 
@@ -24902,7 +24905,7 @@ class SupervertalerQt(QMainWindow):
 
             container = QWidget()
             container.setLayout(row)
-            api_keys_form.addRow(label, container)
+            api_keys_form.addRow(label, self._with_key_note(container, key_name, key_input, key_notes))
             self._api_key_inputs[key_name] = key_input
 
         api_keys_group.setLayout(api_keys_form)
@@ -25438,6 +25441,8 @@ class SupervertalerQt(QMainWindow):
         mt_keys_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
         current_keys = self.load_api_keys()
+        from modules.llm_clients import unreadable_key_notes
+        key_notes = unreadable_key_notes()
         if not hasattr(self, '_api_key_inputs'):
             self._api_key_inputs = {}
 
@@ -25475,7 +25480,7 @@ class SupervertalerQt(QMainWindow):
 
             container = QWidget()
             container.setLayout(row)
-            mt_keys_form.addRow(label, container)
+            mt_keys_form.addRow(label, self._with_key_note(container, key_name, key_input, key_notes))
             self._api_key_inputs[key_name] = key_input
 
         mt_api_keys_group.setLayout(mt_keys_form)
@@ -29947,6 +29952,11 @@ class SupervertalerQt(QMainWindow):
             new_settings['ollama_timeout_minutes'] = ollama_timeout_spin.value()
         self.save_llm_settings(new_settings)
         self._apply_ollama_timeout_setting(new_settings)
+        # Each endpoint profile's key is also locked to this computer, under
+        # workbench:custom_openai:<name> (step 1; settings.json still decides).
+        from modules.llm_clients import save_profile_keys
+        if not save_profile_keys(new_settings.get('custom_openai_profiles', [])):
+            self.log("⚠ The endpoint profiles' keys could not be locked to this computer; the next start tries again.")
 
         # Update current provider and model attributes for AI Assistant
         self.current_provider = new_settings['provider']
@@ -30056,17 +30066,49 @@ class SupervertalerQt(QMainWindow):
         QMessageBox.information(self, "Settings Saved", "AI settings have been saved successfully.")
     
     def _save_api_keys_from_ui(self):
-        """Save API keys from inline input fields to unified settings"""
+        """Save API keys from inline input fields: a changed key into the keys
+        every Supervertaler product shares (the plain file, then locked to this
+        computer), and all of them into Workbench's own settings as before."""
         if not hasattr(self, '_api_key_inputs') or not self._api_key_inputs:
             return
+        from modules.llm_clients import save_api_key, SHARED_KEY_IDS
+        from modules.api_key_store import display_name
         api_keys = self._load_settings_section("api_keys")
         for key_name, input_widget in self._api_key_inputs.items():
             value = input_widget.text().strip()
             api_keys[key_name] = value
+            # Only a box the user changed goes to the shared keys: the page saves
+            # every box, and an untouched one must not put back an older key that
+            # another product has replaced meanwhile.
+            if value != (input_widget.property("shown_key") or ""):
+                if save_api_key(key_name, value):
+                    input_widget.setProperty("shown_key", value)
+                else:
+                    self.log(f"⚠ Your {display_name(SHARED_KEY_IDS.get(key_name, key_name))} key could not be "
+                             f"saved to the keys Supervertaler's products share. Try again in a moment.")
         # Migrate legacy 'google' key to canonical 'gemini' key
         if api_keys.get('google') and not api_keys.get('gemini'):
             api_keys['gemini'] = api_keys['google']
         self.save_api_keys(api_keys)
+
+    def _with_key_note(self, field, key_name, key_input, notes):
+        """A key row, with M1 under it when that key can't be read on this
+        computer; the note goes as soon as a new key is typed. Remembers what
+        the box showed, so a save writes only the keys the user changed."""
+        key_input.setProperty("shown_key", key_input.text().strip())
+        note = notes.get(key_name)
+        if not note:
+            return field
+        box = QWidget()
+        box_layout = QVBoxLayout(box)
+        box_layout.setContentsMargins(0, 0, 0, 0)
+        box_layout.addWidget(field)
+        label = QLabel(note)
+        label.setWordWrap(True)
+        label.setStyleSheet("color: #b35c00; font-size: 9pt;")
+        box_layout.addWidget(label)
+        key_input.textEdited.connect(lambda _text, lbl=label: lbl.hide())
+        return box
 
     def _save_mt_settings_from_ui(self, google_cb, deepl_cb, microsoft_cb, amazon_cb, modernmt_cb, mymemory_cb):
         """Save MT settings from UI"""
@@ -63970,16 +64012,6 @@ class SupervertalerQt(QMainWindow):
         else:
             # Load API keys for cloud providers
             api_keys = self.load_api_keys()
-            if not api_keys:
-                reply = QMessageBox.question(
-                    self, "API Keys Missing",
-                    "No API keys found. Would you like to configure them now?\n\n"
-                    f"Keys should be in: {self.user_data_path / 'api_keys.txt'}",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-                )
-                if reply == QMessageBox.StandardButton.Yes:
-                    self._go_to_settings_tab("AI Settings")
-                return
 
             # Check if API key exists for selected provider
             # Note: 'gemini' and 'google' are aliases for the same API key
@@ -63987,7 +64019,7 @@ class SupervertalerQt(QMainWindow):
             if not has_api_key:
                 reply = QMessageBox.question(
                     self, f"{provider.title()} API Key Missing",
-                    f"{provider.title()} API key not found in api_keys.txt\n\n"
+                    f"{self._api_key_problem(provider) or f'No API key set for {provider.title()}.'}\n\n"
                     f"Would you like to configure it now?",
                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
                 )
@@ -64553,7 +64585,7 @@ class SupervertalerQt(QMainWindow):
             if not has_key:
                 reply = QMessageBox.question(
                     self, f"{provider.title()} API Key Missing",
-                    f"{provider.title()} API key not found. Configure it now?",
+                    f"{self._api_key_problem(provider) or f'No API key set for {provider.title()}.'} Configure it now?",
                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
                 if reply == QMessageBox.StandardButton.Yes:
                     self._go_to_settings_tab("AI Settings")
@@ -65159,7 +65191,7 @@ class SupervertalerQt(QMainWindow):
             if not has_key:
                 r = QMessageBox.question(
                     self, f"{provider.title()} API Key Missing",
-                    f"{provider.title()} API key not found. Configure it now?",
+                    f"{self._api_key_problem(provider) or f'No API key set for {provider.title()}.'} Configure it now?",
                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
                 if r == QMessageBox.StandardButton.Yes:
                     self._go_to_settings_tab("AI Settings")
@@ -66370,7 +66402,7 @@ class SupervertalerQt(QMainWindow):
                 api_key = api_keys.get("google_translate")
             
             if not api_key:
-                return "[Google Cloud Translation requires API key]"
+                return f"[{self._api_key_problem('google_translate') or 'Google Cloud Translation requires API key'}]"
             
             # Map full language names to ISO codes
             lang_name_to_code = {
@@ -66424,7 +66456,7 @@ class SupervertalerQt(QMainWindow):
                 api_key = api_keys.get("deepl")
 
             if not api_key:
-                return "[DeepL requires API key]"
+                return f"[{self._api_key_problem('deepl') or 'DeepL requires API key'}]"
 
             translator = deepl.Translator(api_key, proxy=self._get_proxy_dict())
 
@@ -66500,7 +66532,7 @@ class SupervertalerQt(QMainWindow):
                 region = api_keys.get("microsoft_translate_region") or api_keys.get("azure_region") or "global"
 
             if not api_key:
-                return "[Microsoft Translator requires API key]"
+                return f"[{self._api_key_problem('microsoft_translate') or 'Microsoft Translator requires API key'}]"
 
             # Map full language names to ISO codes
             lang_name_to_code = {
@@ -66612,7 +66644,7 @@ class SupervertalerQt(QMainWindow):
                 api_key = api_keys.get("modernmt")
 
             if not api_key:
-                return "[ModernMT requires API key]"
+                return f"[{self._api_key_problem('modernmt') or 'ModernMT requires API key'}]"
 
             # Map full language names to ISO codes
             lang_name_to_code = {
@@ -66706,14 +66738,47 @@ class SupervertalerQt(QMainWindow):
             return f"[MyMemory error: {str(e)}]"
     
     def load_api_keys(self) -> Dict[str, str]:
-        """Load API keys from unified settings"""
-        api_keys = self._load_settings_section("api_keys")
+        """Every API key Workbench uses: the keys shared with Supervertaler for
+        Trados, memoQ and Sidekick, then Workbench's own settings - through the
+        one reader in modules/llm_clients.py."""
+        from modules.llm_clients import load_api_keys
+        return load_api_keys(str(self._get_unified_settings_path()))
 
-        # Migrate legacy 'google' key to canonical 'gemini' key
-        if api_keys.get('google') and not api_keys.get('gemini'):
-            api_keys['gemini'] = api_keys['google']
+    def _api_key_problem(self, name: str):
+        """Why an action has no key to use: "can't be read on this computer" (M2)
+        or "No API key set for …"; None when the key is there."""
+        from modules.llm_clients import api_key_problem
+        return api_key_problem(name, settings_path=str(self._get_unified_settings_path()))
 
-        return api_keys
+    def _prepare_api_keys(self):
+        """Once per start, before any key is read (step 1 of "API keys locked to
+        the computer"): Workbench's own keys join the shared ones - at its first
+        such start only - and the shared keys are locked to this computer.
+        Never stops Workbench starting."""
+        try:
+            from modules.llm_clients import prepare_api_keys
+            general = self._load_settings_section("general")
+            state = dict(general.get("api_key_lock") or {})
+            prepared = prepare_api_keys(str(self._get_unified_settings_path()),
+                                        join=not state.get("joined"),
+                                        profiles=self.load_llm_settings().get('custom_openai_profiles', []))
+            notices = list(prepared.notices)
+            if prepared.joined:
+                state["joined"] = datetime.now().strftime("%Y-%m-%d")
+            if prepared.keychain_missing:
+                print(f"[API keys] {prepared.keychain_missing}")
+                if not state.get("keychain_missing_said"):
+                    state["keychain_missing_said"] = True
+                    notices.append(prepared.keychain_missing)
+            if state != (general.get("api_key_lock") or {}):
+                general["api_key_lock"] = state
+                self._save_settings_section("general", general)
+            if notices:
+                # Once, in the status line and the log, when the window is up.
+                from PyQt6.QtCore import QTimer
+                QTimer.singleShot(3000, lambda: [self.log(n) for n in notices])
+        except Exception as e:
+            print(f"[API keys] Start-up step skipped: {type(e).__name__}: {e}")
 
     def save_api_keys(self, api_keys: Dict[str, str]):
         """Save API keys to unified settings"""

@@ -776,7 +776,8 @@ Please:
             provider = self._get_provider_from_model(model)
             
             if provider not in self.clients:
-                return f"[ERROR: {provider.title()} client not initialized. Check API key in api_keys.txt]"
+                from modules.llm_clients import api_key_problem
+                return f"[ERROR: {api_key_problem(provider) or provider.title() + ' client not initialized.'}]"
             
             # Call appropriate provider
             if provider == "openai":
@@ -1686,39 +1687,16 @@ if __name__ == "__main__":
             title.setAlignment(Qt.AlignmentFlag.AlignCenter)
             main_layout.addWidget(title)
             
-            # Load API keys from unified settings, with legacy fallback
-            self.api_keys = {}
-            data_dir = "user_data_private" if os.path.exists(".supervertaler.local") else "user_data"
-            settings_file = Path(data_dir) / "workbench" / "settings" / "settings.json"
-            if settings_file.exists():
-                try:
-                    import json as _json
-                    with open(settings_file, 'r', encoding='utf-8') as f:
-                        self.api_keys = _json.load(f).get("api_keys", {})
-                except Exception:
-                    pass
+            # Workbench's one key reader: the keys every Supervertaler
+            # product shares, then Workbench's own settings
+            from modules.llm_clients import load_api_keys, api_key_problem
+            self.api_keys = load_api_keys()
 
-            # Legacy fallback: api_keys.txt
-            if not self.api_keys:
-                api_file = Path("api_keys.txt")
-                if not api_file.exists():
-                    api_file = Path(data_dir) / "api_keys.txt"
-                if api_file.exists():
-                    with open(api_file, 'r', encoding='utf-8') as f:
-                        for line in f:
-                            line = line.strip()
-                            if line and not line.startswith('#') and '=' in line:
-                                key, value = line.split('=', 1)
-                            if 'openai' in key.lower():
-                                self.api_keys['openai'] = value.strip()
-            
             if not self.api_keys.get('openai'):
                 QMessageBox.critical(
                     self,
                     "API Key Missing",
-                    "Could not find OpenAI API key in api_keys.txt\n\n"
-                    "Please add a line like:\nOPENAI_API_KEY=your-key-here\n\n"
-                    "Or place api_keys.txt in the user_data folder."
+                    api_key_problem('openai') or "No API key set for OpenAI."
                 )
                 # Still create UI but warn user
             

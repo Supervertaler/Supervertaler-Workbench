@@ -95,6 +95,10 @@ pyobjc-framework-Cocoa>=10.0; sys_platform == "darwin"
 # (used by Dicta voice commands of type 'keystroke', 'ahk_inline', 'ahk_script')
 ahk>=1.0.0; sys_platform == "win32"
 
+# API keys locked to the computer: the Keychain on a Mac, the Secret Service on
+# Linux (Windows uses its own DPAPI)
+keyring>=25.0; sys_platform != "win32"
+
 
 # ===== PLATFORM-SPECIFIC NOTES =====
 # - Linux: Install Hunspell dictionaries: sudo apt install hunspell-<lang>
