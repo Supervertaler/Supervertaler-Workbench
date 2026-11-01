@@ -139,7 +139,11 @@ class ClipboardManagerWidget(QWidget):
 
     # Privacy defaults (issue #246). Capture stays ON so existing installs
     # behave exactly as before; everything else is opt-in.
+    # 'manager_enabled' is the Clipboard Manager's main switch: off, the main
+    # window hides this tab and frees its global hotkey as well. It lives
+    # here so one settings entry, saved by one Settings page, holds them all.
     DEFAULT_PRIVACY = {
+        'manager_enabled':      True,
         'capture_enabled':      True,
         'auto_delete_enabled':  False,
         'auto_delete_minutes':  60,
@@ -274,6 +278,8 @@ class ClipboardManagerWidget(QWidget):
         """)
         clear_btn.setToolTip("Remove all clipboard history (cannot be undone)")
         clear_btn.clicked.connect(self._clear_all)
+        # Kept visible with capture off: the history is hidden then, but
+        # its stored entries are still there and this is how they go.
         header.addWidget(clear_btn)
         header.addWidget(HelpButton(HelpTopics.CLIPBOARD,
                                     tooltip="Open Clipboard help"))
@@ -303,9 +309,9 @@ class ClipboardManagerWidget(QWidget):
         # Snippets" entry in the 3rd-column action menu, which
         # confused users about which one held the clipboard history.
         self._text_header = QLabel("📝 Text")
-        text_col = self._make_column(
+        self._text_col = self._make_column(
             self._text_header, self._text_list, self._text_empty)
-        self._splitter.addWidget(text_col)
+        self._splitter.addWidget(self._text_col)
 
         self._image_list = self._make_list_widget(
             row_height_hint=self._THUMB_SIZE.height() + 10)
@@ -329,9 +335,9 @@ class ClipboardManagerWidget(QWidget):
         self._image_empty = self._make_empty_label(
             "No images yet –\ncopy any image to start.")
         self._image_header = QLabel("🖼 Images")
-        image_col = self._make_column(
+        self._image_col = self._make_column(
             self._image_header, self._image_list, self._image_empty)
-        self._splitter.addWidget(image_col)
+        self._splitter.addWidget(self._image_col)
 
         # Third column: action menu (snippets, characters, conversions,
         # prompts). Built lazily by _build_action_tree(); always added
@@ -389,17 +395,23 @@ class ClipboardManagerWidget(QWidget):
         # Reflect counts in the per-column headers.
         self._update_column_headers()
 
-        # Footer hint
-        hint = QLabel(
-            "Click to paste  •  Right-click a clip to delete it or save it "
-            "as a snippet  •  Right-click the Menu column to add / edit "
-            "snippets  •  Pasted items shown in grey  •  ← / → switches "
-            "columns  •  Up / Down navigates within a column")
-        hint.setStyleSheet(
+        # Footer hint. Its text depends on whether the history columns are
+        # shown, so _update_capture_state_ui sets it.
+        self._hint_label = QLabel("")
+        self._hint_label.setStyleSheet(
             f"color: #999; font-size: {scaled_pt(7):.1f}pt; padding: 2px 4px; border: none;"
         )
-        hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(hint)
+        self._hint_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self._hint_label)
+
+    _HINT_HISTORY = (
+        "Click to paste  •  Right-click a clip to delete it or save it "
+        "as a snippet  •  Right-click the Menu column to add / edit "
+        "snippets  •  Pasted items shown in grey  •  ← / → switches "
+        "columns  •  Up / Down navigates within a column")
+    _HINT_MENU_ONLY = (
+        "Click to paste  •  Right-click to add / edit snippets  •  "
+        "Up / Down navigates  •  → / ← opens and closes a category")
 
     # -- column / list construction helpers -----------------------------
 
@@ -496,6 +508,10 @@ class ClipboardManagerWidget(QWidget):
 
     def showEvent(self, event):
         super().showEvent(event)
+        if not self._history_shown():
+            # Capture off: the Menu is the only column on the tab.
+            self._focus_action_tree(self._action_tree)
+            return
         # Default focus is the text list – that's where most clips live.
         self._text_list.setFocus()
         # Always highlight the latest entry (row 0) on show, not just when
@@ -562,6 +578,10 @@ class ClipboardManagerWidget(QWidget):
                     if current is not None and current.childCount() > 0 \
                             and current.isExpanded():
                         return False  # let Qt collapse
+                    if not self._history_shown():
+                        # The image column is hidden: nothing to the
+                        # left, so let Qt step up to the parent category.
+                        return False
                     self._focus_list(self._image_list)
                     return True
         return super().eventFilter(obj, event)
@@ -639,6 +659,14 @@ class ClipboardManagerWidget(QWidget):
         if list_widget.count() > 0 and list_widget.currentRow() < 0:
             list_widget.setCurrentRow(0)
 
+    def focus_default_column(self):
+        """Focus the column a summon lands on: the text history, or the
+        Menu when capture is off and the history columns are hidden."""
+        if self._history_shown():
+            self._focus_list(self._text_list)
+        else:
+            self._focus_action_tree(self._action_tree)
+
     def _refresh_focus_styles(self, old=None, new=None):
         """Highlight the column header whose widget currently has
         focus. Connected to QApplication.focusChanged in __init__ so
@@ -713,7 +741,11 @@ class ClipboardManagerWidget(QWidget):
         # excluded, the clip must never be read, hashed, displayed or written
         # to the database. Filtering later - after reading the text - would
         # still pull a password into this process's memory.
-        if not self._privacy.get('capture_enabled', True):
+        # The main switch is checked too: with the Clipboard Manager off the
+        # tab is hidden, but a widget built before it was switched off is
+        # still connected to the clipboard.
+        if not (self._privacy.get('manager_enabled', True)
+                and self._privacy.get('capture_enabled', True)):
             return
         if self._foreground_app_is_excluded():
             return
@@ -879,20 +911,32 @@ class ClipboardManagerWidget(QWidget):
         except Exception:
             return None
 
+    def _history_shown(self) -> bool:
+        return bool(self._privacy.get('capture_enabled', True))
+
     def _update_capture_state_ui(self):
-        """Reflect the capture state in the header. Without this a user who
-        switched capture off would later see an empty history and reasonably
-        conclude the feature was broken."""
+        """Reflect the capture state on the tab. With capture off the Text
+        and Images columns are hidden, leaving only the Menu (Snippets,
+        Special Characters, Text Conversions, QuickLauncher Prompts), and the
+        header says why - without that a user who switched capture off would
+        reasonably conclude the history was broken."""
         label = getattr(self, '_capture_state_label', None)
         if label is None:
             return
-        if self._privacy.get('capture_enabled', True):
+        history = self._history_shown()
+        self._text_col.setVisible(history)
+        self._image_col.setVisible(history)
+        self._hint_label.setText(
+            self._HINT_HISTORY if history else self._HINT_MENU_ONLY)
+        if history:
             label.hide()
             return
-        label.setText("⏸ Capture off")
+        label.setText("⏸ Capture off – history hidden")
         label.setToolTip(
-            "Clipboard capture is switched off in Settings → Clipboard.\n"
-            "Existing history is still shown and can be pasted.")
+            "Clipboard capture is switched off in Settings → Clipboard, so\n"
+            "the Text and Images columns are hidden and only the Menu is shown.\n"
+            "Entries already in the history are still stored – 'Clear all'\n"
+            "deletes them.")
         label.show()
 
     @staticmethod
