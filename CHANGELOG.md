@@ -2,10 +2,10 @@
 
 All notable changes to Supervertaler Workbench are documented in this file.
 
-**Current Version:** v1.10.372 (September 29, 2026)
+**Current Version:** v1.10.373 (November 1, 2026)
 
 
-## Unreleased
+## v1.10.373 - November 1, 2026
 
 ### Added (Settings · turn the Clipboard Manager off, or keep only its Menu)
 
