@@ -13407,6 +13407,9 @@ class SupervertalerQt(QMainWindow):
         clipboard_placeholder = _QW()
         self.main_tabs.addTab(clipboard_placeholder, "📋 Clipboard Manager")
         self.clipboard_tab_index = self.main_tabs.count() - 1
+        # Hidden, not removed, when the Clipboard Manager is switched off,
+        # so every stored tab index stays valid.
+        self._apply_clipboard_manager_enabled()
 
         voice_placeholder = _QW()
         self.main_tabs.addTab(voice_placeholder, "🎤 Voice")
@@ -15205,6 +15208,10 @@ class SupervertalerQt(QMainWindow):
         AHK's cold-spawn latency (Windows + AV scan can stretch the
         first ``AutoHotkey64.exe`` launch to 1–2 s; subsequent
         launches hit a hot disk cache and run in ~150 ms).
+
+        The Clipboard widget is built even when the Clipboard Manager is
+        switched off and its tab hidden: it reads nothing then, but its
+        automatic deletion still clears expired entries from the database.
         """
         for helper in ('_ensure_superlookup_top_tab',
                        '_ensure_clipboard_top_tab',
@@ -27004,6 +27011,7 @@ class SupervertalerQt(QMainWindow):
             if getattr(self, '_clipboard_settings_loading', False):
                 return
             self.save_clipboard_privacy_settings({
+                'manager_enabled':     manager_cb.isChecked(),
                 'capture_enabled':     master_cb.isChecked(),
                 'auto_delete_enabled': autodel_cb.isChecked(),
                 'auto_delete_minutes': minutes_spin.value(),
@@ -27011,8 +27019,8 @@ class SupervertalerQt(QMainWindow):
                                         for i in range(apps_list.count())],
             })
 
-        # ── Capture group ────────────────────────────────────────────────
-        group = QGroupBox(self.tr("📋 Clipboard history"))
+        # ── Main switch + capture group ──────────────────────────────────
+        group = QGroupBox(self.tr("📋 Clipboard Manager"))
         glayout = QVBoxLayout()
 
         header_row = QHBoxLayout()
@@ -27028,25 +27036,45 @@ class SupervertalerQt(QMainWindow):
         glayout.addLayout(header_row)
 
         info = QLabel(self.tr(
-            "The Clipboard tab keeps a history of everything you copy while "
-            "Supervertaler is running, so you can paste it again later. That "
-            "includes anything you copy from other programs — passwords and "
-            "licence keys among them.\n\n"
+            "The Clipboard Manager tab keeps a history of everything you copy "
+            "while Supervertaler is running, so you can paste it again later. "
+            "That includes anything you copy from other programs — passwords "
+            "and licence keys among them. The same tab holds your Snippets, "
+            "Special Characters, Text Conversions and QuickLauncher Prompts.\n\n"
             "Changes apply immediately — there's no Save button on this tab."
         ))
         info.setWordWrap(True)
         info.setStyleSheet("color: #666; font-size: 9pt; padding: 5px;")
         glayout.addWidget(info)
 
+        manager_cb = CheckmarkCheckBox(self.tr("Use the Clipboard Manager"))
+        manager_cb.setChecked(bool(current.get('manager_enabled', True)))
+        manager_cb.setToolTip(
+            "When this is off, the Clipboard Manager tab is hidden, nothing\n"
+            "you copy is read or stored, and its global shortcut (Ctrl+Alt+C\n"
+            "by default) is left free for other programs.\n"
+            "Snippets, Special Characters and Text Conversions are only on\n"
+            "that tab, so they go too. QuickLauncher Prompts are still in\n"
+            "the editor's right-click menu.\n"
+            "Entries already in the history are kept — use 'Clear all' on\n"
+            "the tab first if you want them gone."
+        )
+        glayout.addWidget(manager_cb)
+
         master_cb = CheckmarkCheckBox(self.tr("Capture clipboard history"))
         master_cb.setChecked(bool(current.get('capture_enabled', True)))
         master_cb.setToolTip(
-            "Master switch. When this is off, nothing you copy is read or\n"
-            "stored, and the Clipboard tab shows a 'Capture off' badge.\n"
-            "Entries already in the history are kept — use 'Clear all'\n"
-            "on the Clipboard tab to remove them."
+            "When this is off, nothing you copy is read or stored, and the\n"
+            "Clipboard Manager tab shows only its Menu column: Snippets,\n"
+            "Special Characters, Text Conversions and QuickLauncher Prompts.\n"
+            "Entries already in the history are kept — 'Clear all' at the\n"
+            "top of the tab removes them."
         )
-        glayout.addWidget(master_cb)
+        capture_row = QHBoxLayout()
+        capture_row.addSpacing(24)
+        capture_row.addWidget(master_cb)
+        capture_row.addStretch()
+        glayout.addLayout(capture_row)
 
         group.setLayout(glayout)
         layout.addWidget(group)
@@ -27172,7 +27200,8 @@ class SupervertalerQt(QMainWindow):
                 _persist()
 
         def _sync_enabled():
-            enabled = master_cb.isChecked()
+            master_cb.setEnabled(manager_cb.isChecked())
+            enabled = manager_cb.isChecked() and master_cb.isChecked()
             for w in (autodel_cb, ad_group, ex_group):
                 w.setEnabled(enabled)
             minutes_spin.setEnabled(enabled and autodel_cb.isChecked())
@@ -27181,6 +27210,7 @@ class SupervertalerQt(QMainWindow):
         new_app_edit.returnPressed.connect(_add_app)
         remove_btn.clicked.connect(_remove_apps)
         common_btn.clicked.connect(_add_common)
+        manager_cb.toggled.connect(lambda _: (_sync_enabled(), _persist()))
         master_cb.toggled.connect(lambda _: (_sync_enabled(), _persist()))
         autodel_cb.toggled.connect(lambda _: (_sync_enabled(), _persist()))
         minutes_spin.valueChanged.connect(lambda _: _persist())
@@ -29451,6 +29481,13 @@ class SupervertalerQt(QMainWindow):
         the clipboard. Manual navigation to the Clipboard tab passes
         no source; activations then just set the clipboard.
         """
+        if not self.clipboard_manager_enabled():
+            # Reached by the in-app shortcut, which stays bound. (The global
+            # hotkey is not registered while the manager is off.)
+            self.statusBar().showMessage(
+                "The Clipboard Manager is turned off – turn it on in "
+                "Settings → Clipboard", 4000)
+            return
         try:
             # v1.10.7 reordered to bring-then-ensure.
             # v1.10.8 additionally splits the work across two Qt event-
@@ -29478,19 +29515,15 @@ class SupervertalerQt(QMainWindow):
                     # list so arrow keys navigate the history straight
                     # away. Without this, the foreground-grab Alt-tap
                     # leaks into Qt's QMenuBar and arrow keys steer
-                    # the File menu instead of the list. Prefer the
-                    # text list (most-used column); the widget's own
-                    # _focus_list helper falls back to selecting row 0
-                    # if nothing is currently selected.
+                    # the File menu instead of the list. The widget
+                    # picks the column: the text list (most-used), or
+                    # the Menu when capture is off and the history
+                    # columns are hidden.
                     if widget is not None:
                         try:
-                            text_list = getattr(widget, '_text_list', None)
-                            if text_list is not None and hasattr(widget, '_focus_list'):
-                                widget._focus_list(text_list)
-                            else:
-                                widget.setFocus()
+                            widget.focus_default_column()
                         except Exception:
-                            pass
+                            widget.setFocus()
 
                     # Summon-latency breakdown. Logged one event-loop
                     # turn later so the tab switch's queued paint work
@@ -33381,6 +33414,8 @@ class SupervertalerQt(QMainWindow):
         jump_clipboard = QAction("Open Clipboard", self)
         jump_clipboard.triggered.connect(_make_jumper('clipboard_tab_index'))
         menu.addAction(jump_clipboard)
+        self._tray_jump_clipboard_action = jump_clipboard
+        jump_clipboard.setVisible(self.clipboard_manager_enabled())
 
         jump_voice = QAction("Open Voice", self)
         jump_voice.triggered.connect(_make_jumper('voice_tab_index'))
@@ -48958,6 +48993,7 @@ class SupervertalerQt(QMainWindow):
         """Persist clipboard privacy settings and apply them to the live
         widget immediately - a privacy switch that only takes effect after a
         restart is not a privacy switch."""
+        was_enabled = self.clipboard_manager_enabled()
         try:
             all_settings = self._load_unified_settings()
             features = all_settings.setdefault("features", {})
@@ -48967,6 +49003,11 @@ class SupervertalerQt(QMainWindow):
             self.log(f"⚠ Could not save clipboard privacy settings: {e}")
             return
 
+        if self.clipboard_manager_enabled() != was_enabled:
+            self._apply_clipboard_manager_enabled()
+            # Registers or frees the Clipboard Manager's global hotkey.
+            self.reload_global_hotkeys()
+
         # The Clipboard tab is built lazily, so the widget may not exist yet -
         # that is fine, it reads these settings when it is constructed.
         try:
@@ -48975,6 +49016,27 @@ class SupervertalerQt(QMainWindow):
                 widget.refresh_privacy_settings()
         except Exception as e:
             self.log(f"⚠ Could not apply clipboard privacy settings live: {e}")
+
+    def clipboard_manager_enabled(self) -> bool:
+        """The Clipboard Manager's main switch (Settings → Clipboard). On by
+        default, so installs that never touched it keep the tab."""
+        saved = self.load_clipboard_privacy_settings()
+        return not isinstance(saved, dict) or bool(saved.get('manager_enabled', True))
+
+    def _apply_clipboard_manager_enabled(self):
+        """Show or hide the Clipboard Manager tab and its tray entry to match
+        the main switch. The tab is hidden rather than removed, so
+        clipboard_tab_index and the indices after it stay valid. The global
+        hotkey is handled by register_global_hotkey, and capture by the
+        widget's own gate."""
+        enabled = self.clipboard_manager_enabled()
+        tabs = getattr(self, 'main_tabs', None)
+        idx = getattr(self, 'clipboard_tab_index', None)
+        if tabs is not None and idx is not None:
+            tabs.setTabVisible(idx, enabled)
+        action = getattr(self, '_tray_jump_clipboard_action', None)
+        if action is not None:
+            action.setVisible(enabled)
 
     def _migrate_settings_to_unified(self):
         """One-time migration from old settings files to unified settings/settings.json"""
@@ -72530,6 +72592,10 @@ class SuperlookupTab(QWidget):
             if _skip('tools_universal_lookup'):       sl_shortcut = ''
             if _skip('mt_quick_lookup'):              qt_shortcut = ''
             if _skip('sidekick_open_clipboard'):      cb_shortcut = ''
+            # Clipboard Manager switched off in Settings → Clipboard: leave
+            # its chord free for other applications.
+            _cb_on = getattr(self.main_window, 'clipboard_manager_enabled', None)
+            if callable(_cb_on) and not _cb_on():      cb_shortcut = ''
             if _skip('voice_dictate'):                pt_shortcut = ''
             if _skip('voice_alwayson_toggle'):  ao_shortcut = ''
             # Defensive — voice_command_ptt may not be present in

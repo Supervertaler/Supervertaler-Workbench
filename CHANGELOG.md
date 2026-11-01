@@ -7,6 +7,19 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ## Unreleased
 
+### Added (Settings · turn the Clipboard Manager off, or keep only its Menu)
+
+**Settings → Clipboard** has a new main switch, **Use the Clipboard Manager**. Turned off:
+- the Clipboard Manager tab and the tray menu's "Open Clipboard" entry are hidden;
+- nothing you copy is read or stored;
+- its global shortcut (Ctrl+Alt+C by default) is no longer claimed, so other programs can use it. Pressing it inside Workbench shows a note in the status bar instead.
+
+Snippets, Special Characters and Text Conversions are only on that tab, so they go too, and the setting says so. QuickLauncher Prompts are still in the editor's right-click menu.
+
+**Capture clipboard history** is now the option for keeping those without a history. Turned off, the tab shows only its Menu column (Snippets, Special Characters, Text Conversions and QuickLauncher Prompts), and Ctrl+Alt+C lands there. Before, the tab kept showing two history columns that could no longer fill up. Entries already in the history are kept in both cases: **Clear all**, which stays at the top of the tab, deletes them.
+
+Both switches take effect at once, without a restart. Automatic deletion keeps clearing expired entries while the Clipboard Manager is off.
+
 ### Fixed (Start-up stopped other apps' music; closing the window left Workbench running – #255)
 
 Two problems, reported together:
