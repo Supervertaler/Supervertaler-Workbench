@@ -15,10 +15,16 @@ _llm_datas, _llm_binaries, _llm_hiddenimports = [], [], []
 # distro/pydantic all missing — which would make every API call fail at
 # runtime with ModuleNotFoundError). Naming them explicitly via collect_all
 # guarantees they ship.
+#
+# vosk (Always-On voice commands) is here for its DLLs: PyInstaller has no
+# hook for it, so libvosk.dll and the three MinGW runtime DLLs beside it
+# never shipped, and `from vosk import Model` failed in every Windows build
+# from v1.9.435 to v1.10.373 with "[WinError 2] ... _internal\vosk".
 for _pkg in (
     'google.generativeai', 'openai', 'anthropic',
     'httpx', 'httpcore', 'h11', 'sniffio', 'anyio',
     'distro', 'pydantic', 'jiter',
+    'vosk',
 ):
     _d, _b, _h = collect_all(_pkg)
     _llm_datas += _d

@@ -17,11 +17,14 @@ from PyInstaller.utils.hooks import collect_all
 _llm_datas, _llm_binaries, _llm_hiddenimports = [], [], []
 # See Supervertaler.spec for the full explanation. Naming HTTP transitive
 # deps explicitly because PyInstaller's analysis doesn't follow them from
-# inside openai/anthropic's submodule tree.
+# inside openai/anthropic's submodule tree. vosk is here for its native
+# library (libvosk.dyld), which no PyInstaller hook collects – see
+# Supervertaler.spec.
 for _pkg in (
     'google.generativeai', 'openai', 'anthropic',
     'httpx', 'httpcore', 'h11', 'sniffio', 'anyio',
     'distro', 'pydantic', 'jiter',
+    'vosk',
 ):
     _d, _b, _h = collect_all(_pkg)
     _llm_datas += _d

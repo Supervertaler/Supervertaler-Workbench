@@ -16,6 +16,15 @@ Workbench no longer has a Clipboard Manager, so that it can concentrate on trans
 - QuickLauncher prompts are still in the editor's right-click menu and in the AI tab's Prompt Library.
 - Ctrl+Alt+C is now free for other programs. If you had changed it to another key, that key is free too.
 
+### Fixed (Voice · Always-On voice commands work in the Windows download)
+
+- **Always-On and the voice-command push-to-talk key (Ctrl+Alt+V) work in the Windows download again.** Since v1.9.435 (May 2026), starting either one failed with "[WinError 2] … _internal\vosk", because the speech recogniser, Vosk, was missing from the download. Installs made with pip were not affected. The Windows download is about 14 MB larger. The first time you start Always-On, Workbench downloads a small speech model (about 40 MB), as before.
+- **Speech that matches no command is no longer typed.** Always-On used to type it into whichever program was in front, often as fragments such as "[unk] project tm next add". Now the status bar just says "No command matched". Dictation (push-to-talk) is unchanged.
+- **The Voice tab no longer says "Listening for speech…" when nothing is listening.**
+  - If Always-On stops by itself, for example because Vosk can't load or the microphone is unplugged, the tab now says "Not active", and **Start Always-On** starts it again. Before, it kept saying "Listening for speech…", and the next press of Ctrl+Alt+O did nothing.
+  - While the speech model loads, or downloads the first time, the tab says "Starting…".
+  - If Always-On stops while you are holding Ctrl+Alt+V, the "Listening for command…" message goes away, and keystroke commands are no longer held back afterwards.
+
 ## v1.10.373 - November 1, 2026
 
 ### Added (Settings · turn the Clipboard Manager off, or keep only its Menu)

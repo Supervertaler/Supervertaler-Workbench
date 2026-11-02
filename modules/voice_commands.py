@@ -745,6 +745,9 @@ class ContinuousVoiceListener(QObject):
     # Signals
     listening_started = pyqtSignal()
     listening_stopped = pyqtSignal()
+    # The listener thread ended without stop() being called (Vosk failed
+    # to load, the microphone went away). Emitted after listening_stopped.
+    stopped_unexpectedly = pyqtSignal()
     speech_detected = pyqtSignal(str)  # Raw transcribed text
     command_detected = pyqtSignal(str, str)  # (phrase, result)
     text_for_dictation = pyqtSignal(str)  # Text that didn't match any command
@@ -828,6 +831,7 @@ class ContinuousVoiceListener(QObject):
         self._thread.status_update.connect(self.status_update.emit)
         self._thread.error_occurred.connect(self.error_occurred.emit)
         self._thread.vad_status.connect(self.vad_status_changed.emit)
+        self._thread.ended.connect(self._on_thread_ended)
         self._thread.start()
         # Hot-reload Vosk's grammar when the user adds / edits / removes
         # / disables a command, so they don't have to stop and restart
@@ -853,6 +857,18 @@ class ContinuousVoiceListener(QObject):
             self._thread.stop()
             self._thread = None
         self.listening_stopped.emit()
+
+    def _on_thread_ended(self, thread):
+        """The listener thread's run loop has returned (delivered on the
+        GUI thread). After stop() or a restart this is an old thread and
+        is ignored. If it is still the current one, it died on its own,
+        and the listener must stop claiming to listen: the Voice tab
+        reads ``is_listening`` to paint its status, and the next toggle
+        would otherwise "stop" a listener that isn't running."""
+        if thread is not self._thread or not self.is_listening:
+            return
+        self.stop()
+        self.stopped_unexpectedly.emit()
 
     def _on_commands_changed(self):
         """Slot for ``VoiceCommandManager.commands_changed``.
@@ -929,7 +945,8 @@ class _VADListenerThread(QObject):
     status_update = pyqtSignal(str)
     error_occurred = pyqtSignal(str)
     vad_status = pyqtSignal(str)  # "waiting", "recording", "processing"
-    
+    ended = pyqtSignal(object)  # self, when _run returns for any reason
+
     def __init__(self, listener: ContinuousVoiceListener):
         super().__init__()
         self.listener = listener
@@ -1210,7 +1227,8 @@ class _VADListenerThread(QObject):
         finally:
             self.vad_status.emit("stopped")
             self.status_update.emit("🔇 Stopped listening")
-    
+            self.ended.emit(self)
+
     def _process_audio(self, audio_buffer: list, sample_rate: int):
         """Process recorded audio - save to file and transcribe"""
         try:

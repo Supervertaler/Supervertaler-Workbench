@@ -1068,6 +1068,16 @@ class VoiceTab(QWidget):
             self._status_label.setText("⏳ Processing…")
             self._status_label.setStyleSheet(
                 "font-size: 9pt; padding: 4px; color: #F57C00;")
+        elif status == "loading":
+            # Running, but Vosk is still loading (or downloading its
+            # model, the first time). The button stops it, so it must
+            # not offer "Start".
+            self._status_label.setText("⏳ Starting…")
+            self._status_label.setStyleSheet(
+                "font-size: 9pt; padding: 4px; color: #F57C00;")
+            self._toggle_btn.setText("⏹️ Stop Always-On")
+            self._toggle_btn.setStyleSheet(
+                "padding: 6px 12px; background-color: #FFCDD2;")
         else:
             self._status_label.setText("⚪ Not active")
             self._status_label.setStyleSheet(

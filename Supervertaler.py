@@ -28041,6 +28041,7 @@ class SupervertalerQt(QMainWindow):
                 self.voice_listener.vad_status_changed.connect(self._on_alwayson_vad_status)
                 self.voice_listener.listening_started.connect(lambda: self._update_alwayson_ui("listening"))
                 self.voice_listener.listening_stopped.connect(lambda: self._update_alwayson_ui("stopped"))
+                self.voice_listener.stopped_unexpectedly.connect(self._on_alwayson_listener_died)
                 
                 # Log which engine we're using
                 if engine == 'api':
@@ -28352,40 +28353,18 @@ class SupervertalerQt(QMainWindow):
         self.status_bar.showMessage(f"🎤 {result}", 3000)
 
     def _on_alwayson_dictation(self, text: str):
-        """Handle dictation text from always-on listener (no command matched).
+        """Speech from the always-on listener that matched no command.
 
-        Routes through the shared cross-app helper so Always-On, F9
-        push-to-talk, and the Voice global hotkey all behave the same
-        way regardless of which app has focus.
-
-        Skipped entirely in two cases:
-
-        1. v1.10.196 — when the listener was started by Ctrl+Alt+V
-           (command push-to-talk). The user explicitly held a hotkey
-           to issue a *command*, not to dictate text; if their phrase
-           didn't match a defined command we silently drop it rather
-           than typing "next" / "select all" / etc. into the focused
-           field. The flag is kept set until the listener fully stops
-           (see ``_update_alwayson_ui`` for the clearing logic) so
-           late transcriptions arriving after release are also dropped.
-
-        2. When the user has set Always-On to commands-only mode
-           (Voice tab → "Listen for commands only"). Same effect:
-           unmatched speech is logged but not typed – dictation is
-           reserved for the explicit dictation push-to-talk path
-           (hold Ctrl+Shift+Space).
+        It is reported and never typed: Always-On only runs voice
+        commands, and running text belongs to push-to-talk dictation.
+        Up to v1.10.373 it was typed into the active app unless the
+        "Listen for commands only" setting was on – but that checkbox
+        was removed in v1.9.493 with the setting left off, so Vosk's
+        leftovers ("[unk] project tm next add [unk]") landed in
+        whatever window had focus.
         """
-        if getattr(self, '_voice_command_ptt_owned', False):
-            self.log(f"💬 Command PTT mode, dropping unmatched speech: {text!r}")
-            return
-        try:
-            settings = self.load_dictation_settings()
-            if settings.get('alwayson_commands_only', False):
-                self.log(f"💬 Heard (commands-only mode, not dictated): {text}")
-                return
-        except Exception:
-            pass
-        self._insert_dictated_text(text)
+        self.log(f"💬 No command matched, not typed: {text!r}")
+        self.status_bar.showMessage(f"🎤 No command matched: “{text}”", 3000)
 
     def _on_alwayson_status(self, message: str):
         """Handle status updates from always-on listener"""
@@ -28398,6 +28377,20 @@ class SupervertalerQt(QMainWindow):
         """Handle errors from always-on listener"""
         self.log(f"❌ Always-on error: {error}")
         QMessageBox.warning(self, "Always-On Error", f"Voice listener error:\n\n{error}")
+
+    def _on_alwayson_listener_died(self):
+        """The listener stopped without being asked to; it reports why
+        through _on_alwayson_error. End any command push-to-talk hold it
+        was serving: the release handler no longer sees a session, so
+        the keystroke deferral and the "Listening for command…" message
+        would otherwise outlive it."""
+        self.log("🔇 Always-on listener stopped unexpectedly")
+        self._voice_command_ptt_owned = False
+        self._voice_command_ptt_pending_stop = False
+        self.status_bar.clearMessage()
+        mgr = getattr(self, 'voice_command_manager', None)
+        if mgr is not None:
+            mgr.set_defer_keystrokes(False)
 
     def _on_alwayson_vad_status(self, status: str):
         """Handle VAD status changes (waiting/recording/processing).
