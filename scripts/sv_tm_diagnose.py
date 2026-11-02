@@ -252,7 +252,7 @@ def main():
 
     print("\n--- 8. Verdict ---")
     if not active_ids:
-        print("  No TM is switched on for this project. Tick 'Read' in Resources -> TM.")
+        print("  No TM is switched on for this project. Tick 'Read' on the TMs tab.")
     elif fts_ok is False:
         print("  The full-text index is dead: fuzzy matches cannot work, exact ones can.")
         print("  Update to v1.10.371+ (repairs itself on startup), or run --repair.")

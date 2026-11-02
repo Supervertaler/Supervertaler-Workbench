@@ -86,6 +86,14 @@ Both recognise every self-closing tag now, as AutoTagger already did. Pseudo-tra
 
 **SuperLookup → ⚙️ SuperLookup Settings** said SuperLookup searches the TMs and termbases ticked **Read**. Since v1.10.247 it searches the ones ticked in the **🔍 SuperLookup** column of the TMs and Termbases tabs, whether or not they are ticked Read. The note now says so.
 
+### Fixed (Messages · menu and tab names that no longer exist)
+
+A few messages sent you to places that have been renamed:
+- **Bilingual text export:** after exporting AI-friendly bilingual text, the message said to re-import through "File → Import". That menu has been called **Project** since v1.10.182.
+- **No TM or termbase:** several messages and log lines said "Resources → TM", "Resources → Translation Memories" or "Resources → Termbases". The tabs are **💾 TMs** and **🏷️ Termbases**.
+
+They now name the menu items and tabs as they appear. The TM diagnostic script (`scripts/sv_tm_diagnose.py`) says the same.
+
 ## v1.10.373 - November 1, 2026
 
 ### Added (Settings · turn the Clipboard Manager off, or keep only its Menu)
