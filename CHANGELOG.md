@@ -159,6 +159,12 @@ QuickTrans lists the suggestions of several MT engines for the current segment. 
 
 This works in the docked QuickTrans panel and in the Ctrl+Alt+Q popup. The **Δ** button beside ⚙️ switches it on and off, and the choice is remembered. Only the display is marked: clicking a row, or Ctrl+1…9, still inserts that engine's exact translation. Results longer than 1,000 characters are shown without marks, so a long segment never slows QuickTrans down. Tags in a suggestion, such as `<b>`, are now always shown as text.
 
+### Improved (Glossaries · synonyms are first-class citizens)
+
+Two improvements for glossary synonyms (issue #114):
+- **TermLens shows a synonym where it occurs, even next to the main term.** Take an entry *methyl-ethylketoxime* → *methyl ethyl ketoxime* with the synonym *MEKO* on both sides. In "…op basis van methyl-ethylketoxime (MEKO) en…", TermLens used to show only the main term. It now also shows **MEKO** under "(MEKO)". A synonym's chip suggests the matching target synonym when there is one (MEKO → MEKO), otherwise the main target term, and offers the other forms as alternatives. The grid highlights the synonym too. A synonym that is part of the main term, such as *ethylketoxime* in *methyl-ethylketoxime*, gets no second chip there.
+- **The 🏷️ Termbases tab has a Synonyms column**, listing each term's source and target synonyms, for example `MEKO → MEKO`.
+
 ## v1.10.373 - November 1, 2026
 
 ### Added (Settings · turn the Clipboard Manager off, or keep only its Menu)
