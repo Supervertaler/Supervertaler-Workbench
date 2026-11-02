@@ -294,6 +294,7 @@ if sys.platform == 'win32':
 import pyperclip  # For clipboard operations in Superlookup
 from modules.superlookup import SuperlookupEngine  # Superlookup engine
 from modules.pseudo_translate_dialog import run_pseudo_translation  # Pseudo-translation export test (dialog + apply)
+from modules.project_assets import write_project_file, read_backup, bundle_round_trip_sources, restore_round_trip_sources, is_in_source_dir, TM_SUBDIR  # Safe saves, round-trip sources, tm/ (issue #228)
 from modules.project_assets import bundle_source, resolve_source_path, ensure_target_dir, nest_in_own_folder  # Project-folder model (issue #228)
 from modules.voice_commands import VoiceCommandManager, VoiceCommand, ContinuousVoiceListener  # Voice commands (Talon-style)
 from modules import inline_codes as _inline_codes  # User-defined inline codes / placeholders (issue #194)
@@ -1173,9 +1174,13 @@ def expand_compact_tags(text: str, tag_map: dict) -> str:
 
 # Combined pattern for memoQ tags, HTML tags, and Trados/SDLXLIFF numeric tags
 # memoQ: [N}, {N], [N]
-# HTML: <tag>, </tag>, <tag/>, <tag attr="value"> - includes hyphenated tags like li-o, li-b
-# Trados/SDLXLIFF: <N>, </N> (numeric tags from SDLXLIFF paired elements)
-_ALL_TAGS_PATTERN = r'(\[\d+\}|\{\d+\]|\[\d+\]|</?[a-zA-Z][a-zA-Z0-9-]*(?:\s+[^>]*)?>|</?\d+>)'
+# HTML/XML: <tag>, </tag>, <tag/>, <tag attr="value"> - includes hyphenated tags
+#   like li-o, li-b, and namespaced ones like memoQ's <mq:ch val="→" />
+# Trados/SDLXLIFF: <N>, </N>, and standalone <N/>
+# Self-closing forms without a space (<2/>, <br/>) used to be missed, so the
+# standalone tags of every SDLXLIFF/Trados import were never offered by Insert
+# next tag (Ctrl+,) and a lost one went unreported by the QA tag check.
+_ALL_TAGS_PATTERN = r'(\[\d+\}|\{\d+\]|\[\d+\]|</?\d+/?>|</?[a-zA-Z][a-zA-Z0-9._:-]*(?:\s+[^>]*)?/?>)'
 
 
 def extract_all_tags(text: str) -> list:
@@ -1197,10 +1202,9 @@ def extract_all_tags(text: str) -> list:
     return [tag for _, _, tag in sorted(found)]
 
 
-# AutoTagger uses its own, more complete pattern than extract_all_tags: it also
-# matches self-closing forms (numbered <2/> and HTML <x1/>) which the SDLXLIFF/
-# Trados standalone tags use. Kept separate so extract_all_tags' behaviour (used
-# by other features) is unchanged.
+# AutoTagger's pattern – now the same as extract_all_tags'. It matches
+# self-closing forms (numbered <2/> and HTML <x1/>) which the SDLXLIFF/Trados
+# standalone tags use.
 # The name part allows XML QName characters — letters, digits, '.', '_', '-'
 # and ':'. The colon matters: memoQ bilingual files carry NAMESPACED tags such
 # as <mq:ch val="→" />, and a name class of [a-zA-Z0-9-] stopped at the colon,
@@ -1956,6 +1960,7 @@ class Project:
     original_txt_path: str = None  # Path to original simple text file for round-trip export
     dejavu_source_path: str = None  # Path to original Déjà Vu bilingual RTF for round-trip export
     po_source_path: str = None  # Path to original GNU gettext .po / .pot for round-trip export
+    bundled_sources: Dict[str, Any] = None  # {field: "source/<name>"} copies of the round-trip sources above (#228)
     concordance_geometry: Dict[str, int] = None  # Window geometry for Concordance Search {x, y, width, height}
     # Multi-file project support
     files: List[Dict[str, Any]] = None  # List of files in project: [{id, name, path, type, segment_count, ...}]
@@ -2053,6 +2058,8 @@ class Project:
             result['dejavu_source_path'] = self.dejavu_source_path
         if self.po_source_path:
             result['po_source_path'] = self.po_source_path
+        if self.bundled_sources:
+            result['bundled_sources'] = self.bundled_sources
         
         # Add UI state
         if self.concordance_geometry:
@@ -2150,6 +2157,8 @@ class Project:
         # Store .po / .pot source path if it exists
         if 'po_source_path' in data:
             project.po_source_path = data['po_source_path']
+        if isinstance(data.get('bundled_sources'), dict):
+            project.bundled_sources = data['bundled_sources']
         # Store concordance window geometry if it exists
         if 'concordance_geometry' in data:
             project.concordance_geometry = data['concordance_geometry']
@@ -3019,6 +3028,43 @@ def is_triple_click(widget, event) -> bool:
         return (event.button() == Qt.MouseButton.LeftButton and bool(last)
                 and (event.timestamp() - last) <= QApplication.doubleClickInterval())
     except Exception:
+        return False
+
+
+class _GridStyleBatch:
+    """Coalesces grid-cell stylesheet rebuilds while a row is built (issue #185).
+
+    setStyleSheet re-polishes the widget, and building a row used to rebuild
+    each editor's sheet three times (constructor, font size, row colour) –
+    a third of the time it takes to fill a page of the grid. Inside
+    ``with _GridStyleBatch():`` a rebuild is only noted, and each editor gets
+    its final sheet once, on exit.
+    """
+    depth = 0
+    pending = {}  # id(widget) → widget
+
+    def __enter__(self):
+        _GridStyleBatch.depth += 1
+        return self
+
+    def __exit__(self, *exc):
+        _GridStyleBatch.depth -= 1
+        if _GridStyleBatch.depth == 0:
+            widgets = list(_GridStyleBatch.pending.values())
+            _GridStyleBatch.pending.clear()
+            for widget in widgets:
+                try:
+                    widget._rebuild_grid_stylesheet()
+                except RuntimeError:
+                    pass  # deleted before the row was finished
+        return False
+
+    @classmethod
+    def defer(cls, widget) -> bool:
+        """True (and the rebuild noted) while a batch is open."""
+        if cls.depth:
+            cls.pending[id(widget)] = widget
+            return True
         return False
 
 
@@ -4486,6 +4532,8 @@ class ReadOnlyGridTextEditor(QTextEdit):
 
     def _rebuild_grid_stylesheet(self):
         """Compose this cell's stylesheet from current bg colour + font size."""
+        if _GridStyleBatch.defer(self):
+            return
         # v1.10.229: When "Allow Replace in Source Text" is on, override the
         # cell background with a soft amber so the user can see at a glance
         # which cells are dangerous to touch. Mirrors the inline-editor
@@ -6512,6 +6560,8 @@ class EditableGridTextEditor(QTextEdit):
 
     def _rebuild_grid_stylesheet(self):
         """Compose this cell's stylesheet from current bg colour + font size."""
+        if _GridStyleBatch.defer(self):
+            return
         border_color = EditableGridTextEditor.focus_border_color
         border_thickness = EditableGridTextEditor.focus_border_thickness
         bg_rule = f"background-color: {self._grid_bg_color};" if self._grid_bg_color else ""
@@ -8858,6 +8908,12 @@ class _ImportProgressDialog:
             return
         if self.cancelled():
             return
+        # Repaint at most ten times a second (issue #185): each repaint pumps
+        # the event loop, and doing it every few rows added seconds to a big load.
+        now = time.monotonic()
+        if rows_done < total and now - getattr(self, '_last_grid_repaint', 0.0) < 0.1:
+            return
+        self._last_grid_repaint = now
         self._dialog.setValue(int(rows_done))
         self._dialog.setLabelText(
             f"Loading segments into grid… ({rows_done:,}/{total:,})"
@@ -9288,16 +9344,20 @@ class SupervertalerQt(QMainWindow):
         self.theme_manager = None  # Will be initialized after UI setup
         
         self.recent_projects_file = self.user_data_path / "workbench" / "settings" / "recent_projects.json"
-        
+
+        # Apply the theme's application stylesheet BEFORE building the UI, so
+        # each widget is styled once as it is created. Applied afterwards it
+        # re-styled every widget in the window – three seconds of a cold start
+        # (issue #203). self.theme_manager stays None during init_ui, as before.
+        theme_manager = ThemeManager(self.user_data_path)
+        # Apply saved global UI font scale
+        theme_manager.font_scale = self._get_global_ui_font_scale()
+        theme_manager.apply_theme(QApplication.instance())
+
         # Initialize UI
         self.init_ui()
         
-        # Initialize theme manager and apply theme
-        self.theme_manager = ThemeManager(self.user_data_path)
-        # Apply saved global UI font scale
-        saved_font_scale = self._get_global_ui_font_scale()
-        self.theme_manager.font_scale = saved_font_scale
-        self.theme_manager.apply_theme(QApplication.instance())
+        self.theme_manager = theme_manager
 
         # Dark themes: rewrite the fixed light colours in widgets' own
         # stylesheets – now, and for dialogs and lazily built tabs as they
@@ -11359,15 +11419,19 @@ class SupervertalerQt(QMainWindow):
                 files = getattr(self.current_project, 'files', [])
                 
                 if is_multifile and files:
-                    # Count completed files
+                    # Count completed files – one pass over the segments, not
+                    # one per file (300 files × 17,000 segments, issue #185).
+                    per_file = {}  # file_id → [segments, confirmed]
+                    for s in segments:
+                        counts = per_file.setdefault(getattr(s, 'file_id', None), [0, 0])
+                        counts[0] += 1
+                        if s.status in confirmed_statuses:
+                            counts[1] += 1
                     completed_files = 0
                     for file_info in files:
-                        file_id = file_info['id']
-                        file_segs = [s for s in segments if getattr(s, 'file_id', None) == file_id]
-                        if file_segs:
-                            conf_count = sum(1 for s in file_segs if s.status in confirmed_statuses)
-                            if conf_count == len(file_segs):
-                                completed_files += 1
+                        total, confirmed = per_file.get(file_info['id'], (0, 0))
+                        if total and confirmed == total:
+                            completed_files += 1
                     
                     self.progress_files_label.setText(f"📁 Files: {completed_files}/{len(files)}")
                     self.progress_files_label.setToolTip(
@@ -11506,7 +11570,9 @@ class SupervertalerQt(QMainWindow):
             "on export."
         ))
         import_document_action.triggered.connect(self.import_document)
-        import_document_action.setShortcut("Ctrl+O")
+        # Not Ctrl+O: that is Open Project (QKeySequence.StandardKey.Open), and
+        # two menu actions on one key are ambiguous to Qt, so neither fired.
+        import_document_action.setShortcut("Ctrl+Shift+O")
         import_menu.addAction(import_document_action)
 
         import_txt_action = QAction(self.tr("&Text / Markdown File (TXT, MD)..."), self)
@@ -16333,6 +16399,37 @@ class SupervertalerQt(QMainWindow):
         else:
             self.export_target_only_docx()
 
+    def _export_dir_beside(self, source_path) -> Path:
+        """Where a round-trip export is offered by default: next to the file it
+        came from – or in the project's target/ folder when that file is the
+        copy in source/ (#228), which is no place for a translation."""
+        source_path = Path(source_path)
+        project_path = getattr(self, 'project_file_path', None)
+        if project_path:
+            project_dir = os.path.dirname(os.path.abspath(project_path))
+            if is_in_source_dir(str(source_path), project_dir):
+                try:
+                    return Path(ensure_target_dir(project_dir))
+                except Exception:
+                    pass
+        return source_path.parent
+
+    def _segments_in_document_order(self):
+        """The project's segments in document order, however the grid is sorted.
+
+        Sorting the grid reorders ``current_project.segments`` itself, so an
+        export that reads that list after a sort by source text wrote the
+        segments in that order – and the round-trip exports, which pair the
+        n-th segment with the n-th unit of the original file, put every
+        translation into the wrong unit. The segment id is the document
+        position; Document Order sorts by it as well.
+        """
+        segments = list(self.current_project.segments) if self.current_project else []
+        try:
+            return sorted(segments, key=lambda seg: int(seg.id))
+        except (TypeError, ValueError):
+            return list(getattr(self, '_original_segment_order', None) or segments)
+
     def _project_export_path(self, filename):
         """Default save path for a generated translation: the project's target/
         folder (project-folder model, #228).
@@ -16494,7 +16591,7 @@ class SupervertalerQt(QMainWindow):
                 return
             
             # Check if there are any translations
-            segments = list(self.current_project.segments)
+            segments = self._segments_in_document_order()
             translated_count = sum(1 for seg in segments if seg.target and seg.target.strip())
             
             if translated_count == 0:
@@ -17823,7 +17920,7 @@ class SupervertalerQt(QMainWindow):
             QMessageBox.warning(self, "No Data", "No segments to export")
             return
         
-        segments = list(self.current_project.segments)
+        segments = self._segments_in_document_order()
 
         if not segments:
             QMessageBox.warning(self, "No Data", "No segments to export")
@@ -19225,7 +19322,7 @@ class SupervertalerQt(QMainWindow):
         active_termbase_ids = set(self.termbase_mgr.get_active_termbase_ids(project_id)) if project_id else set()
         
         if not active_termbases:
-            QMessageBox.warning(self, "No Termbase", "Please create or activate at least one termbase in Resources → Termbases tab.")
+            QMessageBox.warning(self, "No Termbase", "Please create or activate at least one termbase on the 🏷️ Termbases tab.")
             return
         
         # Show metadata dialog with termbase selection
@@ -19797,7 +19894,7 @@ class SupervertalerQt(QMainWindow):
 
         label = "Project termbase" if target == "project" else "Background termbase"
         if not target_termbase:
-            self.statusBar().showMessage(f"No {label} found – check Resources → Termbases", 3000)
+            self.statusBar().showMessage(f"No {label} found – check the 🏷️ Termbases tab", 3000)
             return
         
         self.log(f"⚡ Quick-adding term to {label} '{target_termbase['name']}': {source_text} → {target_text}")
@@ -20145,7 +20242,7 @@ class SupervertalerQt(QMainWindow):
                 "No writable termbase",
                 "Activate at least one writable termbase for this project "
                 "before marking text as non-translatable.\n\n"
-                "Resources → Termbases → tick the Read and Write boxes."
+                "On the 🏷️ Termbases tab, tick the Read and Write boxes."
             )
             return
 
@@ -32535,7 +32632,7 @@ class SupervertalerQt(QMainWindow):
         # them into whatever folder the user saves into. Default on.
         subfolder_check = CheckmarkCheckBox(
             self.tr("📁 Create a dedicated folder for this project"))
-        subfolder_check.setChecked(getattr(self, 'create_project_subfolder', True))
+        subfolder_check.setChecked(self._create_project_subfolder_pref())
         subfolder_check.setToolTip(self.tr(
             "When you first save, place the .svproj in its own folder so its "
             "source/ and target/ subfolders stay self-contained."))
@@ -32562,8 +32659,15 @@ class SupervertalerQt(QMainWindow):
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
 
-        # Remember the folder preference for the first save (and future Save As).
+        # Remember the folder preference for the first save and future Save As
+        # – across sessions too (issue #228).
         self.create_project_subfolder = subfolder_check.isChecked()
+        try:
+            _gs = self.load_general_settings()
+            _gs['create_project_subfolder'] = self.create_project_subfolder
+            self.save_general_settings(_gs)
+        except Exception as e:
+            self.log(f"⚠ Could not remember the project folder preference: {e}")
 
         # Create project
         project_name = name_input.text().strip() or "Untitled Project"
@@ -33111,13 +33215,22 @@ class SupervertalerQt(QMainWindow):
             QApplication.processEvents()
 
             # Try UTF-8 first, fall back to latin-1 if it fails
+            recovered_from_backup = False
             try:
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-            except UnicodeDecodeError:
-                self.log(f"⚠ UTF-8 decoding failed, trying latin-1 encoding...")
-                with open(file_path, 'r', encoding='latin-1') as f:
-                    data = json.load(f)
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                except UnicodeDecodeError:
+                    self.log(f"⚠ UTF-8 decoding failed, trying latin-1 encoding...")
+                    with open(file_path, 'r', encoding='latin-1') as f:
+                        data = json.load(f)
+            except json.JSONDecodeError as damaged:
+                # A damaged project file: offer the copy kept at the last good
+                # save (<name>.svproj.bak, issue #228)
+                data = self._offer_project_backup(file_path, damaged, progress)
+                if data is None:
+                    raise
+                recovered_from_backup = True
             
             # If no name in file, use filename
             if 'name' not in data:
@@ -33125,7 +33238,12 @@ class SupervertalerQt(QMainWindow):
             
             self.current_project = Project.from_dict(data)
             self.project_file_path = file_path
-            self.project_modified = False
+            # Exports must not use the memoQ/Trados/… file of the project
+            # that was open before this one
+            self._forget_round_trip_state()
+            # Opened from the backup: mark it modified so the next save repairs
+            # the damaged file
+            self.project_modified = recovered_from_backup
 
             # Clear the previous project's per-segment comment/notes editors up
             # front, so opening this project directly (without closing the last
@@ -33266,6 +33384,18 @@ class SupervertalerQt(QMainWindow):
                 else:
                     self.log(f"⚠️ Original DOCX not found (export will rebuild from segments): {stored_source}")
             
+            # Round-trip sources (memoQ, Trados, CafeTran, SDLPPX, …) whose
+            # original is gone – the project folder was moved, or opened on
+            # another computer – are taken from their copies in source/ (#228).
+            try:
+                switched = restore_round_trip_sources(
+                    self.current_project, os.path.dirname(os.path.abspath(file_path)),
+                    self.current_project.bundled_sources)
+                if switched:
+                    self.log(f"✓ Using the copies in the project's source/ folder for: {', '.join(switched)}")
+            except Exception as restore_exc:
+                self.log(f"⚠ Could not check the project's source/ copies: {restore_exc}")
+
             # Restore SDLPPX handler for Trados package projects
             if hasattr(self.current_project, 'sdlppx_source_path') and self.current_project.sdlppx_source_path:
                 sdlppx_path = self.current_project.sdlppx_source_path
@@ -33632,6 +33762,56 @@ class SupervertalerQt(QMainWindow):
                 progress.close()
             except Exception:
                 pass
+
+    # The round-trip state of an open project: the file it was imported from
+    # and the handler that writes the translation back into it, per format.
+    _ROUND_TRIP_STATE = ('trados_source_file', 'trados_handler', 'memoq_source_file',
+                         'memoq_rtf_source_file', 'memoq_rtf_handler', 'mqxliff_source_file',
+                         'mqxliff_handler', 'cafetran_source_file', 'cafetran_handler',
+                         'phrase_source_file', 'phrase_handler', 'po_source_file', 'po_handler',
+                         'dejavu_source_file', 'dejavu_handler', 'sdlppx_source_file',
+                         'sdlppx_handler', 'sdlxliff_source_files', 'sdlxliff_handler')
+
+    def _forget_round_trip_state(self):
+        """Forget the round-trip state of the project opened before this one.
+
+        Exports prefer these over the paths stored in the project, so a
+        memoQ/Trados/… file loaded for an earlier project was used to export
+        the next one – its structure, filled with the new project's segments.
+        A Trados package was unpacked into a temporary folder, which goes too.
+        """
+        old_package = getattr(self, 'sdlppx_handler', None)
+        if old_package is not None and hasattr(old_package, 'cleanup'):
+            try:
+                old_package.cleanup()
+            except Exception as cleanup_exc:
+                self.log(f"⚠ Could not remove the previous package's temporary files: {cleanup_exc}")
+        for attr in self._ROUND_TRIP_STATE:
+            setattr(self, attr, None)
+
+    def _offer_project_backup(self, file_path: str, error, progress=None):
+        """The project file will not parse: offer the backup copy from the
+        last good save. Returns its data, or None to report the error."""
+        found = read_backup(file_path)
+        if found is None:
+            return None
+        data, saved_at = found
+        if progress is not None:
+            progress.hide()
+        when = datetime.fromtimestamp(saved_at).strftime('%Y-%m-%d %H:%M')
+        reply = QMessageBox.question(
+            self, "Project file damaged",
+            f"{os.path.basename(file_path)} is damaged and cannot be read:\n{error}\n\n"
+            f"A backup copy from the previous save ({when}) is available. "
+            "Open the backup? Saving then replaces the damaged file.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes)
+        if progress is not None:
+            progress.show()
+        if reply != QMessageBox.StandardButton.Yes:
+            return None
+        self.log(f"♻ Opened the backup copy of {os.path.basename(file_path)} (saved {when})")
+        return data
 
     def _load_synonyms_bulk(self):
         """Load every synonym from ``termbase_synonyms`` in one query,
@@ -35004,7 +35184,7 @@ class SupervertalerQt(QMainWindow):
                 file_path += '.svproj'
             # Optionally tuck the project into its own folder so its source/ and
             # target/ subfolders stay self-contained (project-folder model, #228).
-            if getattr(self, 'create_project_subfolder', True):
+            if self._create_project_subfolder_pref():
                 try:
                     file_path = nest_in_own_folder(file_path)
                 except Exception as exc:
@@ -35017,6 +35197,16 @@ class SupervertalerQt(QMainWindow):
             self.project_file_path = file_path
             self.add_to_recent_projects(file_path)
     
+    def _create_project_subfolder_pref(self) -> bool:
+        """"Create a dedicated folder for this project" (issue #228): this
+        session's choice, else the one remembered in the settings (default on)."""
+        if hasattr(self, 'create_project_subfolder'):
+            return bool(self.create_project_subfolder)
+        try:
+            return bool(self.load_general_settings().get('create_project_subfolder', True))
+        except Exception:
+            return True
+
     def save_project_to_file(self, file_path: str):
         """Save project to specified file"""
         try:
@@ -35155,6 +35345,18 @@ class SupervertalerQt(QMainWindow):
                     # Directory source (multi-file / folder project): legacy path.
                     self.current_project.original_docx_path = original_path
 
+            # The bilingual files and packages the project exports back into
+            # (memoQ, Trados, CafeTran, SDLPPX, …) get a copy in source/ as
+            # well. The project keeps using the originals; the copies stand in
+            # when the originals are gone, e.g. after the folder was moved.
+            try:
+                self.current_project.bundled_sources = bundle_round_trip_sources(
+                    self.current_project, os.path.dirname(os.path.abspath(file_path)),
+                    previous=self.current_project.bundled_sources,
+                    main_copy=getattr(self, 'original_docx', None)) or None
+            except Exception as bundle_exc:
+                self.log(f"⚠ Could not copy the round-trip source files into the project folder: {bundle_exc}")
+
             # IMPORTANT: Always save segments in original document order, not sorted order
             # Store current sort state and temporarily restore original order
             current_sort_state = getattr(self, 'current_sort', None)
@@ -35173,11 +35375,17 @@ class SupervertalerQt(QMainWindow):
                 if seg.target:
                     seg.target = strip_invisible_markers(seg.target)
 
-            with open(file_path, 'w', encoding='utf-8') as f:
-                json.dump(self.current_project.to_dict(), f, indent=2, ensure_ascii=False)
-
-            # Restore the current (sorted) order after saving
-            self.current_project.segments = current_segments
+            try:
+                # Serialise first, then write through a temporary file that
+                # replaces the project in one step, keeping the previous
+                # version as <name>.svproj.bak (issue #228). Writing straight
+                # into the .svproj left it truncated when a save failed half-way.
+                payload = json.dumps(self.current_project.to_dict(), indent=2, ensure_ascii=False)
+                write_project_file(file_path, payload)
+            finally:
+                # Restore the current (sorted) order after saving – also when
+                # the save failed
+                self.current_project.segments = current_segments
             
             self.project_modified = False
             self.update_window_title()
@@ -35267,10 +35475,19 @@ class SupervertalerQt(QMainWindow):
             # Save project.json
             self.save_project_to_file(self.project_file_path)
 
-            # Export TMX to same folder as project
+            # Export the TMX into the project's tm/ folder (issue #228). A
+            # backup left in the project folder itself by an older version is
+            # moved there first.
             project_dir = Path(self.project_file_path).parent
             project_name = Path(self.project_file_path).stem
-            tmx_file_path = project_dir / f"{project_name}_backup.tmx"
+            tmx_file_path = project_dir / TM_SUBDIR / f"{project_name}_backup.tmx"
+            tmx_file_path.parent.mkdir(parents=True, exist_ok=True)
+            legacy_tmx = project_dir / f"{project_name}_backup.tmx"
+            if legacy_tmx.exists() and not tmx_file_path.exists():
+                try:
+                    os.replace(legacy_tmx, tmx_file_path)
+                except OSError:
+                    pass
 
             # Prepare segments for TMX export
             source_segments = []
@@ -36859,7 +37076,7 @@ class SupervertalerQt(QMainWindow):
                 QMessageBox.warning(self, "No Project", "Please open a project with segments first")
                 return
             
-            segments = list(self.current_project.segments)
+            segments = self._segments_in_document_order()
             
             # Check translation status
             translated_count = sum(1 for seg in segments if seg.target and seg.target.strip())
@@ -37045,7 +37262,7 @@ class SupervertalerQt(QMainWindow):
                 QMessageBox.warning(self, "No Project", "Please open a project with segments first")
                 return
             
-            segments = list(self.current_project.segments)
+            segments = self._segments_in_document_order()
             
             # Get language codes
             source_lang = self.current_project.source_lang or "Source"
@@ -39310,7 +39527,7 @@ class SupervertalerQt(QMainWindow):
             from docx import Document
             from docx.shared import RGBColor
             
-            segments = list(self.current_project.segments)
+            segments = self._segments_in_document_order()
             translations = [seg.target for seg in segments]
 
             if not translations or all(not t.strip() for t in translations):
@@ -39428,7 +39645,7 @@ class SupervertalerQt(QMainWindow):
             # Prompt user to save the updated bilingual file
             # Use the same directory as the original import file
             source_path = Path(self.memoq_source_file)
-            default_name = str(source_path.parent / (source_path.stem + "_translated.docx"))
+            default_name = str(self._export_dir_beside(source_path) / (source_path.stem + "_translated.docx"))
             save_path, _ = QFileDialog.getSaveFileName(
                 self,
                 "Save memoQ Bilingual DOCX",
@@ -39684,12 +39901,13 @@ class SupervertalerQt(QMainWindow):
             # Count pretranslated segments
             pretranslated_count = sum(1 for s in mqxliff_segments if s.get('target', '').strip())
 
-            # Convert to internal Segment format
+            # Convert to internal Segment format. The handler already maps
+            # memoQ's status to a Workbench one; the id is the segment's
+            # position, which the export pairs with the file's units.
             segments = []
             for i, mq_seg in enumerate(mqxliff_segments):
-                # Map status from mqxliff
                 status = mq_seg.get('status', 'not_started')
-                if status not in ['not_started', 'pre_translated', 'draft', 'translated', 'confirmed', 'locked']:
+                if status not in STATUSES:
                     status = 'not_started'
 
                 segment = Segment(
@@ -39698,9 +39916,12 @@ class SupervertalerQt(QMainWindow):
                     target=mq_seg.get('target', ''),
                     status=status,
                     match_percent=mq_seg.get('match_percent'),
+                    memoQ_status=mq_seg.get('mq_status', ''),
+                    locked=bool(mq_seg.get('locked')),
                     notes="",
                 )
                 segments.append(segment)
+            doc_count = len({s.get('file') for s in mqxliff_segments})
             
             # Store the handler and original path for round-trip export
             self.mqxliff_handler = handler
@@ -39783,12 +40004,16 @@ class SupervertalerQt(QMainWindow):
 
             # Log success
             self.log(f"✓ Imported {len(segments)} segments from memoQ XLIFF: {Path(file_path).name}")
+            if doc_count > 1:
+                self.log(f"  From {doc_count} documents (memoQ view)")
             self.log(f"  Source: {source_lang}, Target: {target_lang}")
             if pretranslated_count > 0:
                 self.log(f"  Pretranslated: {pretranslated_count} segments with target text")
 
             # Build message with pretranslation info
             msg = f"Successfully imported {len(segments)} segment(s) from memoQ XLIFF.\n\nLanguages: {source_lang} → {target_lang}"
+            if doc_count > 1:
+                msg += f"\n\nDocuments: {doc_count}"
             if pretranslated_count > 0:
                 msg += f"\n\nPretranslated: {pretranslated_count} segment(s) with target text loaded."
 
@@ -39995,7 +40220,7 @@ class SupervertalerQt(QMainWindow):
         try:
             from modules.memoqrtf_handler import MemoQRTFHandler
 
-            segments = list(self.current_project.segments)
+            segments = self._segments_in_document_order()
             translations = [seg.target for seg in segments]
 
             if not translations or all(not t.strip() for t in translations):
@@ -40144,18 +40369,21 @@ class SupervertalerQt(QMainWindow):
             return
         
         try:
-            # Get translations from current segments
-            translations = [seg.target for seg in self.current_project.segments]
-            
+            # Translations and statuses in document order: the handler pairs
+            # the n-th segment with the n-th unit of the file
+            segments = self._segments_in_document_order()
+            translations = [seg.target for seg in segments]
+            statuses = [seg.status for seg in segments]
+
             # Update the handler with translations
-            updated_count = self.mqxliff_handler.update_target_segments(translations)
+            updated_count = self.mqxliff_handler.update_target_segments(translations, statuses)
             
             # Save the updated file
             if self.mqxliff_handler.save(output_path):
-                self.log(f"✓ Exported {updated_count} segments to memoQ XLIFF: {Path(output_path).name}")
+                self.log(f"✓ Exported {updated_count} changed segments to memoQ XLIFF: {Path(output_path).name}")
                 QMessageBox.information(
                     self, "Export Successful",
-                    f"Successfully exported {updated_count} translated segment(s) to memoQ XLIFF.\n\n"
+                    f"Exported to memoQ XLIFF: {updated_count} segment(s) with a new translation or status.\n\n"
                     f"File: {Path(output_path).name}\n\n"
                     f"You can now import this file back into memoQ."
                 )
@@ -40375,7 +40603,7 @@ class SupervertalerQt(QMainWindow):
             return
 
         try:
-            translations = [seg.target for seg in self.current_project.segments]
+            translations = [seg.target for seg in self._segments_in_document_order()]
             updated_count = self.po_handler.update_target_segments(translations)
 
             if self.po_handler.save(output_path):
@@ -40949,7 +41177,7 @@ class SupervertalerQt(QMainWindow):
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "Export Trados Bilingual DOCX",
-            str(source_path.parent / suggested_name),
+            str(self._export_dir_beside(source_path) / suggested_name),
             "Word Documents (*.docx);;All Files (*.*)"
         )
         
@@ -40957,18 +41185,18 @@ class SupervertalerQt(QMainWindow):
             return
         
         try:
-            # Collect translations from grid
+            # Collect translations by segment, not by grid row: the grid may be
+            # sorted, filtered or paginated, and then row n is not table row n
+            # of the review document (and rows on other pages have no editor
+            # at all, so their translations were left out).
+            segments = self._segments_in_document_order()
+            self._sync_grid_targets_to_segments(segments)
             translations = {}
-            for row in range(self.table.rowCount()):
-                target_widget = self.table.cellWidget(row, 3)  # Target column
-                if target_widget:
-                    target_text = target_widget.toPlainText().strip()
-                    # v1.9.306: Strip invisible markers before export
-                    if hasattr(self, 'reverse_invisible_replacements'):
-                        target_text = self.reverse_invisible_replacements(target_text).strip()
-                    if target_text:
-                        # Row index in handler is 1-based (row 0 is header)
-                        translations[row + 1] = target_text
+            for seg in segments:
+                target_text = (seg.target or '').strip()
+                if target_text:
+                    # Segment n came from table row n (row 0 is the header)
+                    translations[int(seg.id)] = target_text
             
             # Update the handler with translations
             updated = self.trados_handler.update_target_segments(translations)
@@ -41480,7 +41708,7 @@ class SupervertalerQt(QMainWindow):
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "Export Trados Return Package (SDLRPX)",
-            str(source_path.parent / suggested_name),
+            str(self._export_dir_beside(source_path) / suggested_name),
             "Trados Return Packages (*.sdlrpx);;All Files (*.*)"
         )
         
@@ -42153,7 +42381,7 @@ class SupervertalerQt(QMainWindow):
             if len(handler.xliff_files) == 1:
                 # Single file – use Save As dialog
                 default_name = Path(source_files[0]).stem + "_translated.sdlxliff"
-                default_dir = str(Path(source_files[0]).parent / default_name)
+                default_dir = str(self._export_dir_beside(source_files[0]) / default_name)
 
                 output_path, _ = QFileDialog.getSaveFileName(
                     self,
@@ -42603,7 +42831,7 @@ class SupervertalerQt(QMainWindow):
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "Export Phrase Bilingual DOCX",
-            str(source_path.parent / suggested_name),
+            str(self._export_dir_beside(source_path) / suggested_name),
             "Word Documents (*.docx);;All Files (*.*)"
         )
 
@@ -42961,7 +43189,7 @@ class SupervertalerQt(QMainWindow):
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "Export Déjà Vu Bilingual RTF",
-            str(source_path.parent / suggested_name),
+            str(self._export_dir_beside(source_path) / suggested_name),
             "RTF Files (*.rtf);;All Files (*.*)"
         )
 
@@ -43364,7 +43592,7 @@ class SupervertalerQt(QMainWindow):
             from modules.statuses import STATUSES, get_status
             from datetime import datetime, timezone
 
-            segments = list(self.current_project.segments)
+            segments = self._segments_in_document_order()
             # Flush any pending grid edits into the segment objects first, so the
             # export matches exactly what's on screen.
             try:
@@ -43383,8 +43611,8 @@ class SupervertalerQt(QMainWindow):
                 "<b>[SEGMENT NNNN]</b> format, with a <code>.svexport.json</code> "
                 "sidecar written alongside it.<br><br>"
                 "Edit the target lines in any text editor or with an LLM, then "
-                "re-import via <b>File → Import → 🔁 Supervertaler Re-importable → "
-                "Bilingual Text (AI-friendly)</b> to update this project."
+                "re-import via <b>Project → Import → 🔁 Supervertaler Re-importable → "
+                "Bilingual Text (AI-friendly) - Update Project…</b> to update this project."
             )
             info.setTextFormat(Qt.TextFormat.RichText)
             info.setWordWrap(True)
@@ -43532,9 +43760,9 @@ class SupervertalerQt(QMainWindow):
                     self, "Copied to Clipboard",
                     f"Copied {len(export_segs)} segment(s) to the clipboard.\n\n"
                     "Paste them into your AI chat. When you have the edited reply, "
-                    "copy it and press " + paste_key + " (File → Import → "
+                    "copy it and press " + paste_key + " (Project → Import → "
                     "🔁 Supervertaler Re-importable → Bilingual Text (AI-friendly) - "
-                    "Update from Pasted Text) to update this project.")
+                    "Update from Pasted Text…) to update this project.")
                 return
 
             side_path = write_export(file_path, md_text, sidecar)
@@ -43545,9 +43773,9 @@ class SupervertalerQt(QMainWindow):
                 self, "Export Complete",
                 f"Exported {len(export_segs)} segment(s) to:\n{os.path.basename(file_path)}\n\n"
                 f"Sidecar: {os.path.basename(side_path)}\n\n"
-                "Edit the target lines, then re-import via File → Import → "
-                "🔁 Supervertaler Re-importable → Bilingual Text (AI-friendly) to "
-                "update this project.")
+                "Edit the target lines, then re-import via Project → Import → "
+                "🔁 Supervertaler Re-importable → Bilingual Text (AI-friendly) - "
+                "Update Project… to update this project.")
 
         except Exception as e:
             QMessageBox.critical(self, "Export Error",
@@ -43966,7 +44194,7 @@ class SupervertalerQt(QMainWindow):
         try:
             from modules.cafetran_docx_handler import CafeTranDOCXHandler
             
-            segments = list(self.current_project.segments)
+            segments = self._segments_in_document_order()
             translations = [seg.target for seg in segments]
             
             if not translations or all(not t.strip() for t in translations):
@@ -43988,7 +44216,7 @@ class SupervertalerQt(QMainWindow):
             
             # Prompt user to save the file
             source_path = Path(self.cafetran_source_file)
-            default_name = str(source_path.parent / (source_path.stem + "_translated.docx"))
+            default_name = str(self._export_dir_beside(source_path) / (source_path.stem + "_translated.docx"))
             save_path, _ = QFileDialog.getSaveFileName(
                 self,
                 "Save CafeTran Bilingual DOCX",
@@ -44059,6 +44287,13 @@ class SupervertalerQt(QMainWindow):
         return set(range(start_row, end_row))
 
     def _populate_single_row(self, row, segment):
+        """Install full source/target editor widgets and metadata for one row
+        (see _populate_single_row_widgets); each editor's stylesheet is applied
+        once, when the row is complete."""
+        with _GridStyleBatch():
+            self._populate_single_row_widgets(row, segment)
+
+    def _populate_single_row_widgets(self, row, segment):
         """Install full source/target editor widgets and metadata for one row.
 
         Extracted from the per-row body of load_segments_to_grid as part of
@@ -45930,6 +46165,18 @@ class SupervertalerQt(QMainWindow):
         # Track current highlighted segment
         widget.current_highlighted_segment_id = None
 
+        # Hidden previews are not re-rendered on every change (issue #185), so
+        # catch up when this one is shown – tab switch, pop-out window, or the
+        # main window appearing with a project already loaded.
+        widget.preview_sig = None
+
+        def _showEvent(event, _w=widget, _base=widget.showEvent):
+            _base(event)
+            if getattr(_w, 'preview_sig', None) is None:
+                from PyQt6.QtCore import QTimer
+                QTimer.singleShot(0, self._refresh_preview_on_show)
+        widget.showEvent = _showEvent
+
         # Store reference in instance for easy access
         if not hasattr(self, 'preview_widgets'):
             self.preview_widgets = []
@@ -45976,6 +46223,7 @@ class SupervertalerQt(QMainWindow):
 
         try:
             self._render_preview(pv)
+            pv.preview_sig = self._preview_content_signature()
         except Exception:
             pass
         win.show()
@@ -46310,21 +46558,29 @@ class SupervertalerQt(QMainWindow):
                     if hasattr(widget, 'preview_text'):
                         widget.preview_text.clear()
                         widget.segment_positions = {}
-            self._preview_rendered_sig = None
+                        widget.preview_sig = None
             return
 
         if not hasattr(self, 'preview_widgets') or not self.preview_widgets:
             return
 
         sig = self._preview_content_signature()
-        widgets = [w for w in self.preview_widgets if hasattr(w, 'preview_text')]
-        all_populated = all(getattr(w, 'segment_positions', None) for w in widgets)
-        if not force and all_populated and sig == getattr(self, '_preview_rendered_sig', None):
-            return  # already current — caller re-applies the current-segment highlight
-
-        for widget in self.preview_widgets:
+        for widget in [w for w in self.preview_widgets if hasattr(w, 'preview_text')]:
+            try:
+                visible = widget.isVisible()
+            except RuntimeError:
+                continue
+            if not visible:
+                # Issue #185: a hidden preview (the usual case – the Match Panel
+                # is in front) is not rendered on every grid load; it renders
+                # when it is shown (see showEvent in _create_preview_tab). On a
+                # 17,000-segment import this render was most of the wait.
+                widget.preview_sig = None
+                continue
+            if not force and widget.segment_positions and getattr(widget, 'preview_sig', None) == sig:
+                continue  # already current – caller re-applies the current-segment highlight
             self._render_preview(widget)
-        self._preview_rendered_sig = sig
+            widget.preview_sig = sig
 
     def _preview_content_signature(self) -> str:
         """A cheap digest of everything the preview render depends on (segment
@@ -46374,7 +46630,31 @@ class SupervertalerQt(QMainWindow):
 
         cursor = preview_text.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.Start)
+        # One edit block for the whole render: the document is laid out once at
+        # the end instead of after every insert (issue #185).
+        cursor.beginEditBlock()
+        try:
+            self._render_preview_segments(widget, preview_text, cursor, zoom)
+        finally:
+            cursor.endEditBlock()
 
+        # Scroll to current segment if we have one
+        if hasattr(widget, 'current_segment_start_pos') and widget.current_segment_start_pos is not None:
+            # Create cursor at the current segment position
+            scroll_cursor = preview_text.textCursor()
+            scroll_cursor.setPosition(widget.current_segment_start_pos)
+            preview_text.setTextCursor(scroll_cursor)
+            # Center the segment in the viewport
+            # Use QTimer to delay centering until after layout is complete
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(0, lambda pt=preview_text: self._center_cursor_in_preview(pt))
+        else:
+            # Set cursor to beginning if no current segment
+            cursor.movePosition(QTextCursor.MoveOperation.Start)
+            preview_text.setTextCursor(cursor)
+
+    def _render_preview_segments(self, widget, preview_text, cursor, zoom):
+        """Insert every segment into the preview at ``cursor`` (see _render_preview)."""
         # Pre-calculate list numbers for numbered list items
         import re
         list_numbers = {}  # {segment_id: list_number}
@@ -46585,21 +46865,6 @@ class SupervertalerQt(QMainWindow):
 
         # Add final newline at end of document
         cursor.insertText("\n")
-
-        # Scroll to current segment if we have one
-        if hasattr(widget, 'current_segment_start_pos') and widget.current_segment_start_pos is not None:
-            # Create cursor at the current segment position
-            scroll_cursor = preview_text.textCursor()
-            scroll_cursor.setPosition(widget.current_segment_start_pos)
-            preview_text.setTextCursor(scroll_cursor)
-            # Center the segment in the viewport
-            # Use QTimer to delay centering until after layout is complete
-            from PyQt6.QtCore import QTimer
-            QTimer.singleShot(0, lambda pt=preview_text: self._center_cursor_in_preview(pt))
-        else:
-            # Set cursor to beginning if no current segment
-            cursor.movePosition(QTextCursor.MoveOperation.Start)
-            preview_text.setTextCursor(cursor)
 
     def _render_formatted_text(self, cursor, text: str, base_format: QTextCharFormat,
                                 list_number: Optional[int] = None):
@@ -47171,9 +47436,19 @@ class SupervertalerQt(QMainWindow):
         viewport = self.table.viewport()
         viewport_width = viewport.width()
 
-        for row, segment in enumerate(segments):
-            if row == 0:
-                continue  # First file has no preceding banner
+        # Only rows on screen get a banner: this runs on every scroll step, and
+        # making a label for every file boundary in the project (300 files →
+        # 300 labels per step) made scrolling and loading slow (issue #185).
+        # The row just below the viewport is included, since its banner sits
+        # above its top edge.
+        first = self.table.rowAt(0)
+        if first < 0:
+            return
+        last = self.table.rowAt(viewport.height() - 1)
+        if last < 0:
+            last = len(segments) - 1
+        for row in range(max(first, 1), min(last + 2, len(segments))):
+            segment = segments[row]
             prev_file_id = getattr(segments[row - 1], 'file_id', None)
             curr_file_id = getattr(segment, 'file_id', None)
             if curr_file_id is None or prev_file_id is None or curr_file_id == prev_file_id:
@@ -47214,10 +47489,14 @@ class SupervertalerQt(QMainWindow):
         width_reduction = 8
 
         # Manually calculate and set row heights for compact display
+        last_pump = time.monotonic()
         for row in range(self.table.rowCount()):
-            # Keep UI responsive during large grid updates
-            if row % 50 == 0:
+            # Keep UI responsive during large grid updates – a few times a
+            # second is enough; pumping every 50 rows cost more than the
+            # resizing itself on a 17,000-row project (issue #185).
+            if time.monotonic() - last_pump > 0.1:
                 QApplication.processEvents()
+                last_pump = time.monotonic()
             self._auto_resize_single_row(row, width_reduction)
 
         self.log("✓ Auto-resized rows to fit content (compact)")
@@ -47331,11 +47610,15 @@ class SupervertalerQt(QMainWindow):
         """
         font = QFont(self.default_font_family, self.default_font_size)
 
-        self.table.setFont(font)
+        # Re-setting an unchanged font still re-lays out every cell editor
+        # (seconds on a big project, issue #185), so only set a real change.
+        if self.table.font() != font:
+            self.table.setFont(font)
 
         # Also update header font - same size as grid content, normal weight
         header_font = QFont(self.default_font_family, self.default_font_size, QFont.Weight.Normal)
-        self.table.horizontalHeader().setFont(header_font)
+        if self.table.horizontalHeader().font() != header_font:
+            self.table.horizontalHeader().setFont(header_font)
 
         if skip_per_row:
             # Fast path for initial load: fonts on individual cells/widgets
@@ -51009,7 +51292,7 @@ class SupervertalerQt(QMainWindow):
         all_tms = self.tm_metadata_mgr.get_all_tms()
         if not all_tms:
             QMessageBox.warning(self, "No TMs", 
-                "No Translation Memories found.\n\nPlease create or import a TM in Resources → Translation Memories.")
+                "No Translation Memories found.\n\nPlease create or import a TM on the 💾 TMs tab.")
             return
         
         # Get writable TMs (those with Write enabled)
@@ -51017,7 +51300,7 @@ class SupervertalerQt(QMainWindow):
         if not writable_tms:
             QMessageBox.warning(self, "No Writable TMs", 
                 "No writable Translation Memories found.\n\n"
-                "Please enable Write (✓) for at least one TM in Resources → Translation Memories → TM List.")
+                "Please enable Write (✓) for at least one TM on the 💾 TMs tab.")
             return
         
         # Create dialog
@@ -52081,7 +52364,7 @@ class SupervertalerQt(QMainWindow):
                         self.tm_display.setHtml(
                             f"<p style='color: #666;'><b>Source:</b> {source_text}</p>"
                             f"<p style='color: #E65100;'><i>No TMs activated for this project.</i></p>"
-                            f"<p style='color: #999; font-size: 9pt;'>Go to <b>Resources → TM</b> to activate translation memories.</p>"
+                            f"<p style='color: #999; font-size: 9pt;'>Go to the <b>💾 TMs</b> tab and tick <b>Read</b> to activate translation memories.</p>"
                         )
                     elif tms_wrong_language:
                         # Show message when TMs are activated but don't match project language pair
@@ -52089,7 +52372,7 @@ class SupervertalerQt(QMainWindow):
                         self.tm_display.setHtml(
                             f"<p style='color: #666;'><b>Source:</b> {source_text}</p>"
                             f"<p style='color: #E65100;'><i>Activated TMs don't match project language ({project_lang_pair}).</i></p>"
-                            f"<p style='color: #999; font-size: 9pt;'>Go to <b>Resources → TM</b> to activate TMs for this language pair.</p>"
+                            f"<p style='color: #999; font-size: 9pt;'>Go to the <b>💾 TMs</b> tab and tick <b>Read</b> to activate TMs for this language pair.</p>"
                         )
                     else:
                         self.tm_display.setHtml(
@@ -59716,8 +59999,14 @@ class SupervertalerQt(QMainWindow):
         Reverses invisible character display replacements and restores
         stripped outer wrapping tags to get clean text for export.
         """
+        # One pass over the grid instead of a row search per segment, which
+        # was quadratic: minutes for a 17,000-segment package export.
+        rows = self._rows_by_segment_id()
         for segment in segments:
-            row = self._find_row_for_segment(segment.id)
+            try:
+                row = rows.get(int(segment.id), -1)
+            except (TypeError, ValueError):
+                row = -1
             if row >= 0:
                 target_widget = self.table.cellWidget(row, 3)
                 if target_widget:
@@ -59745,6 +60034,20 @@ class SupervertalerQt(QMainWindow):
                 except (ValueError, AttributeError):
                     continue
         return -1
+
+    def _rows_by_segment_id(self) -> Dict[int, int]:
+        """``{segment id: grid row}`` for the rows in the grid, in one pass."""
+        rows = {}
+        if not hasattr(self, 'table') or not self.table:
+            return rows
+        for row in range(self.table.rowCount()):
+            id_item = self.table.item(row, 0)
+            if id_item:
+                try:
+                    rows.setdefault(int(id_item.text()), row)
+                except (ValueError, AttributeError):
+                    continue
+        return rows
 
     def insert_termlens_text(self, text: str):
         """Insert text from TermLens into the currently active target field"""
@@ -60060,17 +60363,42 @@ class SupervertalerQt(QMainWindow):
 
         # Suppress target change handlers during refresh to prevent data corruption
         # (switching display modes changes widget content which could trigger textChanged)
+        previous_suppression = getattr(self, '_suppress_target_change_handlers', False)
         self._suppress_target_change_handlers = True
+        try:
+            self._refresh_grid_display_mode_rows(mode)
+        finally:
+            # Also after an error: left on, every later edit would be dropped
+            self._suppress_target_change_handlers = previous_suppression
+
+        # Auto-resize rows since tag length changes affect row heights
+        self.auto_resize_rows()
+
+    def _refresh_grid_display_mode_rows(self, mode):
+        """Re-render the built rows' editors in ``mode`` (see _refresh_grid_display_mode)."""
+        # One id → segment map for the whole pass: looking each row up with
+        # _segment_for_grid_row scanned the segment list per row, which took
+        # 16 s on a 17,000-segment project (issue #185).
+        segments_by_id = {s.id: s for s in self.current_project.segments}
 
         # Get current visible rows
         for row in range(self.table.rowCount()):
+            # Rows not built yet (another page, or not scrolled to) have no
+            # editors to update – they are built in the current mode later.
+            source_widget = self.table.cellWidget(row, 2)
+            target_widget = self.table.cellWidget(row, 3)
+            if source_widget is None and target_widget is None:
+                continue
             # Resolve the segment via the id in column 0 — NOT segments[row].
             # The table row index only equals the list position in unsorted,
             # unfiltered, single-page view; under a sort/filter/pagination the
             # positional lookup rendered each cell from the WRONG segment, so
             # toggling the view mode appeared to "not update" (or showed stale
             # text). The id-based lookup is correct in every view state.
-            segment, _seg_idx = self._segment_for_grid_row(row)
+            try:
+                segment = segments_by_id.get(int(self.table.item(row, 0).text()))
+            except (AttributeError, ValueError, TypeError):
+                segment = None
             if segment is None:
                 continue
 
@@ -60101,22 +60429,14 @@ class SupervertalerQt(QMainWindow):
             show_tags_for_cell = (mode in ('tags', 'compact'))
 
             # Update source cell (column 2)
-            source_widget = self.table.cellWidget(row, 2)
             if source_widget and hasattr(source_widget, 'update_display_mode'):
                 source_widget.update_display_mode(source_for_display, show_tags_for_cell)
 
             # Update target cell (column 3)
-            target_widget = self.table.cellWidget(row, 3)
             if target_widget and hasattr(target_widget, 'update_display_mode'):
                 target_widget.update_display_mode(target_for_display, show_tags_for_cell)
                 # Store tag map for reverse-expanding on save
                 target_widget._compact_tag_map = tag_map
-
-        # Re-enable target change handlers
-        self._suppress_target_change_handlers = False
-
-        # Auto-resize rows since tag length changes affect row heights
-        self.auto_resize_rows()
 
     def update_tab_segment_editor(self, segment_id: int, source_text: str, target_text: str,
                                    status: str = "untranslated", notes: str = ""):
@@ -65083,8 +65403,8 @@ class SupervertalerQt(QMainWindow):
                             self._warned_no_active_tm_for_project = project_id
                             self.log(
                                 "ℹ️ No TM is switched on for this project, so no TM "
-                                "matches can be shown. Tick 'Read' for the TM you want in "
-                                "Resources → TM. (A new project starts with every TM off.)"
+                                "matches can be shown. Tick 'Read' for the TM you want on "
+                                "the 💾 TMs tab. (A new project starts with every TM off.)"
                             )
                     else:
                         # Strip outer structural tags if setting is enabled (for cleaner TM matching)
@@ -68159,15 +68479,15 @@ class SuperlookupTab(QWidget):
 
         # v1.10.168: Removed the per-SuperLookup Termbase + TM checkbox
         # sub-tabs. Selection now lives in one place per resource: the
-        # main TMs tab's Read column for translation memories, and the
-        # main Termbases tab's Read column for termbases. A short note
-        # below explains where users should go.
+        # 🔍 SuperLookup column of the main TMs and Termbases tabs (since
+        # v1.10.247 independent of Read). A short note below explains
+        # where users should go.
         resource_info = QLabel(
             "<b>Translation Memories &amp; Termbases:</b> SuperLookup searches every TM and "
-            "termbase that has its <b>Read</b> flag enabled on the main <b>TMs</b> and "
-            "<b>Termbases</b> tabs. To include or exclude a resource from SuperLookup, "
-            "toggle its Read flag there. There used to be a second set of checkboxes here "
-            "in SuperLookup Settings — they were redundant and confusing, so they're gone."
+            "termbase ticked in the <b>🔍 SuperLookup</b> column of the main <b>TMs</b> and "
+            "<b>Termbases</b> tabs – whether or not it is also ticked <b>Read</b> for the "
+            "current project. To include or exclude a resource from SuperLookup, tick or "
+            "untick it in that column."
         )
         resource_info.setWordWrap(True)
         resource_info.setTextFormat(Qt.TextFormat.RichText)
@@ -70155,7 +70475,7 @@ class SuperlookupTab(QWidget):
             
             if not writable_termbases:
                 QMessageBox.warning(self, "No Writable Termbases",
-                    "No writable termbases found. Please enable Write for at least one termbase in Resources → Termbases.")
+                    "No writable termbases found. Please enable Write for at least one termbase on the 🏷️ Termbases tab.")
                 return
             
             for tb in writable_termbases:

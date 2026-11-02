@@ -54,6 +54,105 @@ The Voice tab now does voice commands only, the way SuperVoice works in Superver
 - **The built-in commands are distinctive phrases,** for example "next segment", "translate segment" and "translate all segments". The everyday one-word alternatives ("next", "okay", "save" and so on) are gone for new users. Your own command list is left as it is, apart from "start dictation", which is removed. Keep your own phrases distinctive too, because Voice keeps listening while you dictate with another tool.
 - **Keystroke commands no longer need AutoHotkey.** Workbench presses the keys itself. AutoHotkey is still needed for **AHK Inline** and **AHK Script** commands.
 
+### Fixed (Dark theme · glossary synonyms turned black and unreadable)
+
+In the glossary entry editor, promoting a synonym or switching its "forbidden" mark off set its text to solid black, which could not be read on the dark theme (issue #78). The text now takes the theme's colour; forbidden synonyms stay red.
+
+### Fixed (Projects · a failed save could destroy the project file)
+
+Saving wrote the project straight over the existing `.svproj`. If anything went wrong halfway (a full disk, a crash, a value that could not be saved), the file was left cut off and could no longer be opened. Now (issue #228):
+- **Saving is all-or-nothing.** The project is written to a temporary file next to it, which then replaces the `.svproj` in one step, so a failed save leaves the previous version intact. If another program (a virus scanner, a sync tool such as OneDrive or Synology Drive) holds the file for a moment, Supervertaler waits a second for it instead of failing.
+- **A `.svproj.bak` safety copy** of the previous save is kept next to the project, as OmegaT does. A damaged file never overwrites a good backup. (The numbered copies in your data folder's `workbench\backups\` folder are kept as before.)
+- **Recovery when opening.** If a project file cannot be read, Supervertaler offers to open the backup copy and says when it was saved. The next save then replaces the damaged file.
+- **After a failed save, the grid keeps its sort order** and the project stays marked as unsaved.
+- **"📁 Create a dedicated folder for this project"** in New Project is now remembered between sessions, not only until you close the app.
+
+### Fixed (Performance · big projects no longer freeze on import)
+
+A Trados package of 300 files and 17,000 segments (about 200,000 words) froze Supervertaler for over ten minutes on import (issues #185 and #203). In our test with a package of that size (300 files, 17,100 segments), the import took 9 minutes 12 seconds before and now takes under 20 seconds. Most of the wait came from work nobody could see:
+- **The document Preview was rebuilt on every import, even behind the Match Panel,** one sentence at a time with a full re-layout after each. It is now built only when you open the Preview tab or the pop-out window, and in one go. That makes it several times faster when it is shown.
+- **Loading the grid looked up each row's segment by scanning the whole project,** 17,000 × 17,000 times. It now uses a direct lookup. The same lookup made switching between the tag views slow: on that package it took 25 seconds and now takes half a second.
+- **The file-name banners of multi-file projects were rebuilt for all 300 files on every scroll step.** Only the banners on screen are drawn now, so scrolling a big multi-file project is smooth again.
+- **Smaller savings:**
+  - the progress bar repaints at most ten times a second;
+  - "Files: 3/300" in the status bar is counted in one pass;
+  - each grid cell's style is applied once instead of three times;
+  - reading SDLXLIFF files is 30% faster.
+
+**Starting Supervertaler is faster too.** The theme is now applied before the window is built, not afterwards to every widget in it. In our test the window was ready in 11 seconds instead of 14.
+
+Nothing changes in what you see or export: the imported segments and the exported return package are the same as before. One safety fix came along: if switching between the tag views ever failed halfway, edits made afterwards were ignored until Supervertaler was restarted. They no longer are.
+
+### Fixed (Projects · an export could use the file of the project you had open before)
+
+Opening a project kept the memoQ, Trados, CafeTran, Phrase, PO, Déjà Vu or SDLPPX file of the project that was open before. The export preferred that file over the one saved with the project you had just opened. Exporting the second project in the same format then built the exported file from the first project's file. Opening a project now clears all of that. The temporary folder that the previous project's Trados package was unpacked into is removed too.
+
+### Improved (Projects · every kind of project travels with its source files)
+
+Supervertaler already copied a project's source document into the project's `source/` folder, but only the main document (issue #228). The files a project exports back into stayed outside it, so a project moved to another computer could no longer produce its return file:
+- memoQ bilingual DOCX and memoQ XLIFF;
+- Trados review DOCX, SDLPPX packages and SDLXLIFF files;
+- CafeTran, Déjà Vu, PO and plain text/Markdown files.
+
+Saving now puts a copy of each of these in `source/` as well:
+- **Your original is still the file Supervertaler uses**, so exports are offered next to it as before. The copy is only used when the original can no longer be found, for example after you moved the project folder or opened it on another computer. An export from the copy is offered in the project's `target/` folder.
+- **Nothing is copied twice.** A file is copied again only after it has changed.
+- **Two different files with the same name get separate copies** (`doc.sdlxliff`, `doc_2.sdlxliff`), so one never replaces the other.
+
+### Fixed (Keyboard · Ctrl+O did nothing)
+
+**Ctrl+O** was the shortcut of both **Project → Open Project…** and **Project → Import → Import Document…**. Qt cannot choose between two menu items on the same key, so pressing it did nothing at all. Ctrl+O opens a project again, as Settings → Keyboard Shortcuts says, and **Import Document…** is now **Ctrl+Shift+O**.
+
+### Fixed (Tags · standalone tags like `<2/>` were not recognised)
+
+Supervertaler writes a Trados or SDLXLIFF standalone tag as `<2/>`, but two features did not recognise that form, nor `<br/>` or memoQ's `<mq:ch …/>`:
+- **Insert next tag (Ctrl+,)** never offered them.
+- **QA → Run QA Checks** did not report one missing from a translation.
+
+Both recognise every self-closing tag now, as AutoTagger already did. Pseudo-translation now keeps them intact too.
+
+### Fixed (SuperLookup · the settings page pointed to the wrong column)
+
+**SuperLookup → ⚙️ SuperLookup Settings** said SuperLookup searches the TMs and termbases ticked **Read**. Since v1.10.247 it searches the ones ticked in the **🔍 SuperLookup** column of the TMs and Termbases tabs, whether or not they are ticked Read. The note now says so.
+
+### Fixed (Messages · menu and tab names that no longer exist)
+
+A few messages sent you to places that have been renamed:
+- **Bilingual text export:** after exporting AI-friendly bilingual text, the message said to re-import through "File → Import". That menu has been called **Project** since v1.10.182.
+- **No TM or termbase:** several messages and log lines said "Resources → TM", "Resources → Translation Memories" or "Resources → Termbases". The tabs are **💾 TMs** and **🏷️ Termbases**.
+
+They now name the menu items and tabs as they appear. The TM diagnostic script (`scripts/sv_tm_diagnose.py`) says the same.
+
+### Changed (Projects · the backup TMX has its own tm/ folder)
+
+The automatic backup (**Settings → 💾 Backup → Auto Backup**) wrote `<project>_backup.tmx` next to the `.svproj`. It now goes into a `tm/` folder inside the project folder, as OmegaT keeps its TMs in `tm/` (issue #228). A backup left next to the project file by an older version is moved there.
+
+### Fixed (Export · sorting the grid scrambled the exported translations)
+
+Sorting the grid, for example by source text or by length, rearranges the project's segments, and several exports read them in that order. Every export that puts translations back into the original file by position then wrote them into the wrong segments: the translation of "Apple" ended up under "Zebra". This affected:
+- memoQ bilingual DOCX, memoQ RTF and memoQ XLIFF;
+- Trados bilingual review DOCX;
+- PO and CafeTran.
+
+The plain-text, AI-friendly bilingual text, bilingual Markdown and review-table exports also came out in the sorted order. All of them now use the document order, however the grid is sorted.
+
+The Trados review DOCX export had a second problem: it read the translations from the grid's rows, so with more segments than fit on one grid page, the translations on the other pages were left out. It now reads every segment.
+
+Exporting a large SDLPPX or SDLXLIFF project is also faster. Before an export, the grid is now read in one pass instead of searched once per segment, which took minutes for a 17,000-segment package.
+
+### Fixed (memoQ XLIFF · a memoQ view imported only its first document)
+
+A `.mqxliff` exported from a memoQ **view** contains one part per document, and Supervertaler read only the first (issue #110). A view of 364 segments came in with 5. Every document is now imported, and the import message says how many documents there were.
+
+memoQ's inline codes were also imported wrongly. What memoQ stores inside a tag ended up in the segment text as `(<x id="1164" mq:catalogvalue="…"/>)`, and formatting disappeared altogether. Codes now appear as numbered tags, as in SDLXLIFF imports: `<1>`…`</1>` for a pair such as bold, `<2/>` for a placeholder such as a cross-reference. The export turns each tag back into the original memoQ code, so formatting and placeholders return to memoQ where you put them.
+
+The export also used to lose your translation in segments with tags, leaving the source text in the target. It now:
+- **Keeps memoQ's statuses:**
+  - they are imported: *Confirmed*, *Reviewer 1/2 confirmed*, *Pre-translated*, *Edited* and so on no longer all arrive as *Not started*;
+  - locked segments stay locked;
+  - on export, only segments whose translation or status changed are written, so everything else keeps memoQ's own status.
+- **Leaves empty segments alone.** It used to mark every segment as confirmed, even untranslated ones.
+
 ## v1.10.373 - November 1, 2026
 
 ### Added (Settings · turn the Clipboard Manager off, or keep only its Menu)
