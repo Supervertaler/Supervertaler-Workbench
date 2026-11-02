@@ -98,6 +98,32 @@ They now name the menu items and tabs as they appear. The TM diagnostic script (
 
 The automatic backup (**Settings → 💾 Backup → Auto Backup**) wrote `<project>_backup.tmx` next to the `.svproj`. It now goes into a `tm/` folder inside the project folder, as OmegaT keeps its TMs in `tm/` (issue #228). A backup left next to the project file by an older version is moved there.
 
+### Fixed (Export · sorting the grid scrambled the exported translations)
+
+Sorting the grid, for example by source text or by length, rearranges the project's segments, and several exports read them in that order. Every export that puts translations back into the original file by position then wrote them into the wrong segments: the translation of "Apple" ended up under "Zebra". This affected:
+- memoQ bilingual DOCX, memoQ RTF and memoQ XLIFF;
+- Trados bilingual review DOCX;
+- PO and CafeTran.
+
+The plain-text, AI-friendly bilingual text, bilingual Markdown and review-table exports also came out in the sorted order. All of them now use the document order, however the grid is sorted.
+
+The Trados review DOCX export had a second problem: it read the translations from the grid's rows, so with more segments than fit on one grid page, the translations on the other pages were left out. It now reads every segment.
+
+Exporting a large SDLPPX or SDLXLIFF project is also faster. Before an export, the grid is now read in one pass instead of searched once per segment, which took minutes for a 17,000-segment package.
+
+### Fixed (memoQ XLIFF · a memoQ view imported only its first document)
+
+A `.mqxliff` exported from a memoQ **view** contains one part per document, and Supervertaler read only the first (issue #110). A view of 364 segments came in with 5. Every document is now imported, and the import message says how many documents there were.
+
+memoQ's inline codes were also imported wrongly. What memoQ stores inside a tag ended up in the segment text as `(<x id="1164" mq:catalogvalue="…"/>)`, and formatting disappeared altogether. Codes now appear as numbered tags, as in SDLXLIFF imports: `<1>`…`</1>` for a pair such as bold, `<2/>` for a placeholder such as a cross-reference. The export turns each tag back into the original memoQ code, so formatting and placeholders return to memoQ where you put them.
+
+The export also used to lose your translation in segments with tags, leaving the source text in the target. It now:
+- **Keeps memoQ's statuses:**
+  - they are imported: *Confirmed*, *Reviewer 1/2 confirmed*, *Pre-translated*, *Edited* and so on no longer all arrive as *Not started*;
+  - locked segments stay locked;
+  - on export, only segments whose translation or status changed are written, so everything else keeps memoQ's own status.
+- **Leaves empty segments alone.** It used to mark every segment as confirmed, even untranslated ones.
+
 ## v1.10.373 - November 1, 2026
 
 ### Added (Settings · turn the Clipboard Manager off, or keep only its Menu)

@@ -16465,6 +16465,22 @@ class SupervertalerQt(QMainWindow):
                     pass
         return source_path.parent
 
+    def _segments_in_document_order(self):
+        """The project's segments in document order, however the grid is sorted.
+
+        Sorting the grid reorders ``current_project.segments`` itself, so an
+        export that reads that list after a sort by source text wrote the
+        segments in that order – and the round-trip exports, which pair the
+        n-th segment with the n-th unit of the original file, put every
+        translation into the wrong unit. The segment id is the document
+        position; Document Order sorts by it as well.
+        """
+        segments = list(self.current_project.segments) if self.current_project else []
+        try:
+            return sorted(segments, key=lambda seg: int(seg.id))
+        except (TypeError, ValueError):
+            return list(getattr(self, '_original_segment_order', None) or segments)
+
     def _project_export_path(self, filename):
         """Default save path for a generated translation: the project's target/
         folder (project-folder model, #228).
@@ -16626,7 +16642,7 @@ class SupervertalerQt(QMainWindow):
                 return
             
             # Check if there are any translations
-            segments = list(self.current_project.segments)
+            segments = self._segments_in_document_order()
             translated_count = sum(1 for seg in segments if seg.target and seg.target.strip())
             
             if translated_count == 0:
@@ -17955,7 +17971,7 @@ class SupervertalerQt(QMainWindow):
             QMessageBox.warning(self, "No Data", "No segments to export")
             return
         
-        segments = list(self.current_project.segments)
+        segments = self._segments_in_document_order()
 
         if not segments:
             QMessageBox.warning(self, "No Data", "No segments to export")
@@ -37376,7 +37392,7 @@ class SupervertalerQt(QMainWindow):
                 QMessageBox.warning(self, "No Project", "Please open a project with segments first")
                 return
             
-            segments = list(self.current_project.segments)
+            segments = self._segments_in_document_order()
             
             # Check translation status
             translated_count = sum(1 for seg in segments if seg.target and seg.target.strip())
@@ -37562,7 +37578,7 @@ class SupervertalerQt(QMainWindow):
                 QMessageBox.warning(self, "No Project", "Please open a project with segments first")
                 return
             
-            segments = list(self.current_project.segments)
+            segments = self._segments_in_document_order()
             
             # Get language codes
             source_lang = self.current_project.source_lang or "Source"
@@ -39827,7 +39843,7 @@ class SupervertalerQt(QMainWindow):
             from docx import Document
             from docx.shared import RGBColor
             
-            segments = list(self.current_project.segments)
+            segments = self._segments_in_document_order()
             translations = [seg.target for seg in segments]
 
             if not translations or all(not t.strip() for t in translations):
@@ -40201,12 +40217,13 @@ class SupervertalerQt(QMainWindow):
             # Count pretranslated segments
             pretranslated_count = sum(1 for s in mqxliff_segments if s.get('target', '').strip())
 
-            # Convert to internal Segment format
+            # Convert to internal Segment format. The handler already maps
+            # memoQ's status to a Workbench one; the id is the segment's
+            # position, which the export pairs with the file's units.
             segments = []
             for i, mq_seg in enumerate(mqxliff_segments):
-                # Map status from mqxliff
                 status = mq_seg.get('status', 'not_started')
-                if status not in ['not_started', 'pre_translated', 'draft', 'translated', 'confirmed', 'locked']:
+                if status not in STATUSES:
                     status = 'not_started'
 
                 segment = Segment(
@@ -40215,9 +40232,12 @@ class SupervertalerQt(QMainWindow):
                     target=mq_seg.get('target', ''),
                     status=status,
                     match_percent=mq_seg.get('match_percent'),
+                    memoQ_status=mq_seg.get('mq_status', ''),
+                    locked=bool(mq_seg.get('locked')),
                     notes="",
                 )
                 segments.append(segment)
+            doc_count = len({s.get('file') for s in mqxliff_segments})
             
             # Store the handler and original path for round-trip export
             self.mqxliff_handler = handler
@@ -40300,12 +40320,16 @@ class SupervertalerQt(QMainWindow):
 
             # Log success
             self.log(f"✓ Imported {len(segments)} segments from memoQ XLIFF: {Path(file_path).name}")
+            if doc_count > 1:
+                self.log(f"  From {doc_count} documents (memoQ view)")
             self.log(f"  Source: {source_lang}, Target: {target_lang}")
             if pretranslated_count > 0:
                 self.log(f"  Pretranslated: {pretranslated_count} segments with target text")
 
             # Build message with pretranslation info
             msg = f"Successfully imported {len(segments)} segment(s) from memoQ XLIFF.\n\nLanguages: {source_lang} → {target_lang}"
+            if doc_count > 1:
+                msg += f"\n\nDocuments: {doc_count}"
             if pretranslated_count > 0:
                 msg += f"\n\nPretranslated: {pretranslated_count} segment(s) with target text loaded."
 
@@ -40512,7 +40536,7 @@ class SupervertalerQt(QMainWindow):
         try:
             from modules.memoqrtf_handler import MemoQRTFHandler
 
-            segments = list(self.current_project.segments)
+            segments = self._segments_in_document_order()
             translations = [seg.target for seg in segments]
 
             if not translations or all(not t.strip() for t in translations):
@@ -40661,18 +40685,21 @@ class SupervertalerQt(QMainWindow):
             return
         
         try:
-            # Get translations from current segments
-            translations = [seg.target for seg in self.current_project.segments]
-            
+            # Translations and statuses in document order: the handler pairs
+            # the n-th segment with the n-th unit of the file
+            segments = self._segments_in_document_order()
+            translations = [seg.target for seg in segments]
+            statuses = [seg.status for seg in segments]
+
             # Update the handler with translations
-            updated_count = self.mqxliff_handler.update_target_segments(translations)
+            updated_count = self.mqxliff_handler.update_target_segments(translations, statuses)
             
             # Save the updated file
             if self.mqxliff_handler.save(output_path):
-                self.log(f"✓ Exported {updated_count} segments to memoQ XLIFF: {Path(output_path).name}")
+                self.log(f"✓ Exported {updated_count} changed segments to memoQ XLIFF: {Path(output_path).name}")
                 QMessageBox.information(
                     self, "Export Successful",
-                    f"Successfully exported {updated_count} translated segment(s) to memoQ XLIFF.\n\n"
+                    f"Exported to memoQ XLIFF: {updated_count} segment(s) with a new translation or status.\n\n"
                     f"File: {Path(output_path).name}\n\n"
                     f"You can now import this file back into memoQ."
                 )
@@ -40892,7 +40919,7 @@ class SupervertalerQt(QMainWindow):
             return
 
         try:
-            translations = [seg.target for seg in self.current_project.segments]
+            translations = [seg.target for seg in self._segments_in_document_order()]
             updated_count = self.po_handler.update_target_segments(translations)
 
             if self.po_handler.save(output_path):
@@ -41474,18 +41501,18 @@ class SupervertalerQt(QMainWindow):
             return
         
         try:
-            # Collect translations from grid
+            # Collect translations by segment, not by grid row: the grid may be
+            # sorted, filtered or paginated, and then row n is not table row n
+            # of the review document (and rows on other pages have no editor
+            # at all, so their translations were left out).
+            segments = self._segments_in_document_order()
+            self._sync_grid_targets_to_segments(segments)
             translations = {}
-            for row in range(self.table.rowCount()):
-                target_widget = self.table.cellWidget(row, 3)  # Target column
-                if target_widget:
-                    target_text = target_widget.toPlainText().strip()
-                    # v1.9.306: Strip invisible markers before export
-                    if hasattr(self, 'reverse_invisible_replacements'):
-                        target_text = self.reverse_invisible_replacements(target_text).strip()
-                    if target_text:
-                        # Row index in handler is 1-based (row 0 is header)
-                        translations[row + 1] = target_text
+            for seg in segments:
+                target_text = (seg.target or '').strip()
+                if target_text:
+                    # Segment n came from table row n (row 0 is the header)
+                    translations[int(seg.id)] = target_text
             
             # Update the handler with translations
             updated = self.trados_handler.update_target_segments(translations)
@@ -43881,7 +43908,7 @@ class SupervertalerQt(QMainWindow):
             from modules.statuses import STATUSES, get_status
             from datetime import datetime, timezone
 
-            segments = list(self.current_project.segments)
+            segments = self._segments_in_document_order()
             # Flush any pending grid edits into the segment objects first, so the
             # export matches exactly what's on screen.
             try:
@@ -44483,7 +44510,7 @@ class SupervertalerQt(QMainWindow):
         try:
             from modules.cafetran_docx_handler import CafeTranDOCXHandler
             
-            segments = list(self.current_project.segments)
+            segments = self._segments_in_document_order()
             translations = [seg.target for seg in segments]
             
             if not translations or all(not t.strip() for t in translations):
@@ -61554,8 +61581,14 @@ class SupervertalerQt(QMainWindow):
         Reverses invisible character display replacements and restores
         stripped outer wrapping tags to get clean text for export.
         """
+        # One pass over the grid instead of a row search per segment, which
+        # was quadratic: minutes for a 17,000-segment package export.
+        rows = self._rows_by_segment_id()
         for segment in segments:
-            row = self._find_row_for_segment(segment.id)
+            try:
+                row = rows.get(int(segment.id), -1)
+            except (TypeError, ValueError):
+                row = -1
             if row >= 0:
                 target_widget = self.table.cellWidget(row, 3)
                 if target_widget:
@@ -61583,6 +61616,20 @@ class SupervertalerQt(QMainWindow):
                 except (ValueError, AttributeError):
                     continue
         return -1
+
+    def _rows_by_segment_id(self) -> Dict[int, int]:
+        """``{segment id: grid row}`` for the rows in the grid, in one pass."""
+        rows = {}
+        if not hasattr(self, 'table') or not self.table:
+            return rows
+        for row in range(self.table.rowCount()):
+            id_item = self.table.item(row, 0)
+            if id_item:
+                try:
+                    rows.setdefault(int(id_item.text()), row)
+                except (ValueError, AttributeError):
+                    continue
+        return rows
 
     def insert_termlens_text(self, text: str):
         """Insert text from TermLens into the currently active target field"""
