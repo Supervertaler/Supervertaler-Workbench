@@ -18754,7 +18754,9 @@ class SupervertalerQt(QMainWindow):
         rule switches, extra abbreviations, and SRX-style custom break /
         exception rules with SRX import/export and a live test box."""
         from modules.segmentation_rules_widget import SegmentationRulesWidget
-        return SegmentationRulesWidget(self._load_segmentation_rules, self._save_segmentation_rules)
+        widget = SegmentationRulesWidget(self._load_segmentation_rules, self._save_segmentation_rules)
+        set_help_topic(widget, HelpTopics.SETTINGS_SEGMENTATION)  # F1 opens its help page
+        return widget
 
     def _load_segmentation_rules(self):
         from modules.segmentation_rules import SETTINGS_KEY, SegmentationRules
@@ -18777,7 +18779,9 @@ class SupervertalerQt(QMainWindow):
         from modules.inline_codes_widget import InlineCodesWidget
         entries = self._load_inline_codes()
         _inline_codes.set_active(entries)
-        return InlineCodesWidget(lambda: entries, self._save_inline_codes)
+        widget = InlineCodesWidget(lambda: entries, self._save_inline_codes)
+        set_help_topic(widget, HelpTopics.SETTINGS_INLINE_CODES)  # F1 opens its help page
+        return widget
 
     def _load_inline_codes(self) -> list:
         try:
@@ -53713,6 +53717,7 @@ class SupervertalerQt(QMainWindow):
                 navigate=self._navigate_to_segment_by_id,
                 on_sets_changed=_reload_fr_sets,
                 extract_tags=extract_all_tags)
+            set_help_topic(dlg, HelpTopics.QA_CHECKS)  # F1 opens its help page
             self._qa_checks_dialog = dlg
         else:
             dlg.refresh_sets()
@@ -53737,6 +53742,7 @@ class SupervertalerQt(QMainWindow):
                 load_settings=self.load_general_settings,
                 save_settings=self.save_general_settings,
                 get_proxies=_proxies)
+            set_help_topic(dlg, HelpTopics.QA_LANGUAGETOOL)  # F1 opens its help page
             self._languagetool_dialog = dlg
         else:
             from modules.languagetool_client import lt_language

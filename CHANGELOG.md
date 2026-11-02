@@ -169,6 +169,10 @@ Two improvements for glossary synonyms (issue #114):
 
 SuperLookup's search history was still saved in the `settings/` folder directly inside your data folder, where the Supervertaler products keep their shared files. All of Workbench's other settings files moved from there to `workbench/settings/` long ago. It now lives with them, and a history in the old place is picked up the first time.
 
+### Added (Help · F1 on the newer pages)
+
+**F1** now opens the help page for **Settings → 📏 Segmentation Rules**, **Settings → 🏷️ Inline Codes**, **QA → Run QA Checks** and **QA → Check with LanguageTool**. Those pages are on [docs.supervertaler.com](https://docs.supervertaler.com/workbench/); before, F1 there opened a general page.
+
 ## v1.10.373 - November 1, 2026
 
 ### Added (Settings · turn the Clipboard Manager off, or keep only its Menu)
