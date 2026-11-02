@@ -25,6 +25,10 @@ Workbench no longer has a Clipboard Manager, so that it can concentrate on trans
   - While the speech model loads, or downloads the first time, the tab says "Starting…".
   - If Always-On stops while you are holding Ctrl+Alt+V, the "Listening for command…" message goes away, and keystroke commands are no longer held back afterwards.
 
+### Fixed (Dark theme · glossary synonyms turned black and unreadable)
+
+In the glossary entry editor, promoting a synonym or switching its "forbidden" mark off set its text to solid black, which could not be read on the dark theme (issue #78). The text now takes the theme's colour; forbidden synonyms stay red.
+
 ## v1.10.373 - November 1, 2026
 
 ### Added (Settings · turn the Clipboard Manager off, or keep only its Menu)

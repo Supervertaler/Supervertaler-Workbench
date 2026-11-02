@@ -811,8 +811,10 @@ class TermbaseEntryEditor(QDialog):
         if new_data['forbidden']:
             item.setForeground(QColor('#d32f2f'))
         else:
-            # Clear the red colour if it was set on the previous text
-            item.setForeground(QColor('#000000'))
+            # Clear the red colour if it was set on the previous text – back
+            # to the theme's colour, not black, which was unreadable on the
+            # dark theme (issue #78)
+            item.setData(Qt.ItemDataRole.ForegroundRole, None)
 
     def show_source_synonym_context_menu(self, position):
         """Show context menu for source synonym list."""
@@ -850,7 +852,8 @@ class TermbaseEntryEditor(QDialog):
             if data['forbidden']:
                 current_item.setForeground(QColor('#d32f2f'))
             else:
-                current_item.setForeground(QColor('#000000'))
+                # the theme's colour, not black (unreadable on the dark theme, #78)
+                current_item.setData(Qt.ItemDataRole.ForegroundRole, None)
 
         elif action == delete_action:
             self.source_synonym_list.takeItem(self.source_synonym_list.row(current_item))
@@ -965,7 +968,8 @@ class TermbaseEntryEditor(QDialog):
             if data['forbidden']:
                 current_item.setForeground(QColor('#d32f2f'))
             else:
-                current_item.setForeground(QColor('#000000'))
+                # the theme's colour, not black (unreadable on the dark theme, #78)
+                current_item.setData(Qt.ItemDataRole.ForegroundRole, None)
 
         elif action == delete_action:
             self.target_synonym_list.takeItem(self.target_synonym_list.row(current_item))
