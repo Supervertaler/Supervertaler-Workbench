@@ -70,6 +70,22 @@ Saving now puts a copy of each of these in `source/` as well:
 - **Nothing is copied twice.** A file is copied again only after it has changed.
 - **Two different files with the same name get separate copies** (`doc.sdlxliff`, `doc_2.sdlxliff`), so one never replaces the other.
 
+### Fixed (Keyboard · Ctrl+O did nothing)
+
+**Ctrl+O** was the shortcut of both **Project → Open Project…** and **Project → Import → Import Document…**. Qt cannot choose between two menu items on the same key, so pressing it did nothing at all. Ctrl+O opens a project again, as Settings → Keyboard Shortcuts says, and **Import Document…** is now **Ctrl+Shift+O**.
+
+### Fixed (Tags · standalone tags like `<2/>` were not recognised)
+
+Supervertaler writes a Trados or SDLXLIFF standalone tag as `<2/>`, but two features did not recognise that form, nor `<br/>` or memoQ's `<mq:ch …/>`:
+- **Insert next tag (Ctrl+,)** never offered them.
+- **QA → Run QA Checks** did not report one missing from a translation.
+
+Both recognise every self-closing tag now, as AutoTagger already did. Pseudo-translation now keeps them intact too.
+
+### Fixed (SuperLookup · the settings page pointed to the wrong column)
+
+**SuperLookup → ⚙️ SuperLookup Settings** said SuperLookup searches the TMs and termbases ticked **Read**. Since v1.10.247 it searches the ones ticked in the **🔍 SuperLookup** column of the TMs and Termbases tabs, whether or not they are ticked Read. The note now says so.
+
 ## v1.10.373 - November 1, 2026
 
 ### Added (Settings · turn the Clipboard Manager off, or keep only its Menu)

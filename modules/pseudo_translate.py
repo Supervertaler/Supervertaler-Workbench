@@ -30,12 +30,13 @@ import re
 # Canonical inline-tag pattern. MUST stay in sync with
 # Supervertaler.extract_all_tags() — it matches the same three tag families:
 #   memoQ:           [N}   {N]   [N]
-#   HTML / XML:      <tag>  </tag>  <tag/>  <tag attr="v">  (incl. hyphenated)
-#   Trados/SDLXLIFF: <N>   </N>
+#   HTML / XML:      <tag>  </tag>  <tag/>  <tag attr="v">  (incl. hyphenated
+#                    and namespaced, e.g. <mq:ch val="x"/>)
+#   Trados/SDLXLIFF: <N>   </N>   <N/>
 # The single capturing group lets re.split() keep the tags in the result so we
 # can put them back untouched.
 _TAG_RE = re.compile(
-    r'(\[\d+\}|\{\d+\]|\[\d+\]|</?[a-zA-Z][a-zA-Z0-9-]*(?:\s+[^>]*)?>|</?\d+>)'
+    r'(\[\d+\}|\{\d+\]|\[\d+\]|</?\d+/?>|</?[a-zA-Z][a-zA-Z0-9._:-]*(?:\s+[^>]*)?/?>)'
 )
 
 # Character mode "accents": one accented char per source char, so it stresses
