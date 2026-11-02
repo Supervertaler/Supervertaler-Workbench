@@ -353,8 +353,9 @@ def run_all_migrations(db_manager) -> bool:
     if not migrate_termbase_ai_inject(db_manager):
         success = False
 
-    # Migration 5: Create clipboard_history table
-    if not create_clipboard_history_table(db_manager):
+    # Migration 5: Remove the clipboard_history table (the Clipboard
+    # Manager was retired in v1.10.374; it used to create it here).
+    if not drop_clipboard_history_table(db_manager):
         success = False
 
     # Migration 5b: translation_units.target_hash (+ index) for fast reverse
@@ -421,21 +422,14 @@ def check_and_migrate(db_manager) -> bool:
         termbase_columns = {row[1] for row in cursor.fetchall()}
         needs_ai_inject = 'ai_inject' not in termbase_columns
 
-        # Check if clipboard_history table exists, OR if it lacks the image columns
+        # The retired Clipboard Manager's history table is still there
         cursor.execute("""
             SELECT name FROM sqlite_master
             WHERE type='table' AND name='clipboard_history'
         """)
-        clipboard_exists = cursor.fetchone() is not None
-        needs_clipboard_table = not clipboard_exists
-        if clipboard_exists:
-            cursor.execute("PRAGMA table_info(clipboard_history)")
-            cb_cols = {row[1] for row in cursor.fetchall()}
-            if 'kind' not in cb_cols or 'image_data' not in cb_cols:
-                needs_clipboard_table = True
-                print("⚠️ Migration needed - clipboard_history image columns missing")
-        elif needs_clipboard_table:
-            print("⚠️ Migration needed - clipboard_history table missing")
+        needs_clipboard_drop = cursor.fetchone() is not None
+        if needs_clipboard_drop:
+            print("⚠️ Migration needed - remove the old clipboard_history table")
 
         if needs_migration:
             print(f"⚠️ Migration needed - missing columns: {', '.join([c for c in ['project', 'client', 'term_uuid', 'note'] if c not in columns])}")
@@ -485,7 +479,7 @@ def check_and_migrate(db_manager) -> bool:
 
         structural = needs_tm_activation_rename or needs_termbase_id_int
 
-        if (needs_migration or needs_synonyms_table or needs_ai_inject or needs_clipboard_table
+        if (needs_migration or needs_synonyms_table or needs_ai_inject or needs_clipboard_drop
                 or needs_target_hash or needs_fts_fix or structural):
             # Structural migrations (table rebuild / column rename) get a
             # consistent timestamped backup first — the safety net every user
@@ -836,73 +830,43 @@ def migrate_fts_external_content_delete(db_manager) -> bool:
         return False
 
 
-def create_clipboard_history_table(db_manager) -> bool:
+def drop_clipboard_history_table(db_manager) -> bool:
     """
-    Create the clipboard_history table if it does not already exist, and
-    add image-support columns if they're missing on an existing table.
+    Remove the clipboard_history table (v1.10.374).
 
-    Schema:
-    - id         INTEGER PRIMARY KEY AUTOINCREMENT
-    - text       TEXT                     – display text or label (e.g. "Image 1920×1080")
-    - copied_at  TEXT DEFAULT datetime()  – ISO-8601 timestamp
-    - pasted     INTEGER DEFAULT 0        – 1 once the item has been pasted
-    - kind       TEXT DEFAULT 'text'      – 'text' or 'image'
-    - image_data BLOB                     – PNG bytes for image clips, NULL for text
+    The Clipboard Manager was removed from Workbench, so nothing can show or
+    clear these rows any more, and they can hold anything the user ever
+    copied - passwords and licence keys among them. secure_delete makes
+    SQLite overwrite the freed pages with zeros instead of leaving the old
+    text in the database file.
 
     Args:
         db_manager: DatabaseManager instance
 
     Returns:
-        True if successful
+        True if successful (or nothing to remove)
     """
     try:
         cursor = db_manager.cursor
-
         cursor.execute("""
             SELECT name FROM sqlite_master
             WHERE type='table' AND name='clipboard_history'
         """)
-        table_exists = cursor.fetchone() is not None
-
-        if not table_exists:
-            print("📊 Creating clipboard_history table...")
-            cursor.execute("""
-                CREATE TABLE clipboard_history (
-                    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-                    text       TEXT,
-                    copied_at  TEXT    DEFAULT (datetime('now')),
-                    pasted     INTEGER DEFAULT 0,
-                    kind       TEXT    DEFAULT 'text',
-                    image_data BLOB
-                )
-            """)
-            cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_clipboard_id
-                ON clipboard_history(id)
-            """)
-            db_manager.connection.commit()
-            print("✅ clipboard_history table created successfully")
+        if cursor.fetchone() is None:
             return True
 
-        # Existing table – add new columns if missing
-        cursor.execute("PRAGMA table_info(clipboard_history)")
-        columns = {row[1] for row in cursor.fetchall()}
-        added = []
-        if 'kind' not in columns:
-            cursor.execute("ALTER TABLE clipboard_history ADD COLUMN kind TEXT DEFAULT 'text'")
-            added.append('kind')
-        if 'image_data' not in columns:
-            cursor.execute("ALTER TABLE clipboard_history ADD COLUMN image_data BLOB")
-            added.append('image_data')
-        if added:
+        previous = cursor.execute("PRAGMA secure_delete").fetchone()[0]
+        cursor.execute("PRAGMA secure_delete = ON")
+        try:
+            cursor.execute("DROP TABLE clipboard_history")
             db_manager.connection.commit()
-            print(f"✅ clipboard_history extended: added {', '.join(added)}")
-        else:
-            print("✅ clipboard_history table already exists")
+        finally:
+            cursor.execute(f"PRAGMA secure_delete = {int(previous)}")
+        print("✅ clipboard_history table removed (the Clipboard Manager was retired)")
         return True
 
     except Exception as e:
-        print(f"❌ Failed to create/migrate clipboard_history table: {e}")
+        print(f"❌ Failed to remove clipboard_history table: {e}")
         import traceback
         traceback.print_exc()
         return False

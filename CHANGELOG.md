@@ -5,6 +5,17 @@ All notable changes to Supervertaler Workbench are documented in this file.
 **Current Version:** v1.10.373 (November 1, 2026)
 
 
+## Unreleased
+
+### Removed (the Clipboard Manager – Supervertaler Sidekick is the clipboard tool)
+
+Workbench no longer has a Clipboard Manager, so that it can concentrate on translation. The **Clipboard Manager** tab, **Settings → Clipboard**, the tray menu's "Open Clipboard" entry and the Ctrl+Alt+C shortcut are gone, and Workbench no longer reads anything you copy. On Windows, [Supervertaler Sidekick](https://github.com/Supervertaler/Supervertaler-Sidekick) does all of this from any program: clipboard history, snippets, special characters and text conversions.
+
+- **Your snippets and text conversions are kept.** They stay where they were, as files in your data folder's `snippet_library` and `text_conversion_library` folders. Sidekick keeps its own, so add the ones you use there.
+- **The clipboard history is deleted** the first time this version starts. Nothing could show it or clear it any more, and it can hold anything you ever copied, passwords and licence keys among them. It is wiped from the database file, not just hidden.
+- QuickLauncher prompts are still in the editor's right-click menu and in the AI tab's Prompt Library.
+- Ctrl+Alt+C is now free for other programs. If you had changed it to another key, that key is free too.
+
 ## v1.10.373 - November 1, 2026
 
 ### Added (Settings · turn the Clipboard Manager off, or keep only its Menu)

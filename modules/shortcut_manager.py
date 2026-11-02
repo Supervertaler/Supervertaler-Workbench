@@ -614,13 +614,9 @@ class ShortcutManager:
             "default": "Alt+K",
             "action": "open_quicklauncher",
         },
-        "sidekick_open_clipboard": {
-            "category": "Hotkeys",
-            "description": "Open Clipboard manager",
-            "default": "Ctrl+Alt+C",
-            "action": "open_clipboard_tab",
-            "global": True,
-        },
+        # "sidekick_open_clipboard" (Ctrl+Alt+C, the Clipboard Manager) was
+        # removed in v1.10.374 along with the Clipboard tab. A saved custom
+        # binding for it is simply never read again.
         # Ctrl+Alt+O ("always-On"), not Ctrl+Alt+A. This is an OS-level global
         # hotkey, so it fires whatever application is in front - and Supervertaler
         # for Trados uses Ctrl+Alt+A for "Add term with abbreviation". Many people
@@ -799,7 +795,6 @@ class ShortcutManager:
             'global_superlookup':       'tools_universal_lookup',
             'global_quicktrans':        'mt_quick_lookup',
             'global_sidekick':          'sidekick_open',
-            'global_clipboard':         'sidekick_open_clipboard',
             'global_pushtotalk':        'voice_dictate',
             'global_alwayson_toggle':   'voice_alwayson_toggle',
         }
@@ -825,27 +820,6 @@ class ShortcutManager:
         # been removed. With Sidekick retired the global Ctrl+Alt+K
         # binding is gone; sidekick_open is now an in-app-only
         # shortcut and Alt+K is fine again.
-
-        # Default-value upgrade for sidekick_open_clipboard: Ctrl+Shift+C
-        # → Ctrl+Alt+C. The old default fired unreliably on Windows
-        # (Ctrl+Shift+C is widely claimed by browsers / DevTools and
-        # other apps), so users who were on the previous default are
-        # bumped to Ctrl+Alt+C.
-        #
-        # This is a ONE-TIME migration and must be gated: it can't tell a
-        # legacy user still on the old default from one who has just
-        # *deliberately* re-selected Ctrl+Shift+C. Running it on every
-        # load wiped that deliberate choice on the next restart (the
-        # binding silently snapped back to Ctrl+Alt+C). Gate it behind a
-        # persisted marker so it fires at most once per install; after
-        # that Ctrl+Shift+C is a freely selectable binding again.
-        _CLIP_MIGRATION = 'clipboard_default_ctrlaltc_v1'
-        if _CLIP_MIGRATION not in self.applied_migrations:
-            sk_clip = self.custom_shortcuts.get('sidekick_open_clipboard')
-            if sk_clip and sk_clip.lower() == 'ctrl+shift+c':
-                del self.custom_shortcuts['sidekick_open_clipboard']
-            self.applied_migrations.add(_CLIP_MIGRATION)
-            self.save_shortcuts()
 
     def save_shortcuts(self):
         """Save custom shortcuts to file"""
@@ -881,7 +855,6 @@ class ShortcutManager:
             'global_superlookup':     'tools_universal_lookup',
             'global_quicktrans':      'mt_quick_lookup',
             'global_sidekick':        'sidekick_open',
-            'global_clipboard':       'sidekick_open_clipboard',
             'global_pushtotalk':      'voice_dictate',
             'global_alwayson_toggle':       'voice_alwayson_toggle',
             # Voice rename (v1.9.491): AutoFingers → Voice

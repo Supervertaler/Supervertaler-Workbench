@@ -393,25 +393,18 @@ class KeyboardShortcutsWidget(QWidget):
         # Global Hotkeys Settings group (cross-platform)
         # Note: && is used so Qt displays a literal ampersand instead of treating
         # the next character as a mnemonic accelerator.
-        hotkey_group = QGroupBox("⌨️ Global Hotkeys (Superlookup, QuickTrans && Clipboard)")
+        hotkey_group = QGroupBox("⌨️ Global Hotkeys (Superlookup && QuickTrans)")
         hotkey_layout = QVBoxLayout()
 
         if IS_MACOS:
             sl_key = format_shortcut_for_display('Meta+Ctrl+L')   # ⌃⌘L
             qt_key = format_shortcut_for_display('Meta+Ctrl+M')   # ⌃⌘M
-            qm_key = format_shortcut_for_display('Meta+Ctrl+K')   # ⌃⌘K
         else:
             sl_key = format_shortcut_for_display('Ctrl+Alt+L')
             qt_key = format_shortcut_for_display('Ctrl+Alt+Q')
-            # Was Ctrl+Alt+A labelled "QuickLauncher", which was wrong twice
-            # over: QuickLauncher moved to Alt+K and is no longer a global
-            # hotkey at all, while Ctrl+Alt+A belonged to Voice Always-On
-            # (now Ctrl+Alt+O). Clipboard is named instead - it really is global.
-            qm_key = format_shortcut_for_display('Ctrl+Alt+C')
         hotkey_info = QLabel(
-            f"Global hotkeys allow {sl_key} (Superlookup), "
-            f"{qt_key} (QuickTrans), and "
-            f"{qm_key} (Clipboard manager) to work from any application."
+            f"Global hotkeys allow {sl_key} (Superlookup) and "
+            f"{qt_key} (QuickTrans) to work from any application."
         )
         hotkey_info.setWordWrap(True)
         hotkey_info.setStyleSheet(
@@ -656,7 +649,7 @@ class KeyboardShortcutsWidget(QWidget):
         Called after any shortcut change so it takes effect immediately.
         Reloads two things:
           • OS-level global hotkeys (Superlookup, QuickTrans,
-            Clipboard, push-to-talk, Always-On) via ``reload_global_hotkeys``.
+            push-to-talk, Always-On) via ``reload_global_hotkeys``.
           • Local QShortcut key sequences via ``refresh_shortcut_enabled_states``.
             Without the second call, in-app QShortcut objects keep firing on
             the old key until the next application restart.

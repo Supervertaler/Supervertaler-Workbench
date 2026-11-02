@@ -157,14 +157,13 @@ class Topics:
     QA_TAGS             = "workbench/qa/tag-validation/"
     QA_NT               = "workbench/qa/non-translatables/"
 
-    # Voice, Clipboard Manager, and Chat — the old "Companion Tabs"
-    # grouping was dropped (2026-05-21). Voice and Clipboard Manager are
-    # now their own top-level sections; Chat moved under AI Translation.
-    # The old /workbench/sidekick/* URLs 301-redirect to these.
+    # Voice and Chat — the old "Companion Tabs" grouping was dropped
+    # (2026-05-21). Voice is its own top-level section; Chat moved under
+    # AI Translation. The old /workbench/sidekick/* URLs 301-redirect to
+    # these. (The Clipboard Manager was removed in v1.10.374.)
     SIDEKICK            = "workbench/voice/overview/"   # legacy alias → Voice
     TRADOS_AWARE_CHAT   = "workbench/ai-translation/chat/"
     VOICE               = "workbench/voice/overview/"
-    CLIPBOARD           = "workbench/clipboard/overview/"
     # QuickTrans. Moved to its own top-level section at
     # workbench/quicktrans/overview.md (2026-05-21); old /sidekick/
     # quicktrans-popup/ URL 301-redirects. AI_QUICKLAUNCHER alias kept

@@ -2197,7 +2197,7 @@ class _QuitEventFilter(QObject):
     v1.10.238: The main window's closeEvent backgrounds the app to the system
     tray / dock (the deliberate "close to tray" behaviour) instead of quitting,
     so clicking the window's X (Windows) or red close button (macOS) keeps
-    Supervertaler running for the SuperLookup global hotkey + Clipboard Manager.
+    Supervertaler running for the SuperLookup global hotkey.
 
     But an *explicit* quit — macOS "Quit Supervertaler" / ⌘Q, or a system
     shutdown — must genuinely quit. Those arrive as a ``QEvent.Quit`` on the
@@ -10184,9 +10184,6 @@ class SupervertalerQt(QMainWindow):
         # Ctrl+Q - Open QuickLauncher directly
         create_shortcut("editor_open_quicklauncher", "Ctrl+Q", self.open_quicklauncher)
 
-        # Ctrl+Shift+C - Open Sidekick directly to Clipboard tab
-        create_shortcut("sidekick_open_clipboard", "Ctrl+Shift+C", self.open_clipboard_tab)
-
         # The next three actions used to have only an OS-level global hotkey
         # entry. After merging local + global into one shortcut per action,
         # they need an in-app QShortcut binding too so the same key works
@@ -10466,21 +10463,6 @@ class SupervertalerQt(QMainWindow):
         if hasattr(self, 'bottom_notes_edit'):
             self.bottom_notes_edit.setFocus()
     
-    def open_clipboard_tab(self):
-        """In-app Ctrl+Shift+C: jump to Workbench's Clipboard top tab.
-
-        Pre-v1.10.4 this opened the (now-retired) Sidekick window
-        to its Clipboard pane. From v1.10.10 it routes to the
-        in-Workbench Clipboard top tab introduced in v1.10.0.
-        """
-        try:
-            if hasattr(self, 'open_workbench_to_clipboard'):
-                self.open_workbench_to_clipboard()
-            else:
-                self.log("⚠ Clipboard tab not available")
-        except Exception as e:
-            self.log(f"❌ Error opening Clipboard tab: {e}")
-
     def open_quicklauncher(self):
         """Ctrl+Q / Alt+K: pop up the QuickLauncher prompt menu for the
         current segment, the same menu available from the grid right-click.
@@ -13333,9 +13315,10 @@ class SupervertalerQt(QMainWindow):
                 self._preview_tab_index += 1
 
         # Sidekick (Floating Assistant) was retired in v1.10.4 and its
-        # four tabs now live in Workbench itself:
+        # tabs moved into Workbench itself. The Clipboard tab was
+        # removed again in v1.10.374: the AutoHotkey Supervertaler
+        # Sidekick is the clipboard tool.
         #   Chat        → right_tabs "💬 Chat"
-        #   Clipboard   → main_tabs "📋 Clipboard Manager"
         #   Voice       → main_tabs "🎤 Voice"
         #   SuperLookup → main_tabs "🔍 SuperLookup"
         # v1.10.10 finished the cleanup: floating_assistant.py is
@@ -13375,7 +13358,7 @@ class SupervertalerQt(QMainWindow):
 
         # ============================================================
         # NEW TOP-LEVEL TABS (Phase 1 of the Sidekick → Workbench
-        # migration, issue #199). SuperLookup, Clipboard and Voice
+        # migration, issue #199). SuperLookup and Voice
         # are added here as Workbench top tabs so the user has a
         # single-window app instead of toggling between Workbench and
         # the always-on-top Sidekick.
@@ -13397,20 +13380,12 @@ class SupervertalerQt(QMainWindow):
         # is a separate instance.
         # ============================================================
         self._superlookup_top_widget = None
-        self._clipboard_top_widget = None
         self._voice_top_widget = None
 
         from PyQt6.QtWidgets import QWidget as _QW
         superlookup_placeholder = _QW()
         self.main_tabs.addTab(superlookup_placeholder, "🔍 SuperLookup")
         self.superlookup_tab_index = self.main_tabs.count() - 1
-
-        clipboard_placeholder = _QW()
-        self.main_tabs.addTab(clipboard_placeholder, "📋 Clipboard Manager")
-        self.clipboard_tab_index = self.main_tabs.count() - 1
-        # Hidden, not removed, when the Clipboard Manager is switched off,
-        # so every stored tab index stays valid.
-        self._apply_clipboard_manager_enabled()
 
         voice_placeholder = _QW()
         self.main_tabs.addTab(voice_placeholder, "🎤 Voice")
@@ -13427,7 +13402,7 @@ class SupervertalerQt(QMainWindow):
         main_layout.addWidget(self.main_tabs)
 
         # v1.10.17: Esc-to-tray on the "quick lookup" top tabs.
-        # When the user is on SuperLookup / Clipboard / Voice –
+        # When the user is on SuperLookup / Voice –
         # which they typically reach via global hotkeys and treat as
         # popup utilities rather than full-screen work surfaces –
         # pressing Esc hides Workbench to the system tray, matching
@@ -15156,7 +15131,7 @@ class SupervertalerQt(QMainWindow):
     def _on_main_tab_changed(self, index: int):
         """Handle main tab changes (Grid/Project resources/Tools/Settings)"""
         try:
-            # Lazy-construct the v1.10.0 SuperLookup / Clipboard / Voice
+            # Lazy-construct the v1.10.0 SuperLookup / Voice
             # top tabs on first activation. Each helper is idempotent –
             # safe to call again on subsequent activations (it short-
             # circuits if already built). Keeps cold start fast by
@@ -15164,8 +15139,6 @@ class SupervertalerQt(QMainWindow):
             # until the user actually visits the tab.
             if hasattr(self, 'superlookup_tab_index') and index == self.superlookup_tab_index:
                 self._ensure_superlookup_top_tab()
-            elif hasattr(self, 'clipboard_tab_index') and index == self.clipboard_tab_index:
-                self._ensure_clipboard_top_tab()
             elif hasattr(self, 'voice_tab_index') and index == self.voice_tab_index:
                 self._ensure_voice_top_tab()
 
@@ -15195,7 +15168,7 @@ class SupervertalerQt(QMainWindow):
     # ------------------------------------------------------------------
 
     def _warm_up_top_tabs(self):
-        """Build the new SuperLookup / Clipboard / Voice top tabs in the
+        """Build the new SuperLookup / Voice top tabs in the
         background a few seconds after launch.
 
         Each ``_ensure_*_top_tab`` is idempotent – calling it here just
@@ -15204,18 +15177,13 @@ class SupervertalerQt(QMainWindow):
         per-helper try/except so a failure in one doesn't skip the
         others.
 
-        Also kicks off an AHK pre-warm so the very first paste-and-
-        return from the Clipboard tab doesn't lose its keystroke to
-        AHK's cold-spawn latency (Windows + AV scan can stretch the
+        Also kicks off an AHK pre-warm so the very first synthetic
+        keystroke (SuperLookup's copy, a voice command) doesn't lose
+        it to AHK's cold-spawn latency (Windows + AV scan can stretch the
         first ``AutoHotkey64.exe`` launch to 1–2 s; subsequent
         launches hit a hot disk cache and run in ~150 ms).
-
-        The Clipboard widget is built even when the Clipboard Manager is
-        switched off and its tab hidden: it reads nothing then, but its
-        automatic deletion still clears expired entries from the database.
         """
         for helper in ('_ensure_superlookup_top_tab',
-                       '_ensure_clipboard_top_tab',
                        '_ensure_voice_top_tab'):
             try:
                 fn = getattr(self, helper, None)
@@ -15300,46 +15268,6 @@ class SupervertalerQt(QMainWindow):
             layout.addWidget(widget)
         except Exception as e:
             self.log(f"⚠ Could not build SuperLookup top tab: {e}")
-            import traceback
-            traceback.print_exc()
-
-    def _ensure_clipboard_top_tab(self):
-        """Build the Clipboard top tab on first activation.
-
-        Click-to-paste copies the chosen item to the system clipboard,
-        so the user can paste with Ctrl+V wherever they're focused
-        (typically the grid editor, or another app entirely). Phase 3
-        of issue #199 turns this single column into a 3-column
-        layout with snippets / characters / conversions on the right.
-        """
-        if self._clipboard_top_widget is not None:
-            return
-        try:
-            from modules.clipboard_manager_widget import ClipboardManagerWidget
-            from PyQt6.QtWidgets import QApplication
-
-            def _paste_text(text: str):
-                QApplication.clipboard().setText(text)
-
-            def _paste_image(pixmap):
-                QApplication.clipboard().setPixmap(pixmap)
-
-            widget = ClipboardManagerWidget(
-                self,
-                paste_text_callback=_paste_text,
-                paste_image_callback=_paste_image,
-            )
-            try:
-                widget.ensure_db_loaded()
-            except Exception:
-                pass
-            self._clipboard_top_widget = widget
-            placeholder = self.main_tabs.widget(self.clipboard_tab_index)
-            layout = QVBoxLayout(placeholder)
-            layout.setContentsMargins(0, 0, 0, 0)
-            layout.addWidget(widget)
-        except Exception as e:
-            self.log(f"⚠ Could not build Clipboard top tab: {e}")
             import traceback
             traceback.print_exc()
 
@@ -24003,10 +23931,6 @@ class SupervertalerQt(QMainWindow):
         voice_tab = self._create_voice_settings_tab()
         settings_tabs.addTab(scroll_area_wrapper(voice_tab), self.tr("🎤 Voice"))
 
-        # ===== TAB: Clipboard privacy (issue #246) =====
-        clipboard_tab = self._create_clipboard_settings_tab()
-        settings_tabs.addTab(scroll_area_wrapper(clipboard_tab), self.tr("📋 Clipboard"))
-
         # ===== TAB 3: Language Pair Settings =====
         lang_tab = self._create_language_pair_tab()
         settings_tabs.addTab(scroll_area_wrapper(lang_tab), self.tr("🌐 Language Pair"))
@@ -26973,259 +26897,6 @@ class SupervertalerQt(QMainWindow):
         
         return tab
     
-    def _create_clipboard_settings_tab(self):
-        """v1.10.369: Settings tab for clipboard capture privacy (issue #246).
-
-        A user pointed out that the clipboard history happily records
-        usernames and passwords copied out of a password manager. This tab
-        gives three levels of control, from bluntest to finest:
-
-          1. turn capture off entirely;
-          2. keep it on but forget entries after N minutes;
-          3. keep it on but never capture while a named app has the focus.
-
-        Like the AutoCorrect tab there is no Save button - every control
-        writes on change and is applied to the live clipboard widget
-        immediately, because a privacy switch that needs a restart is not a
-        privacy switch.
-        """
-        from PyQt6.QtWidgets import (QGroupBox, QSpinBox, QListWidget,
-                                     QListWidgetItem, QLineEdit, QPushButton,
-                                     QAbstractItemView)
-        from modules.clipboard_manager_widget import ClipboardManagerWidget
-
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(15)
-        set_help_topic(tab, HelpTopics.CLIPBOARD)
-
-        current = dict(ClipboardManagerWidget.DEFAULT_PRIVACY)
-        try:
-            saved = self.load_clipboard_privacy_settings()
-            if isinstance(saved, dict):
-                current.update({k: v for k, v in saved.items() if k in current})
-        except Exception as e:
-            self.log(f"⚠ Could not read clipboard privacy settings: {e}")
-
-        # Guard so populating the widgets below doesn't trigger a save per
-        # control while the tab is still being built.
-        self._clipboard_settings_loading = True
-
-        def _persist():
-            if getattr(self, '_clipboard_settings_loading', False):
-                return
-            self.save_clipboard_privacy_settings({
-                'manager_enabled':     manager_cb.isChecked(),
-                'capture_enabled':     master_cb.isChecked(),
-                'auto_delete_enabled': autodel_cb.isChecked(),
-                'auto_delete_minutes': minutes_spin.value(),
-                'excluded_apps':       [apps_list.item(i).text()
-                                        for i in range(apps_list.count())],
-            })
-
-        # ── Main switch + capture group ──────────────────────────────────
-        group = QGroupBox(self.tr("📋 Clipboard Manager"))
-        glayout = QVBoxLayout()
-
-        header_row = QHBoxLayout()
-        header_row.addStretch()
-        try:
-            from modules.styled_widgets import HelpButton as _HelpBtn
-            header_row.addWidget(_HelpBtn(
-                HelpTopics.CLIPBOARD,
-                tooltip="Open the Clipboard help page",
-            ))
-        except Exception as _e:
-            self.log(f"[Clipboard settings] Could not add help button: {_e}")
-        glayout.addLayout(header_row)
-
-        info = QLabel(self.tr(
-            "The Clipboard Manager tab keeps a history of everything you copy "
-            "while Supervertaler is running, so you can paste it again later. "
-            "That includes anything you copy from other programs — passwords "
-            "and licence keys among them. The same tab holds your Snippets, "
-            "Special Characters, Text Conversions and QuickLauncher Prompts.\n\n"
-            "Changes apply immediately — there's no Save button on this tab."
-        ))
-        info.setWordWrap(True)
-        info.setStyleSheet("color: #666; font-size: 9pt; padding: 5px;")
-        glayout.addWidget(info)
-
-        manager_cb = CheckmarkCheckBox(self.tr("Use the Clipboard Manager"))
-        manager_cb.setChecked(bool(current.get('manager_enabled', True)))
-        manager_cb.setToolTip(
-            "When this is off, the Clipboard Manager tab is hidden, nothing\n"
-            "you copy is read or stored, and its global shortcut (Ctrl+Alt+C\n"
-            "by default) is left free for other programs.\n"
-            "Snippets, Special Characters and Text Conversions are only on\n"
-            "that tab, so they go too. QuickLauncher Prompts are still in\n"
-            "the editor's right-click menu.\n"
-            "Entries already in the history are kept — use 'Clear all' on\n"
-            "the tab first if you want them gone."
-        )
-        glayout.addWidget(manager_cb)
-
-        master_cb = CheckmarkCheckBox(self.tr("Capture clipboard history"))
-        master_cb.setChecked(bool(current.get('capture_enabled', True)))
-        master_cb.setToolTip(
-            "When this is off, nothing you copy is read or stored, and the\n"
-            "Clipboard Manager tab shows only its Menu column: Snippets,\n"
-            "Special Characters, Text Conversions and QuickLauncher Prompts.\n"
-            "Entries already in the history are kept — 'Clear all' at the\n"
-            "top of the tab removes them."
-        )
-        capture_row = QHBoxLayout()
-        capture_row.addSpacing(24)
-        capture_row.addWidget(master_cb)
-        capture_row.addStretch()
-        glayout.addLayout(capture_row)
-
-        group.setLayout(glayout)
-        layout.addWidget(group)
-
-        # ── Auto-delete group ────────────────────────────────────────────
-        ad_group = QGroupBox(self.tr("⏱ Automatic deletion"))
-        adlayout = QVBoxLayout()
-
-        autodel_cb = CheckmarkCheckBox(self.tr("Forget clipboard entries after a set time"))
-        autodel_cb.setChecked(bool(current.get('auto_delete_enabled', False)))
-        autodel_cb.setToolTip(
-            "Old entries are deleted from the database, not just hidden.\n"
-            "Checked about once a minute, and once at startup so entries\n"
-            "that expired while Supervertaler was closed don't come back."
-        )
-        adlayout.addWidget(autodel_cb)
-
-        minutes_row = QHBoxLayout()
-        minutes_row.addSpacing(24)
-        minutes_row.addWidget(QLabel(self.tr("Delete entries older than")))
-        minutes_spin = QSpinBox()
-        minutes_spin.setRange(1, 10080)          # 1 minute … 7 days
-        minutes_spin.setValue(int(current.get('auto_delete_minutes', 60) or 60))
-        minutes_spin.setSuffix(self.tr(" minutes"))
-        minutes_spin.setFixedWidth(140)
-        minutes_row.addWidget(minutes_spin)
-        minutes_row.addStretch()
-        adlayout.addLayout(minutes_row)
-
-        ad_group.setLayout(adlayout)
-        layout.addWidget(ad_group)
-
-        # ── Application exclusions ───────────────────────────────────────
-        ex_group = QGroupBox(self.tr("🚫 Never capture from these applications"))
-        exlayout = QVBoxLayout()
-
-        ex_info = QLabel(self.tr(
-            "While one of these programs has the focus, copying is ignored "
-            "entirely — the text is never read, so it never reaches the "
-            "history or the database. Enter the process name as it appears "
-            "in Task Manager, for example <code>keepass.exe</code>."
-        ))
-        ex_info.setWordWrap(True)
-        ex_info.setStyleSheet("color: #666; font-size: 9pt; padding: 5px;")
-        exlayout.addWidget(ex_info)
-
-        if not sys.platform.startswith("win"):
-            plat_note = QLabel(self.tr(
-                "⚠ Detecting which application has the focus is only "
-                "supported on Windows. On this system the list below is "
-                "saved but has no effect — use the master switch or "
-                "automatic deletion instead."
-            ))
-            plat_note.setWordWrap(True)
-            plat_note.setStyleSheet("color: #C62828; font-size: 9pt; padding: 5px;")
-            exlayout.addWidget(plat_note)
-
-        apps_list = QListWidget()
-        apps_list.setMaximumHeight(160)
-        apps_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
-        for name in (current.get('excluded_apps') or []):
-            if isinstance(name, str) and name.strip():
-                apps_list.addItem(QListWidgetItem(name.strip()))
-        exlayout.addWidget(apps_list)
-
-        add_row = QHBoxLayout()
-        new_app_edit = QLineEdit()
-        new_app_edit.setPlaceholderText(self.tr("e.g. keepass.exe"))
-        add_row.addWidget(new_app_edit)
-        add_btn = QPushButton(self.tr("Add"))
-        remove_btn = QPushButton(self.tr("Remove selected"))
-        add_row.addWidget(add_btn)
-        add_row.addWidget(remove_btn)
-        exlayout.addLayout(add_row)
-
-        common_btn = QPushButton(self.tr("Add common password managers"))
-        common_btn.setToolTip(
-            "Adds the process names of the widely used password managers\n"
-            "(KeePass, 1Password, Bitwarden, and so on). Ones already in\n"
-            "the list are skipped."
-        )
-        exlayout.addWidget(common_btn)
-
-        ex_group.setLayout(exlayout)
-        layout.addWidget(ex_group)
-
-        # ── Behaviour ────────────────────────────────────────────────────
-        def _existing_names():
-            return {apps_list.item(i).text().lower()
-                    for i in range(apps_list.count())}
-
-        def _add_app():
-            name = new_app_edit.text().strip()
-            if not name:
-                return
-            if name.lower() in _existing_names():
-                new_app_edit.clear()
-                return
-            apps_list.addItem(QListWidgetItem(name))
-            new_app_edit.clear()
-            _persist()
-
-        def _remove_apps():
-            # Remove by row descending: deleting low rows first would shift
-            # the rows still to be deleted.
-            rows = sorted((apps_list.row(i) for i in apps_list.selectedItems()),
-                          reverse=True)
-            if not rows:
-                return
-            for row in rows:
-                apps_list.takeItem(row)
-            _persist()
-
-        def _add_common():
-            existing = _existing_names()
-            added = False
-            for name in ClipboardManagerWidget.COMMON_SECRET_APPS:
-                if name.lower() not in existing:
-                    apps_list.addItem(QListWidgetItem(name))
-                    existing.add(name.lower())
-                    added = True
-            if added:
-                _persist()
-
-        def _sync_enabled():
-            master_cb.setEnabled(manager_cb.isChecked())
-            enabled = manager_cb.isChecked() and master_cb.isChecked()
-            for w in (autodel_cb, ad_group, ex_group):
-                w.setEnabled(enabled)
-            minutes_spin.setEnabled(enabled and autodel_cb.isChecked())
-
-        add_btn.clicked.connect(_add_app)
-        new_app_edit.returnPressed.connect(_add_app)
-        remove_btn.clicked.connect(_remove_apps)
-        common_btn.clicked.connect(_add_common)
-        manager_cb.toggled.connect(lambda _: (_sync_enabled(), _persist()))
-        master_cb.toggled.connect(lambda _: (_sync_enabled(), _persist()))
-        autodel_cb.toggled.connect(lambda _: (_sync_enabled(), _persist()))
-        minutes_spin.valueChanged.connect(lambda _: _persist())
-
-        _sync_enabled()
-        self._clipboard_settings_loading = False
-
-        layout.addStretch()
-        return tab
-
     def _create_autocorrect_settings_tab(self):
         """v1.10.230: Settings tab for the AutoCorrect-while-typing engine
         (issue #213). Each checkbox lives-saves to ``settings.json`` on
@@ -29385,8 +29056,8 @@ class SupervertalerQt(QMainWindow):
         """Clear any leaked menu-bar activation after a foreground
         grab. Called from _bring_workbench_forward(); safe to call
         when no menu is active (no-op in that case). The continuation
-        callbacks (`_continue_clipboard`, `_continue_superlookup`)
-        also explicitly setFocus() on their target widget, which
+        callback (`_continue_superlookup`)
+        also explicitly setFocus() on its target widget, which
         belt-and-braces clears the menu-activation indirectly – but
         calling setActiveAction(None) here makes the cleanup
         deterministic instead of relying on focus-change side
@@ -29472,102 +29143,6 @@ class SupervertalerQt(QMainWindow):
             QTimer.singleShot(0, _continue_superlookup)
         except Exception as e:
             self.log(f"⚠ Could not open SuperLookup top tab: {e}")
-            import traceback
-            traceback.print_exc()
-
-    def open_workbench_to_clipboard(self, source_window=None):
-        """Bring Workbench forward and switch to the Clipboard top tab.
-
-        Wired to Ctrl+Alt+C in v1.10.1 (Phase 2 of issue #199). If
-        ``source_window`` is supplied (captured by the hotkey handler
-        BEFORE bringing Workbench forward), it's passed to the
-        Clipboard widget so snippet / conversion activations
-        paste-and-return to that window rather than just sitting on
-        the clipboard. Manual navigation to the Clipboard tab passes
-        no source; activations then just set the clipboard.
-        """
-        if not self.clipboard_manager_enabled():
-            # Reached by the in-app shortcut, which stays bound. (The global
-            # hotkey is not registered while the manager is off.)
-            self.statusBar().showMessage(
-                "The Clipboard Manager is turned off – turn it on in "
-                "Settings → Clipboard", 4000)
-            return
-        try:
-            # v1.10.7 reordered to bring-then-ensure.
-            # v1.10.8 additionally splits the work across two Qt event-
-            # loop turns so the WM_ACTIVATE / WM_PAINT events queued by
-            # _bring_workbench_forward() actually get processed before
-            # the heavy lazy-tab ensure blocks the GUI thread. See
-            # open_workbench_to_superlookup for the full diagnosis.
-            import time as _time
-            _bring_t0 = _time.perf_counter()
-            self._bring_workbench_forward()
-            _bring_ms = (_time.perf_counter() - _bring_t0) * 1000
-            from PyQt6.QtCore import QTimer
-
-            def _continue_clipboard():
-                try:
-                    _tab_t0 = _time.perf_counter()
-                    if hasattr(self, '_ensure_clipboard_top_tab'):
-                        self._ensure_clipboard_top_tab()
-                    if hasattr(self, 'clipboard_tab_index') and hasattr(self, 'main_tabs'):
-                        self.main_tabs.setCurrentIndex(self.clipboard_tab_index)
-                    widget = getattr(self, '_clipboard_top_widget', None)
-                    if widget is not None and hasattr(widget, 'set_source_window'):
-                        widget.set_source_window(source_window)
-                    # v1.10.14: explicit focus on the clipboard text
-                    # list so arrow keys navigate the history straight
-                    # away. Without this, the foreground-grab Alt-tap
-                    # leaks into Qt's QMenuBar and arrow keys steer
-                    # the File menu instead of the list. The widget
-                    # picks the column: the text list (most-used), or
-                    # the Menu when capture is off and the history
-                    # columns are hidden.
-                    if widget is not None:
-                        try:
-                            widget.focus_default_column()
-                        except Exception:
-                            widget.setFocus()
-
-                    # Summon-latency breakdown. Logged one event-loop
-                    # turn later so the tab switch's queued paint work
-                    # is included – closer to what the user perceives.
-                    _tab_ms = (_time.perf_counter() - _tab_t0) * 1000
-
-                    def _log_summon_timing():
-                        try:
-                            t0 = getattr(self, '_clip_summon_t0', None)
-                            if not t0:
-                                return
-                            self._clip_summon_t0 = None
-                            total = (_time.perf_counter() - t0) * 1000
-                            copy_ms = getattr(
-                                self, '_clip_summon_copy_ms', None)
-                            copy_txt = (f"{copy_ms:.0f}"
-                                        if copy_ms is not None else "?")
-                            # keyboard-active NO = Windows refused the
-                            # focus handover; keys would go to the
-                            # source app (the _verify_foreground_grab
-                            # retry should normally rescue this).
-                            active = ('yes' if self.isActiveWindow()
-                                      else 'NO')
-                            self.log(
-                                f"⏱ Clipboard summon: {total:.0f} ms total "
-                                f"(copy-wait {copy_txt} ms, bring-forward "
-                                f"{_bring_ms:.0f} ms, tab+focus "
-                                f"{_tab_ms:.0f} ms, keyboard-active "
-                                f"{active})")
-                        except Exception:
-                            pass
-
-                    QTimer.singleShot(0, _log_summon_timing)
-                except Exception as inner:
-                    self.log(f"⚠ Could not finish Clipboard open: {inner}")
-
-            QTimer.singleShot(0, _continue_clipboard)
-        except Exception as e:
-            self.log(f"⚠ Could not open Clipboard top tab: {e}")
             import traceback
             traceback.print_exc()
 
@@ -30661,8 +30236,8 @@ class SupervertalerQt(QMainWindow):
             del general_settings['settings_ui_font_scale']
         self.save_general_settings(general_settings)
 
-        # Invalidate the modules.ui_scale cache so newly-constructed Sidekick /
-        # clipboard widgets see the new value (already-open ones keep their
+        # Invalidate the modules.ui_scale cache so newly-constructed
+        # widgets see the new value (already-open ones keep their
         # construction-time scale until reopened).
         try:
             from modules.ui_scale import refresh_ui_font_scale
@@ -33431,8 +33006,7 @@ class SupervertalerQt(QMainWindow):
         menu.addAction(show_action)
 
         # Quick tab-jump entries (v1.10.2 of issue #199). Mirror the
-        # global hotkeys: Ctrl+Alt+L = SuperLookup, Ctrl+Alt+C =
-        # Clipboard, etc. Each entry shows Workbench (if hidden) and
+        # global hotkeys: Ctrl+Alt+L = SuperLookup, etc. Each entry shows Workbench (if hidden) and
         # switches main_tabs to the target tab. Indices are looked up
         # lazily via getattr so the menu still builds even if a tab
         # hasn't been added (e.g. an older build with fewer top tabs).
@@ -33452,12 +33026,6 @@ class SupervertalerQt(QMainWindow):
         jump_lookup = QAction("Open SuperLookup", self)
         jump_lookup.triggered.connect(_make_jumper('superlookup_tab_index'))
         menu.addAction(jump_lookup)
-
-        jump_clipboard = QAction("Open Clipboard", self)
-        jump_clipboard.triggered.connect(_make_jumper('clipboard_tab_index'))
-        menu.addAction(jump_clipboard)
-        self._tray_jump_clipboard_action = jump_clipboard
-        jump_clipboard.setVisible(self.clipboard_manager_enabled())
 
         jump_voice = QAction("Open Voice", self)
         jump_voice.triggered.connect(_make_jumper('voice_tab_index'))
@@ -33540,16 +33108,9 @@ class SupervertalerQt(QMainWindow):
         - **SuperLookup / Voice**: hide to the system tray (requires a
           tray icon – without one, hiding would strand the user in an
           invisible window, so those tabs fail closed).
-        - **Clipboard**: hand focus back to the app the user came
-          from, then hide to the tray (v1.10.343/344, user request:
-          "Esc should get out of the way"). Falls back to minimizing
-          to the taskbar when no tray icon exists, so Esc can never
-          silently do nothing. Any pending paste-back source is
-          consumed (Esc means "never mind"), so a later manual clip
-          click can't paste into a stale window.
 
         Gate that always applies: the current tab is one of
-        SuperLookup / Clipboard / Voice. On Editor / TMs / Termbases /
+        SuperLookup / Voice. On Editor / TMs / Termbases /
         AI / Settings, Esc keeps its natural editor / dialog /
         combo-box semantics (cancel-edit, close-popup, etc.).
 
@@ -33561,7 +33122,7 @@ class SupervertalerQt(QMainWindow):
           field re-seeds on the next summon, and the only thing Esc
           could reasonably mean here is "get me out of here". So we
           skip the focus check and dismiss unconditionally.
-        - **Clipboard / Voice**: skip the dismiss if a text-input
+        - **Voice**: skip the dismiss if a text-input
           widget has focus (QLineEdit / QTextEdit / QPlainTextEdit /
           QAbstractSpinBox / editable QComboBox), to preserve
           standard Qt-app conventions (Esc clears the field, closes
@@ -33577,7 +33138,6 @@ class SupervertalerQt(QMainWindow):
         has_tray = getattr(self, '_tray_icon', None) is not None
 
         superlookup_idx = getattr(self, 'superlookup_tab_index', None)
-        clipboard_idx = getattr(self, 'clipboard_tab_index', None)
         voice_idx = getattr(self, 'voice_tab_index', None)
         current = self.main_tabs.currentIndex()
 
@@ -33587,38 +33147,8 @@ class SupervertalerQt(QMainWindow):
                 self.hide()
             return
 
-        # v1.10.201: in-Workbench Ctrl+Alt+C return path. If the user
-        # summoned the Clipboard tab from another Workbench tab
-        # (Editor etc.) instead of from a different app, Esc should
-        # switch back to that prior tab — not hide Workbench. The
-        # prior tab index is set by _open_clipboard_after_copy when
-        # it detects the captured source HWND matches Workbench's own.
-        if (clipboard_idx is not None and current == clipboard_idx):
-            prior = getattr(self, '_clipboard_prior_workbench_tab', None)
-            if prior is not None and prior != current:
-                try:
-                    self.main_tabs.setCurrentIndex(prior)
-                except Exception:
-                    pass
-                # v1.10.202: also restore focus to the widget that
-                # held it when Ctrl+Alt+C was pressed. Without this,
-                # the user lands on the Editor tab but focus stays
-                # on the (now off-screen) clipboard list, so they
-                # can't immediately type or use shortcuts.
-                prior_focus = getattr(self, '_clipboard_prior_focused_widget', None)
-                if prior_focus is not None:
-                    try:
-                        prior_focus.setFocus(Qt.FocusReason.OtherFocusReason)
-                    except (RuntimeError, AttributeError):
-                        pass
-                    self._clipboard_prior_focused_widget = None
-                self._clipboard_prior_workbench_tab = None
-                return
-
-        # Clipboard / Voice: focus-aware hide.
-        focus_aware_indices = {clipboard_idx, voice_idx}
-        focus_aware_indices.discard(None)
-        if current not in focus_aware_indices:
+        # Voice: focus-aware hide.
+        if voice_idx is None or current != voice_idx:
             # Some other tab – not a quick-lookup surface, do nothing.
             return
 
@@ -33654,12 +33184,6 @@ class SupervertalerQt(QMainWindow):
             # through to dismiss – safer than silently doing nothing.
             pass
 
-        if clipboard_idx is not None and current == clipboard_idx:
-            # Clipboard: focus back to the source app, window out of
-            # the way (tray if available, else minimize).
-            self._dismiss_clipboard_summon()
-            return
-
         # Voice: hide to tray, as before.
         if has_tray:
             self.hide()
@@ -33682,7 +33206,6 @@ class SupervertalerQt(QMainWindow):
                     and hasattr(self, 'main_tabs')):
                 current = self.main_tabs.currentIndex()
                 quick = (getattr(self, 'superlookup_tab_index', None),
-                         getattr(self, 'clipboard_tab_index', None),
                          getattr(self, 'voice_tab_index', None))
                 if current in quick:
                     try:
@@ -33696,52 +33219,6 @@ class SupervertalerQt(QMainWindow):
         except Exception as e:
             print(f"[Workbench] Esc keyPressEvent fallback failed: {e}")
         super().keyPressEvent(event)
-
-    def _dismiss_clipboard_summon(self):
-        """Esc on the Clipboard tab: hand focus back to the app the
-        user was summoned from (if one was captured) and get Workbench
-        out of the way – hidden to the system tray when a tray icon
-        exists (the notification-area icons by the clock, where the
-        Supervertaler icon lives), else minimized to the taskbar so
-        Esc can never silently do nothing.
-
-        The source window is activated FIRST, while Workbench still
-        owns the foreground (Windows grants foreground changes
-        requested by the foreground process; after hiding we'd be
-        refused – same ordering rule the paste-back path follows).
-        The captured source is consumed either way: Esc means "never
-        mind", so a later manual clip click must not paste-and-return
-        into a stale window.
-        """
-        source = None
-        widget = getattr(self, '_clipboard_top_widget', None)
-        if widget is not None:
-            source = getattr(widget, '_source_window', None)
-            try:
-                widget.set_source_window(None)
-            except Exception:
-                pass
-        if source is not None:
-            try:
-                from modules.platform_helpers import (
-                    activate_foreground_window,
-                )
-                activate_foreground_window(source)
-            except Exception as e:
-                print(f"[Clipboard] Esc source re-activate failed: {e}")
-        if getattr(self, '_tray_icon', None) is not None:
-            try:
-                self.log("[Esc] Clipboard dismissed → hidden to tray")
-            except Exception:
-                pass
-            self.hide()
-        else:
-            try:
-                self.log("[Esc] Clipboard dismissed → minimized "
-                         "(no tray icon)")
-            except Exception:
-                pass
-            self.showMinimized()
 
     def _on_toggle_close_to_tray(self, checked: bool):
         prefs = self._load_settings_section("ui")
@@ -49025,71 +48502,6 @@ class SupervertalerQt(QMainWindow):
         all_settings[section] = section_data
         self._save_unified_settings(all_settings)
 
-    # ------------------------------------------------------------------
-    # Clipboard privacy settings (issue #246)
-    # ------------------------------------------------------------------
-    # Kept in the "features" section rather than "ui": these are not display
-    # preferences, they decide whether the clipboard is read at all.
-
-    def load_clipboard_privacy_settings(self) -> Dict[str, Any]:
-        """Persisted clipboard capture / retention / exclusion settings.
-        Returns {} when nothing has been saved, so the widget's own defaults
-        apply (capture on, matching pre-1.10.369 behaviour)."""
-        try:
-            return self._load_settings_section("features").get('clipboard_privacy', {}) or {}
-        except Exception as e:
-            self.log(f"⚠ Could not load clipboard privacy settings: {e}")
-            return {}
-
-    def save_clipboard_privacy_settings(self, settings: Dict[str, Any]):
-        """Persist clipboard privacy settings and apply them to the live
-        widget immediately - a privacy switch that only takes effect after a
-        restart is not a privacy switch."""
-        was_enabled = self.clipboard_manager_enabled()
-        try:
-            all_settings = self._load_unified_settings()
-            features = all_settings.setdefault("features", {})
-            features['clipboard_privacy'] = settings
-            self._save_unified_settings(all_settings)
-        except Exception as e:
-            self.log(f"⚠ Could not save clipboard privacy settings: {e}")
-            return
-
-        if self.clipboard_manager_enabled() != was_enabled:
-            self._apply_clipboard_manager_enabled()
-            # Registers or frees the Clipboard Manager's global hotkey.
-            self.reload_global_hotkeys()
-
-        # The Clipboard tab is built lazily, so the widget may not exist yet -
-        # that is fine, it reads these settings when it is constructed.
-        try:
-            widget = getattr(self, '_clipboard_top_widget', None)
-            if widget is not None and hasattr(widget, 'refresh_privacy_settings'):
-                widget.refresh_privacy_settings()
-        except Exception as e:
-            self.log(f"⚠ Could not apply clipboard privacy settings live: {e}")
-
-    def clipboard_manager_enabled(self) -> bool:
-        """The Clipboard Manager's main switch (Settings → Clipboard). On by
-        default, so installs that never touched it keep the tab."""
-        saved = self.load_clipboard_privacy_settings()
-        return not isinstance(saved, dict) or bool(saved.get('manager_enabled', True))
-
-    def _apply_clipboard_manager_enabled(self):
-        """Show or hide the Clipboard Manager tab and its tray entry to match
-        the main switch. The tab is hidden rather than removed, so
-        clipboard_tab_index and the indices after it stay valid. The global
-        hotkey is handled by register_global_hotkey, and capture by the
-        widget's own gate."""
-        enabled = self.clipboard_manager_enabled()
-        tabs = getattr(self, 'main_tabs', None)
-        idx = getattr(self, 'clipboard_tab_index', None)
-        if tabs is not None and idx is not None:
-            tabs.setTabVisible(idx, enabled)
-        action = getattr(self, '_tray_jump_clipboard_action', None)
-        if action is not None:
-            action.setVisible(enabled)
-
     def _migrate_settings_to_unified(self):
         """One-time migration from old settings files to unified settings/settings.json"""
         settings_dir = self._get_settings_dir()
@@ -62447,7 +61859,7 @@ class SupervertalerQt(QMainWindow):
             # v1.10.161: label-based (was hard-coded index 4 with stale
             # comment claiming Settings=4; that became SuperLookup when
             # SuperLookup/Clipboard/Voice were inserted between AI and
-            # Settings — Settings is now at index 7).
+            # Settings).
             self._switch_main_tab("Settings")
 
             # Navigate to specific sub-tab if requested
@@ -72614,8 +72026,7 @@ class SuperlookupTab(QWidget):
     
     def register_global_hotkey(self):
         """Register global hotkeys for Superlookup, QuickTrans, Sidekick,
-        Clipboard, Voice push-to-talk, and Voice Always-On
-        toggle.
+        Voice push-to-talk, and Voice Always-On toggle.
 
         Idempotent: if a manager from a previous registration is still
         running, it is stopped first. That makes this safe to call from
@@ -72651,7 +72062,6 @@ class SuperlookupTab(QWidget):
             sl_shortcut = sm.get_shortcut('tools_universal_lookup').lower()
             qt_shortcut = sm.get_shortcut('mt_quick_lookup').lower()
             sk_shortcut = sm.get_shortcut('sidekick_open').lower()
-            cb_shortcut = sm.get_shortcut('sidekick_open_clipboard').lower()
             pt_shortcut = sm.get_shortcut('voice_dictate').lower()
             ao_shortcut = sm.get_shortcut('voice_alwayson_toggle').lower()
             # v1.10.193: push-to-talk for voice COMMANDS — separate
@@ -72666,11 +72076,6 @@ class SuperlookupTab(QWidget):
                 return (not sm.is_enabled(sid)) or (not sm.is_global(sid))
             if _skip('tools_universal_lookup'):       sl_shortcut = ''
             if _skip('mt_quick_lookup'):              qt_shortcut = ''
-            if _skip('sidekick_open_clipboard'):      cb_shortcut = ''
-            # Clipboard Manager switched off in Settings → Clipboard: leave
-            # its chord free for other applications.
-            _cb_on = getattr(self.main_window, 'clipboard_manager_enabled', None)
-            if callable(_cb_on) and not _cb_on():      cb_shortcut = ''
             if _skip('voice_dictate'):                pt_shortcut = ''
             if _skip('voice_alwayson_toggle'):  ao_shortcut = ''
             # Defensive — voice_command_ptt may not be present in
@@ -72683,7 +72088,6 @@ class SuperlookupTab(QWidget):
         else:
             sl_shortcut = 'ctrl+alt+l'
             qt_shortcut = 'ctrl+alt+q'
-            cb_shortcut = 'ctrl+shift+c'
             pt_shortcut = 'ctrl+shift+space'
             ao_shortcut = 'ctrl+alt+a'
             cmd_ptt_shortcut = 'ctrl+alt+v'
@@ -72726,7 +72130,6 @@ class SuperlookupTab(QWidget):
                 _bindings = [
                     (sl_shortcut, self._on_pynput_superlookup),
                     (qt_shortcut, self._on_pynput_quicktrans),
-                    (cb_shortcut, self._on_pynput_clipboard),
                     (pt_shortcut, self._on_pynput_pushtotalk),
                     (ao_shortcut, self._on_pynput_alwayson_toggle),
                     (cmd_ptt_shortcut, self._on_pynput_command_ptt),
@@ -72800,223 +72203,6 @@ class SuperlookupTab(QWidget):
             )
         except Exception as e:
             print(f"[QuickTrans] Error signaling main thread: {e}")
-
-    def _on_pynput_clipboard(self):
-        """Called from pynput background thread when Ctrl+Shift+C is pressed.
-
-        IMPORTANT: Do NO work here – see _on_pynput_superlookup docstring.
-        """
-        try:
-            from PyQt6.QtCore import QTimer
-            QTimer.singleShot(0, self._handle_clipboard_hotkey)
-        except Exception as e:
-            print(f"[Clipboard] Error signaling main thread: {e}")
-
-    @pyqtSlot()
-    def _handle_clipboard_hotkey(self):
-        """Runs on Qt main thread.
-
-        v1.10.1 (Phase 2 of issue #199): the hotkey now brings Workbench
-        forward and switches to its Clipboard top tab, instead of
-        opening Sidekick. Sidekick still works for users who summon it
-        manually via Ctrl+Alt+K.
-
-        v1.10.2: the foreground-window handle is captured BEFORE we
-        bring Workbench forward so snippet / conversion activations
-        in the Clipboard tab can paste-and-return to it (Sidekick's
-        well-loved flow). Without this capture the activations would
-        just leave the result on the clipboard, forcing the user to
-        Alt+Tab back manually.
-
-        v1.10.6: auto-send Ctrl+C to the source app *before* opening
-        the Clipboard tab. The old flow forced users to do two
-        keystrokes (Ctrl+C to copy, then Ctrl+Alt+C to open the
-        Clipboard manager). Now Ctrl+Alt+C alone does both: it
-        synthesises Ctrl+C in the foreground app, waits 250ms for
-        the clipboard to update, then opens the tab with the
-        just-copied text at the top of the history. Users who had
-        already copied something can still press Ctrl+Alt+C – the
-        synthetic Ctrl+C is a no-op if nothing is selected, and a
-        harmless re-copy if something is. Mirrors how Ctrl+Alt+L
-        already worked for SuperLookup.
-        """
-        try:
-            mw = self.main_window or self.window()
-
-            # Timing anchor for the summon-latency breakdown logged at
-            # the end of open_workbench_to_clipboard's _continue step.
-            try:
-                import time as _time
-                if mw is not None:
-                    mw._clip_summon_t0 = _time.perf_counter()
-                    mw._clip_summon_copy_ms = None
-            except Exception:
-                pass
-
-            # Step 1: capture source window before anything else –
-            # send_copy() below doesn't change foreground (AHK just
-            # synthesises input events), but we want a clean snapshot.
-            source_win = None
-            try:
-                from modules.platform_helpers import get_foreground_window
-                source_win = get_foreground_window()
-            except Exception:
-                pass
-
-            # Step 2: synthesise Ctrl+C so the user's current
-            # selection (if any) lands on the clipboard. The clipboard
-            # widget's QClipboard.dataChanged signal will pick it up
-            # and prepend it to the history just before we navigate.
-            # The clipboard sequence number is captured FIRST so step 3
-            # can detect exactly when the copy lands.
-            seq_before = None
-            try:
-                from modules.platform_helpers import (
-                    get_clipboard_sequence_number,
-                )
-                seq_before = get_clipboard_sequence_number()
-            except Exception:
-                pass
-            try:
-                from modules.platform_helpers import CrossPlatformKeySender
-                # wait=False: don't block the Qt main thread on the AHK
-                # spawn + Sleep + teardown (~150–400 ms). Step 3 below
-                # polls the clipboard sequence number, so it detects the
-                # copy landing regardless of when the sender finishes –
-                # the summon starts opening that much sooner.
-                CrossPlatformKeySender().send_copy(wait=False)
-            except Exception as copy_err:
-                print(f"[Clipboard] send_copy failed (non-fatal): {copy_err}")
-
-            # Step 3: open the tab as soon as the copy has actually
-            # landed, instead of after a blind delay. Windows keeps a
-            # kernel-side clipboard change counter
-            # (GetClipboardSequenceNumber); we captured it before the
-            # synthetic Ctrl+C, so a change means the source app has
-            # really populated the clipboard.
-            #
-            # The 250 ms cap is a FLOOR for the no-copy case, not a
-            # guarantee that every copy has landed: when nothing was
-            # selected the counter never moves, and waiting longer
-            # just delays the window for nothing (a 700 ms cap made
-            # every empty-handed summon feel sluggish). A copy that
-            # lands AFTER the cap – e.g. Word or Trados copying a
-            # large selection – still surfaces correctly: the widget's
-            # dataChanged monitor inserts it at the top of the visible
-            # list and snaps the selection to it (see _add_text_clip's
-            # late-clip selection-follow).
-            # Off-Windows the counter is unavailable (None) and the
-            # old fixed 250 ms behaviour is preserved.
-            state = {'elapsed': 0}
-
-            def _open_when_copy_lands():
-                changed = False
-                if seq_before is not None:
-                    try:
-                        from modules.platform_helpers import (
-                            get_clipboard_sequence_number,
-                        )
-                        seq_now = get_clipboard_sequence_number()
-                        changed = (seq_now is not None
-                                   and seq_now != seq_before)
-                    except Exception:
-                        changed = True  # can't poll – behave like before
-                else:
-                    changed = state['elapsed'] >= 250
-                if changed or state['elapsed'] >= 250:
-                    # Record how long we spent waiting on the copy, for
-                    # the summon-latency breakdown log.
-                    try:
-                        import time as _time
-                        if mw is not None and getattr(
-                                mw, '_clip_summon_t0', None):
-                            mw._clip_summon_copy_ms = (
-                                _time.perf_counter() - mw._clip_summon_t0
-                            ) * 1000
-                    except Exception:
-                        pass
-                    # Small grace so QClipboard.dataChanged (which feeds
-                    # the history list) is processed before the tab opens
-                    # with the new clip expected at row 0.
-                    QTimer.singleShot(
-                        30,
-                        lambda sw=source_win:
-                            self._open_clipboard_after_copy(sw),
-                    )
-                    return
-                state['elapsed'] += 25
-                QTimer.singleShot(25, _open_when_copy_lands)
-
-            QTimer.singleShot(25, _open_when_copy_lands)
-        except Exception as e:
-            print(f"[Clipboard] Error in clipboard hotkey handler: {e}")
-
-    def _open_clipboard_after_copy(self, source_win):
-        """Continuation of _handle_clipboard_hotkey, called 250ms
-        after send_copy() so the synthetic Ctrl+C has had time to
-        populate the clipboard. Kept as a separate method (rather
-        than a closure) so tracebacks are readable.
-
-        v1.10.201: detect when Ctrl+Alt+C was pressed from INSIDE
-        Workbench (e.g. user is on the Editor tab). In that case the
-        captured source_win is Workbench's own HWND, and treating it
-        as a "return-to-source" target leads to the paste-and-hide
-        path firing on Workbench itself — i.e. Workbench hides itself
-        to tray instead of returning to the Editor. So we detect the
-        match, remember the tab the user was on, and pass None as
-        source_window. ``_on_esc_quick_lookup_dismiss`` and the
-        widget paste path both check the remembered prior-tab to
-        switch back to it instead of hiding.
-        """
-        try:
-            mw = self.main_window or self.window()
-            if mw and hasattr(mw, 'open_workbench_to_clipboard'):
-                try:
-                    # v1.10.201: detect in-Workbench summon. Compare
-                    # captured source against Workbench's HWND. If they
-                    # match, store the prior tab index for the return-
-                    # path handlers and clear the source so the widget
-                    # treats this as "no external return required".
-                    try:
-                        own_hwnd = int(mw.winId())
-                        if source_win is not None and int(source_win) == own_hwnd:
-                            tabs = getattr(mw, 'main_tabs', None)
-                            prior = tabs.currentIndex() if tabs else None
-                            mw._clipboard_prior_workbench_tab = prior
-                            # v1.10.202: also capture the widget that
-                            # had focus inside Workbench before
-                            # Ctrl+Alt+C. After the user picks a
-                            # clipboard entry and we switch back to
-                            # the prior tab, focus has drifted to the
-                            # clipboard list (which is now off-screen);
-                            # if we just send Ctrl+V it lands on
-                            # nothing visible. Re-focusing the
-                            # captured widget first ensures the
-                            # synthetic paste reaches the cell /
-                            # text-edit / etc. the user was actually
-                            # editing when they invoked the clipboard
-                            # manager.
-                            from PyQt6.QtWidgets import QApplication as _QApp
-                            mw._clipboard_prior_focused_widget = _QApp.focusWidget()
-                            source_win = None
-                        else:
-                            mw._clipboard_prior_workbench_tab = None
-                            mw._clipboard_prior_focused_widget = None
-                    except Exception:
-                        # winId() / int() can fail in headless test
-                        # environments; fall back to the original
-                        # external-source path on any error.
-                        pass
-
-                    mw.open_workbench_to_clipboard(source_window=source_win)
-                    return
-                except Exception as e:
-                    print(f"[Clipboard] Workbench top-tab route failed: {e}")
-
-            else:
-                print("[Clipboard] open_workbench_to_clipboard unavailable")
-        except Exception as e:
-            print(f"[Clipboard] Error in _open_clipboard_after_copy: {e}")
 
     def _on_pynput_pushtotalk(self):
         """Voice global push-to-talk hotkey – fires on the pynput
