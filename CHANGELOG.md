@@ -29,6 +29,15 @@ Workbench no longer has a Clipboard Manager, so that it can concentrate on trans
 
 In the glossary entry editor, promoting a synonym or switching its "forbidden" mark off set its text to solid black, which could not be read on the dark theme (issue #78). The text now takes the theme's colour; forbidden synonyms stay red.
 
+### Fixed (Projects · a failed save could destroy the project file)
+
+Saving wrote the project straight over the existing `.svproj`. If anything went wrong halfway (a full disk, a crash, a value that could not be saved), the file was left cut off and could no longer be opened. Now (issue #228):
+- **Saving is all-or-nothing.** The project is written to a temporary file next to it, which then replaces the `.svproj` in one step, so a failed save leaves the previous version intact. If another program (a virus scanner, a sync tool such as OneDrive or Synology Drive) holds the file for a moment, Supervertaler waits a second for it instead of failing.
+- **A `.svproj.bak` safety copy** of the previous save is kept next to the project, as OmegaT does. A damaged file never overwrites a good backup. (The numbered copies in your data folder's `workbench\backups\` folder are kept as before.)
+- **Recovery when opening.** If a project file cannot be read, Supervertaler offers to open the backup copy and says when it was saved. The next save then replaces the damaged file.
+- **After a failed save, the grid keeps its sort order** and the project stays marked as unsaved.
+- **"📁 Create a dedicated folder for this project"** in New Project is now remembered between sessions, not only until you close the app.
+
 ## v1.10.373 - November 1, 2026
 
 ### Added (Settings · turn the Clipboard Manager off, or keep only its Menu)
