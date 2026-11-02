@@ -185,3 +185,96 @@ def test_no_backup_means_no_question(S, monkeypatch, tmp_path):
     asked = _question(monkeypatch, QMessageBox.StandardButton.Yes)
     assert _recovery_window(S)._offer_project_backup(path, ValueError("cut off")) is None
     assert asked == []
+
+
+# ── opening a project forgets the previous project's round-trip files ────
+
+class _Package:
+    def __init__(self, fail=False):
+        self.cleaned, self.fail = False, fail
+
+    def cleanup(self):
+        if self.fail:
+            raise OSError("in use")
+        self.cleaned = True
+
+
+def test_opening_a_project_forgets_the_previous_round_trip_files(S):
+    win = _recovery_window(S)
+    for attr in S.SupervertalerQt._ROUND_TRIP_STATE:
+        setattr(win, attr, f"left over: {attr}")
+    package = _Package()
+    win.sdlppx_handler = package
+    win._forget_round_trip_state()
+    assert all(getattr(win, attr) is None for attr in S.SupervertalerQt._ROUND_TRIP_STATE)
+    assert package.cleaned                                  # its unpacked temp folder is removed
+
+
+def test_a_package_that_cannot_be_cleaned_up_is_still_forgotten(S):
+    win = _recovery_window(S)
+    win.sdlppx_handler = _Package(fail=True)
+    win.mqxliff_handler = "old memoQ file"
+    win._forget_round_trip_state()
+    assert win.sdlppx_handler is None and win.mqxliff_handler is None
+    assert any("temporary files" in line for line in win.logged)
+
+
+def test_load_project_forgets_the_previous_state_before_anything_else():
+    import ast
+    tree = ast.parse(open(os.path.join(ROOT, "Supervertaler.py"), encoding="utf-8").read())
+    [cls] = [n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "SupervertalerQt"]
+    [load] = [n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == "load_project"]
+    def name(call):
+        return getattr(call.func, "attr", None) or getattr(call.func, "id", "")
+    calls = [n for n in ast.walk(load) if isinstance(n, ast.Call)
+             and name(n) in ("_forget_round_trip_state", "from_dict", "restore_round_trip_sources")]
+    order = [name(c) for c in sorted(calls, key=lambda c: c.lineno)]
+    assert order.index("from_dict") < order.index("_forget_round_trip_state") \
+        < order.index("restore_round_trip_sources")
+
+
+# ── round-trip sources travel with the project ───────────────────────────
+
+def test_saving_copies_the_round_trip_sources_into_the_project(S, messages, tmp_path):
+    original = tmp_path / "from client" / "job.mqxliff"
+    original.parent.mkdir()
+    original.write_bytes(b"<xliff/>")
+    win = _window(S, _segments(S))
+    win.current_project.mqxliff_source_path = str(original)
+    path = tmp_path / "Job" / "Job.svproj"
+    path.parent.mkdir()
+    win.save_project_to_file(str(path))
+
+    assert messages == []
+    assert (path.parent / "source" / "job.mqxliff").read_bytes() == b"<xliff/>"
+    saved = json.load(open(path, encoding="utf-8"))
+    assert saved["bundled_sources"] == {"mqxliff_source_path": "source/job.mqxliff"}
+    assert saved["mqxliff_source_path"] == str(original)    # the original stays the one used
+    reopened = S.Project.from_dict(saved)
+    assert reopened.bundled_sources == {"mqxliff_source_path": "source/job.mqxliff"}
+
+
+def test_a_round_trip_source_that_cannot_be_copied_does_not_stop_the_save(S, messages, monkeypatch, tmp_path):
+    original = tmp_path / "job.mqxliff"
+    original.write_bytes(b"<xliff/>")
+    win = _window(S, _segments(S))
+    win.current_project.mqxliff_source_path = str(original)
+
+    def no_room(*a, **k):
+        raise OSError("No space left on device")
+    monkeypatch.setattr(S, "bundle_round_trip_sources", no_room)
+    path = tmp_path / "Job.svproj"
+    win.save_project_to_file(str(path))
+    assert messages == []
+    assert json.load(open(path, encoding="utf-8"))["segments"]
+    assert any("round-trip source" in line for line in win.logged)
+
+
+def test_an_export_from_a_bundled_copy_is_offered_in_target(S, tmp_path):
+    win = _recovery_window(S)
+    win.project_file_path = str(tmp_path / "Job.svproj")
+    copy = tmp_path / "source" / "job.mqxliff"
+    assert win._export_dir_beside(copy) == tmp_path / "target"
+    assert (tmp_path / "target").is_dir()
+    elsewhere = tmp_path / "client" / "job.mqxliff"
+    assert win._export_dir_beside(elsewhere) == elsewhere.parent  # next to the original, as before
