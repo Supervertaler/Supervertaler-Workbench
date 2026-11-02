@@ -7,7 +7,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from modules.tm_diff import tokenize, word_diff
+from modules.tm_diff import char_diff, diff_spans, tokenize, word_diff
 
 
 def rebuild(parts, kinds):
@@ -43,3 +43,20 @@ def test_identical_and_empty_texts():
     assert word_diff("Same text.", "Same text.") == [("normal", "Same text.")]
     assert word_diff("", "") == []
     assert word_diff("New", "") == [("add", "New")]
+
+
+def test_char_diff_marks_changed_characters_only():
+    parts = char_diff("Open de klep langzaam.", "Open de kraan langzaam.")
+    assert rebuild(parts, {"normal", "add"}) == "Open de klep langzaam."
+    assert rebuild(parts, {"normal", "delete"}) == "Open de kraan langzaam."
+    new = "Open de klep langzaam."
+    assert [new[a:b] for a, b in diff_spans(parts, "new")] == ["lep"]
+
+
+def test_char_diff_folds_tiny_common_runs_into_the_change():
+    new, old = "De pompen draaien.", "De pompje draait."
+    parts = char_diff(new, old)
+    assert [new[a:b] for a, b in diff_spans(parts, "new")] == ["en", "en"]
+    assert [old[a:b] for a, b in diff_spans(parts, "old")] == ["je", "t"]
+    assert char_diff("Same.", "Same.") == [("normal", "Same.")]
+    assert char_diff("Nieuw", "") == [("add", "Nieuw")]

@@ -153,6 +153,12 @@ The export also used to lose your translation in segments with tags, leaving the
   - on export, only segments whose translation or status changed are written, so everything else keeps memoQ's own status.
 - **Leaves empty segments alone.** It used to mark every segment as confirmed, even untranslated ones.
 
+### Added (QuickTrans · see where the MT engines disagree)
+
+QuickTrans lists the suggestions of several MT engines for the current segment. It now marks, character by character, where each one differs from the top result (issue #208). "Open de k**lep** langzaam." under "Open de kraan langzaam." shows at a glance that only the noun differs. A small inflection or a punctuation change is just as easy to spot.
+
+This works in the docked QuickTrans panel and in the Ctrl+Alt+Q popup. The **Δ** button beside ⚙️ switches it on and off, and the choice is remembered. Only the display is marked: clicking a row, or Ctrl+1…9, still inserts that engine's exact translation. Results longer than 1,000 characters are shown without marks, so a long segment never slows QuickTrans down. Tags in a suggestion, such as `<b>`, are now always shown as text.
+
 ## v1.10.373 - November 1, 2026
 
 ### Added (Settings · turn the Clipboard Manager off, or keep only its Menu)
