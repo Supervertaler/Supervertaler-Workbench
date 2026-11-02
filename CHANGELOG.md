@@ -165,6 +165,10 @@ Two improvements for glossary synonyms (issue #114):
 - **TermLens shows a synonym where it occurs, even next to the main term.** Take an entry *methyl-ethylketoxime* → *methyl ethyl ketoxime* with the synonym *MEKO* on both sides. In "…op basis van methyl-ethylketoxime (MEKO) en…", TermLens used to show only the main term. It now also shows **MEKO** under "(MEKO)". A synonym's chip suggests the matching target synonym when there is one (MEKO → MEKO), otherwise the main target term, and offers the other forms as alternatives. The grid highlights the synonym too. A synonym that is part of the main term, such as *ethylketoxime* in *methyl-ethylketoxime*, gets no second chip there.
 - **The 🏷️ Termbases tab has a Synonyms column**, listing each term's source and target synonyms, for example `MEKO → MEKO`.
 
+### Fixed (SuperLookup · search history kept in the old settings folder)
+
+SuperLookup's search history was still saved in the `settings/` folder directly inside your data folder, where the Supervertaler products keep their shared files. All of Workbench's other settings files moved from there to `workbench/settings/` long ago. It now lives with them, and a history in the old place is picked up the first time.
+
 ## v1.10.373 - November 1, 2026
 
 ### Added (Settings · turn the Clipboard Manager off, or keep only its Menu)
