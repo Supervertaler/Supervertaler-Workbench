@@ -278,3 +278,44 @@ def test_an_export_from_a_bundled_copy_is_offered_in_target(S, tmp_path):
     assert (tmp_path / "target").is_dir()
     elsewhere = tmp_path / "client" / "job.mqxliff"
     assert win._export_dir_beside(elsewhere) == elsewhere.parent  # next to the original, as before
+
+
+# ── the auto-backup TMX goes into the project's tm/ folder ───────────────
+
+def _backup_window(S, tmp_path):
+    win = _window(S, _segments(S))
+    win.project_file_path = str(tmp_path / "Job.svproj")
+    return win
+
+
+def test_the_backup_tmx_is_written_into_tm(S, messages, tmp_path):
+    win = _backup_window(S, tmp_path)
+    win.perform_auto_backup()
+    tmx = tmp_path / "tm" / "Job_backup.tmx"
+    assert tmx.exists() and "Doel 2" in tmx.read_text(encoding="utf-8")
+    assert not (tmp_path / "Job_backup.tmx").exists()
+    assert (tmp_path / "Job.svproj").exists()
+
+
+def test_an_older_backup_beside_the_project_is_moved_into_tm(S, messages, tmp_path):
+    (tmp_path / "Job_backup.tmx").write_text("<tmx old/>", encoding="utf-8")
+    win = _backup_window(S, tmp_path)
+    win.perform_auto_backup()
+    assert not (tmp_path / "Job_backup.tmx").exists()
+    assert "Doel 2" in (tmp_path / "tm" / "Job_backup.tmx").read_text(encoding="utf-8")
+
+
+def test_a_backup_that_cannot_be_moved_does_not_stop_the_new_one(S, messages, monkeypatch, tmp_path):
+    (tmp_path / "Job_backup.tmx").write_text("<tmx old/>", encoding="utf-8")
+    win = _backup_window(S, tmp_path)
+    real_replace = os.replace
+
+    def locked(src, dst):
+        if str(src).endswith("_backup.tmx"):
+            raise PermissionError(13, "in use", str(src))
+        return real_replace(src, dst)
+    monkeypatch.setattr(S.os, "replace", locked)
+    win.perform_auto_backup()
+    assert (tmp_path / "Job_backup.tmx").read_text(encoding="utf-8") == "<tmx old/>"   # left alone
+    assert "Doel 2" in (tmp_path / "tm" / "Job_backup.tmx").read_text(encoding="utf-8")
+    assert not any("Auto backup failed" in line for line in win.logged)

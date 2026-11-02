@@ -29,6 +29,7 @@ import time
 # design — see issue #228.
 SOURCE_SUBDIR = "source"
 TARGET_SUBDIR = "target"
+TM_SUBDIR = "tm"  # the project's own TMX backup (OmegaT keeps its TMs in tm/ too)
 
 
 def resolve_source_path(stored_path, project_dir):

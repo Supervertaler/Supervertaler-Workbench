@@ -94,6 +94,10 @@ A few messages sent you to places that have been renamed:
 
 They now name the menu items and tabs as they appear. The TM diagnostic script (`scripts/sv_tm_diagnose.py`) says the same.
 
+### Changed (Projects · the backup TMX has its own tm/ folder)
+
+The automatic backup (**Settings → 💾 Backup → Auto Backup**) wrote `<project>_backup.tmx` next to the `.svproj`. It now goes into a `tm/` folder inside the project folder, as OmegaT keeps its TMs in `tm/` (issue #228). A backup left next to the project file by an older version is moved there.
+
 ## v1.10.373 - November 1, 2026
 
 ### Added (Settings · turn the Clipboard Manager off, or keep only its Menu)
