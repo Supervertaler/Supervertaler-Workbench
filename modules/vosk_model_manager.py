@@ -40,14 +40,8 @@ MODELS: Dict[str, Dict[str, str]] = {
         "extracted_dir": "vosk-model-small-en-us-0.15",
         "size_mb": 40,
     },
-    "small-nl": {
-        "display_name": "Dutch (small, ~40 MB)",
-        "url": "https://alphacephei.com/vosk/models/vosk-model-small-nl-0.22.zip",
-        "extracted_dir": "vosk-model-small-nl-0.22",
-        "size_mb": 40,
-    },
-    # More models can be added here. Larger models give better accuracy but
-    # the small ones are usually sufficient for command recognition.
+    # Voice commands are English (as in Supervertaler for Trados), so this
+    # is the only model. The small one is enough for command recognition.
 }
 
 
@@ -171,18 +165,3 @@ def download_and_extract(
             except Exception:
                 pass
         return None
-
-
-def pick_model_for_language(language_code: Optional[str]) -> str:
-    """Map a Whisper-style language code (``'en'``, ``'nl'``, ...) to the
-    closest available Vosk model key. Falls back to the default if none
-    match. Uppercase / regional variants are normalised.
-    """
-    if not language_code:
-        return DEFAULT_MODEL_KEY
-    code = language_code.lower().split("-")[0].split("_")[0]
-    by_lang = {
-        "en": "small-en-us",
-        "nl": "small-nl",
-    }
-    return by_lang.get(code, DEFAULT_MODEL_KEY)

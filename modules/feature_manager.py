@@ -13,7 +13,6 @@ Each feature module has:
 
 Installation examples:
     pip install supervertaler                    # Recommended core install
-    pip install supervertaler[local-whisper]     # Optional: Local Whisper (offline, heavy)
     pip install supervertaler[all]               # Legacy alias (no-op; kept for compatibility)
 """
 
@@ -56,32 +55,16 @@ class FeatureModule:
 FEATURE_MODULES: Dict[str, FeatureModule] = {
     "voice": FeatureModule(
         id="voice",
-        name="Voice (Commands & Dictation)",
+        name="Voice commands",
         description=(
-            "Voice dictation and hands-free commands. Works via the OpenAI Whisper API (recommended). "
-            "Optional offline Local Whisper is available via the 'local-whisper' extra."
+            "Hands-free voice commands, recognised offline by Vosk. "
+            "Running text is left to a dictation tool."
         ),
         pip_extra="voice",
-        packages=["sounddevice", "numpy", "openai"],
-        size_mb=150,
-        check_import="sounddevice",
+        packages=["sounddevice", "numpy", "vosk"],
+        size_mb=60,
+        check_import="vosk",
         icon="🎤",
-        category="AI Features",
-        enabled_by_default=False,
-    ),
-    "local_whisper": FeatureModule(
-        id="local_whisper",
-        name="Local Whisper (Offline Speech Recognition)",
-        description=(
-            "Offline Whisper speech recognition (no API key required). Uses the faster-whisper "
-            "CTranslate2 backend – much smaller and faster than the original openai-whisper / "
-            "PyTorch combo, and no ffmpeg required."
-        ),
-        pip_extra="local-whisper",
-        packages=["faster-whisper"],
-        size_mb=300,
-        check_import="faster_whisper",
-        icon="🤖",
         category="AI Features",
         enabled_by_default=False,
     ),
@@ -141,8 +124,8 @@ class FeatureManager:
         fm = FeatureManager(user_data_path)
 
         # Check if a feature can be used
-        if fm.is_feature_usable("local-whisper"):
-            backend = lazy_import_whisper()
+        if fm.is_feature_usable("voice"):
+            ...
 
         # Get all features for Settings UI
         for feature in fm.get_all_features():
@@ -252,15 +235,6 @@ class FeatureManager:
 
 
 # Lazy import helpers - use these instead of direct imports
-def lazy_import_whisper():
-    """Lazily import the faster-whisper backend for voice commands."""
-    try:
-        import faster_whisper
-        return faster_whisper
-    except ImportError:
-        return None
-
-
 def lazy_import_chromadb():
     """Lazily import ChromaDB for vector storage."""
     try:

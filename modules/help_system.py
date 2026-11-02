@@ -172,7 +172,7 @@ class Topics:
     AI_QUICKTRANS_POPUP = QUICKTRANS_POPUP   # v1.10.21 alias
     AI_QUICKLAUNCHER    = QUICKTRANS_POPUP   # pre-v1.10.21 alias
 
-    # Tools (TOOL_VOICE removed – voice/dictation is the Voice tab in Sidekick)
+    # Tools (TOOL_VOICE removed – voice commands are the Voice top tab)
     TOOL_PDF_RESCUE     = "workbench/tools/pdf-rescue/"
     TOOL_TMX_EDITOR     = "workbench/tools/tmx-editor/"
     TOOL_STATISTICS     = "workbench/tools/statistics/"

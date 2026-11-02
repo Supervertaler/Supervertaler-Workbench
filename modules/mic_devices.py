@@ -1,6 +1,6 @@
 """Input-device enumeration + name → index resolution for the Voice surface.
 
-The dictation engines (push-to-talk, Always-On) and the Voice tab's
+The voice-command listener (Always-On) and the Voice tab's
 microphone picker all need to ask sounddevice the same two questions:
 
   1. What input devices does the user have? – for the dropdown
@@ -96,7 +96,7 @@ def _is_wasapi_device(device_idx: Optional[int]) -> bool:
     Used by ``wasapi_autoconvert_settings`` to decide whether to attach
     an auto-resampling flag. WASAPI in shared mode forces the OS
     mixer's sample rate (typically 48000 Hz) on any capture stream,
-    while our pipeline asks for Whisper's required 16000 Hz. Without
+    while our pipeline asks for Vosk's 16000 Hz. Without
     the auto-convert flag, opening a capture stream at 16000 Hz on a
     WASAPI device fails with "Invalid sample rate"; with it, WASAPI
     transparently resamples between the device's mixer rate and the

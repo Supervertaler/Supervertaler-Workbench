@@ -1,9 +1,14 @@
 """
-Voice Commands Module for Supervertaler
-Talon-style voice command system with 3 tiers:
-- Tier 1: In-app commands (Python/PyQt6)
-- Tier 2: System commands (AutoHotkey scripts)
-- Tier 3: Dictation fallback (insert as text)
+Voice commands for Supervertaler Workbench.
+
+Vosk listens in grammar mode: it can only hear the phrases in the
+command list (or "[unk]"), so speech that is not a command is ignored
+and never typed. Running text is left to a dictation tool (Wispr Flow,
+Windows voice typing), as with SuperVoice in Supervertaler for Trados.
+
+Command types: internal (a Workbench action), keystroke (a key chord
+sent to the program in front), and AutoHotkey code (ahk_inline,
+ahk_script; Windows only, needs AutoHotkey v2).
 """
 
 import json
@@ -13,12 +18,72 @@ import sys
 import subprocess
 from pathlib import Path
 from typing import Optional, Dict, List, Callable, Tuple
-from dataclasses import dataclass, field
-from difflib import SequenceMatcher
+from dataclasses import dataclass, field, replace
 from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import QWidget
 from modules.shortcut_display import format_shortcut_for_display
-from modules.platform_helpers import IS_WINDOWS, get_hidden_subprocess_flags, hide_subprocess_console_windows
+from modules.platform_helpers import IS_WINDOWS, get_hidden_subprocess_flags
+
+
+# Key names as stored by the command dialog (Qt's lowercase format, e.g.
+# "ctrl+shift+s", "alt+down", "f6", "del") → pynput key names.
+_PYNPUT_KEYS = {
+    'ctrl': 'ctrl', 'control': 'ctrl', 'alt': 'alt', 'shift': 'shift',
+    'meta': 'cmd', 'win': 'cmd', 'windows': 'cmd', 'cmd': 'cmd',
+    'enter': 'enter', 'return': 'enter', 'tab': 'tab',
+    'esc': 'esc', 'escape': 'esc', 'space': 'space', 'backspace': 'backspace',
+    'del': 'delete', 'delete': 'delete', 'ins': 'insert', 'insert': 'insert',
+    'home': 'home', 'end': 'end',
+    'pgup': 'page_up', 'pageup': 'page_up', 'page_up': 'page_up',
+    'pgdown': 'page_down', 'pgdn': 'page_down', 'pagedown': 'page_down', 'page_down': 'page_down',
+    'up': 'up', 'down': 'down', 'left': 'left', 'right': 'right',
+    **{f'f{n}': f'f{n}' for n in range(1, 21)},
+}
+
+
+def parse_chord(keystroke: str) -> list:
+    """Turn "ctrl+shift+s" into pynput keys, in press order.
+
+    Raises ValueError for an empty chord or a key name it doesn't know,
+    so a typo in a command fails loudly instead of sending something else.
+    """
+    from pynput.keyboard import Key, KeyCode
+    text = (keystroke or '').strip().lower()
+    if text == '+':                       # the plus key on its own
+        parts = ['+']
+    elif text.endswith('++'):             # "ctrl++" means Ctrl and "+"
+        parts = text[:-2].split('+') + ['+']
+    else:
+        parts = text.split('+')
+    parts = [p.strip() for p in parts]
+    keys = []
+    for part in parts:
+        if not part:
+            raise ValueError(f"empty key in {keystroke!r}")
+        if part in _PYNPUT_KEYS:
+            keys.append(getattr(Key, _PYNPUT_KEYS[part]))
+        elif len(part) == 1:
+            keys.append(KeyCode.from_char(part))
+        else:
+            raise ValueError(f"unknown key {part!r} in {keystroke!r}")
+    return keys
+
+
+def send_chord(keystroke: str, controller=None) -> None:
+    """Press a key chord in the program in front, then release it in
+    reverse order (pynput's controller uses SendInput on Windows)."""
+    keys = parse_chord(keystroke)
+    if controller is None:
+        from pynput.keyboard import Controller
+        controller = Controller()
+    pressed = []
+    try:
+        for key in keys:
+            controller.press(key)
+            pressed.append(key)
+    finally:
+        for key in reversed(pressed):
+            controller.release(key)
 
 
 @dataclass
@@ -31,34 +96,6 @@ class VoiceCommand:
     description: str = ""  # Human-readable description
     category: str = "general"  # Category for organization
     enabled: bool = True
-    
-    def matches(self, spoken_text: str, threshold: float = 0.85) -> Tuple[bool, float]:
-        """
-        Check if spoken text matches this command.
-        Returns (is_match, confidence_score)
-        """
-        spoken_lower = spoken_text.lower().strip()
-        
-        # Check exact matches first
-        all_phrases = [self.phrase.lower()] + [a.lower() for a in self.aliases]
-        for phrase in all_phrases:
-            if spoken_lower == phrase:
-                return (True, 1.0)
-        
-        # Check fuzzy matches
-        best_score = 0.0
-        for phrase in all_phrases:
-            # Use SequenceMatcher for fuzzy matching
-            score = SequenceMatcher(None, spoken_lower, phrase).ratio()
-            best_score = max(best_score, score)
-            
-            # Also check if spoken text contains the phrase
-            if phrase in spoken_lower or spoken_lower in phrase:
-                # Boost score for partial matches
-                length_ratio = min(len(phrase), len(spoken_lower)) / max(len(phrase), len(spoken_lower))
-                best_score = max(best_score, 0.9 * length_ratio)
-        
-        return (best_score >= threshold, best_score)
 
 
 class VoiceCommandManager(QObject):
@@ -76,60 +113,60 @@ class VoiceCommandManager(QObject):
     # the user having to restart Always-On.
     commands_changed = pyqtSignal()
     
-    # Default commands
+    # Default commands. Phrases are distinctive on purpose: the listener
+    # keeps running while you dictate with another tool, so an everyday
+    # word ("next", "okay", "save") would fire in the middle of a sentence.
     DEFAULT_COMMANDS = [
         # Navigation
-        VoiceCommand("next segment", ["next", "down"], "internal", "navigate_next", 
+        VoiceCommand("next segment", [], "internal", "navigate_next",
                     "Move to next segment", "navigation"),
-        VoiceCommand("previous segment", ["previous", "back", "up"], "internal", "navigate_previous",
+        VoiceCommand("previous segment", [], "internal", "navigate_previous",
                     "Move to previous segment", "navigation"),
-        VoiceCommand("first segment", ["go to start", "beginning"], "internal", "navigate_first",
+        VoiceCommand("first segment", ["go to start"], "internal", "navigate_first",
                     "Jump to first segment", "navigation"),
-        VoiceCommand("last segment", ["go to end", "end"], "internal", "navigate_last",
+        VoiceCommand("last segment", ["go to end"], "internal", "navigate_last",
                     "Jump to last segment", "navigation"),
-        
+
         # Segment actions
-        VoiceCommand("confirm", ["confirm segment", "done", "okay"], "internal", "confirm_segment",
+        VoiceCommand("confirm", ["confirm segment"], "internal", "confirm_segment",
                     "Confirm current segment", "editing"),
         VoiceCommand("copy source", ["copy from source", "source to target"], "internal", "copy_source_to_target",
                     "Copy source text to target", "editing"),
-        VoiceCommand("clear target", ["clear", "delete target"], "internal", "clear_target",
+        VoiceCommand("clear target", ["delete target"], "internal", "clear_target",
                     "Clear target text", "editing"),
         VoiceCommand("undo", [], "keystroke", "ctrl+z",
                     "Undo last action", "editing"),
         VoiceCommand("redo", [], "keystroke", "ctrl+y",
                     "Redo last action", "editing"),
-        
+
         # Translation
-        VoiceCommand("translate", ["translate segment", "translate this"], "internal", "translate_segment",
+        VoiceCommand("translate segment", ["translate this"], "internal", "translate_segment",
                     "AI translate current segment", "translation"),
-        VoiceCommand("translate all", ["batch translate"], "internal", "batch_translate",
+        VoiceCommand("translate all segments", ["batch translate"], "internal", "batch_translate",
                     "Translate all segments", "translation"),
-        
+
         # Lookup & Search
-        VoiceCommand("lookup", ["super lookup", "search"], "internal", "open_superlookup",
+        VoiceCommand("lookup", ["super lookup"], "internal", "open_superlookup",
                     f"Open Superlookup ({format_shortcut_for_display('Ctrl+K')})", "lookup"),
         VoiceCommand("concordance", ["search memory", "search TM"], "internal", "concordance_search",
                     "Open concordance search", "lookup"),
-        
+
         # File operations
-        VoiceCommand("save project", ["save"], "keystroke", "ctrl+s",
+        VoiceCommand("save project", [], "keystroke", "ctrl+s",
                     "Save current project", "file"),
-        VoiceCommand("open project", ["open"], "keystroke", "ctrl+o",
+        VoiceCommand("open project", [], "keystroke", "ctrl+o",
                     "Open project", "file"),
-        
+
         # View
-        VoiceCommand("show log", ["open log", "log tab"], "internal", "show_log",
+        VoiceCommand("show log", ["open log"], "internal", "show_log",
                     "Show log panel", "view"),
         VoiceCommand("show editor", ["editor tab", "go to editor"], "internal", "show_editor",
                     "Show editor panel", "view"),
-        
-        # Dictation control
-        VoiceCommand("start dictation", ["dictate", "voice input"], "internal", "start_dictation",
-                    "Start voice dictation mode", "dictation"),
-        VoiceCommand("stop listening", ["stop", "pause"], "internal", "stop_listening",
-                    "Stop voice recognition", "dictation"),
-        
+
+        # Listening
+        VoiceCommand("stop listening", [], "internal", "stop_listening",
+                    "Stop voice recognition", "voice"),
+
         # memoQ-specific (AHK v2)
         VoiceCommand("termbase", ["add term", "add to termbase"], "ahk_inline",
                     'Send "!{Down}"',  # Alt+Down
@@ -146,6 +183,18 @@ class VoiceCommandManager(QObject):
                     'Send "^{Enter}"',
                     "Confirm segment in Trados Studio", "trados"),
     ]
+
+    # Bumped whenever DEFAULT_COMMANDS gains a command that existing,
+    # customised lists should receive. Version 2 (v1.10.374) only made the
+    # defaults distinctive and dropped "start dictation".
+    DEFAULTS_VERSION = 2
+    # Default phrase -> the DEFAULTS_VERSION that introduced it. Defaults
+    # not listed date from version 1. On load, a list saved at an older
+    # version gets the newer defaults it lacks, as SuperVoice in Trados
+    # does – never ones the user deleted earlier, and never edits to theirs.
+    _DEFAULTS_SINCE: Dict[str, int] = {}
+    # Actions that no longer exist; commands using them are dropped on load.
+    _RETIRED_INTERNAL_ACTIONS = {"start_dictation"}
     
     def __init__(self, user_data_path: Path, main_window=None):
         super().__init__()
@@ -154,23 +203,6 @@ class VoiceCommandManager(QObject):
         self.commands: List[VoiceCommand] = []
         self.commands_file = user_data_path / "workbench" / "settings" / "voice_commands.json"
         self.ahk_script_dir = user_data_path / "workbench" / "voice_scripts"
-        self.match_threshold = 0.85  # Minimum similarity for fuzzy matching
-
-        # Internal action handlers (mapped to main_window methods)
-        self.internal_handlers: Dict[str, Callable] = {}
-
-        # v1.10.197: deferred-keystroke mode for the push-to-talk-for-
-        # commands flow. While ``_defer_keystrokes`` is True, any
-        # keystroke / AHK command goes onto ``_deferred_queue`` instead
-        # of being sent immediately. When the flag flips back to False
-        # (via ``set_defer_keystrokes(False)``) the queue is drained.
-        # Internal-action commands (which call Python methods directly
-        # rather than synthesising keystrokes) execute immediately
-        # regardless of this flag — they don't suffer from the
-        # "user is still holding Ctrl+Alt" interference that keystroke
-        # commands hit during a PTT hold.
-        self._defer_keystrokes: bool = False
-        self._deferred_queue: List = []
         
         # Ensure directories exist
         self.ahk_script_dir.mkdir(parents=True, exist_ok=True)
@@ -213,10 +245,14 @@ class VoiceCommandManager(QObject):
             "show_log": lambda: main_window.detach_log_window() if hasattr(main_window, 'detach_log_window') else self._log_missing('detach_log_window'),
             "show_editor": lambda: self._show_tab(main_window, "Editor"),
             
-            # Dictation
-            "start_dictation": lambda: main_window.start_voice_dictation() if hasattr(main_window, 'start_voice_dictation') else self._log_missing('start_voice_dictation'),
+            # Listening
             "stop_listening": lambda: self._stop_voice_recognition(),
         }
+        # Keystroke / AutoHotkey failures ("AutoHotkey not found", an
+        # unknown key name) are reported through error_occurred.
+        if hasattr(main_window, 'log'):
+            self.error_occurred.connect(
+                lambda message: main_window.log(f"❌ Voice command: {message}"))
 
     def _log_missing(self, method_name: str):
         """Log when a method is missing from main_window"""
@@ -239,40 +275,67 @@ class VoiceCommandManager(QObject):
             if listener and hasattr(listener, 'stop'):
                 listener.stop()
     
+    @classmethod
+    def _default_commands(cls) -> List[VoiceCommand]:
+        """Fresh copies, so editing a command never edits the defaults."""
+        return [replace(c, aliases=list(c.aliases)) for c in cls.DEFAULT_COMMANDS]
+
+    @classmethod
+    def _command_from_dict(cls, cmd_data: dict) -> Optional[VoiceCommand]:
+        """A saved command, or None if it uses a retired action."""
+        command = VoiceCommand(
+            phrase=cmd_data['phrase'],
+            aliases=list(cmd_data.get('aliases', [])),
+            action_type=cmd_data.get('action_type', 'internal'),
+            action=cmd_data.get('action', ''),
+            description=cmd_data.get('description', ''),
+            category=cmd_data.get('category', 'general'),
+            enabled=cmd_data.get('enabled', True)
+        )
+        if command.action_type == "internal" and command.action in cls._RETIRED_INTERNAL_ACTIONS:
+            return None
+        return command
+
     def load_commands(self):
         """Load commands from JSON file, or create defaults"""
         if self.commands_file.exists():
             try:
                 with open(self.commands_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
-                
-                self.commands = []
-                self.match_threshold = data.get('match_threshold', 0.85)
-                
-                for cmd_data in data.get('commands', []):
-                    self.commands.append(VoiceCommand(
-                        phrase=cmd_data['phrase'],
-                        aliases=cmd_data.get('aliases', []),
-                        action_type=cmd_data.get('action_type', 'internal'),
-                        action=cmd_data.get('action', ''),
-                        description=cmd_data.get('description', ''),
-                        category=cmd_data.get('category', 'general'),
-                        enabled=cmd_data.get('enabled', True)
-                    ))
-                
+
+                saved = data.get('commands', [])
+                self.commands = [c for c in map(self._command_from_dict, saved) if c]
+                saved_version = data.get('defaults_version', 1)
+                if saved_version < self.DEFAULTS_VERSION or len(self.commands) != len(saved):
+                    self._add_newer_defaults(saved_version)
+                    self.save_commands()
                 return
             except Exception as e:
                 print(f"Error loading voice commands: {e}")
-        
+
         # Use defaults
-        self.commands = self.DEFAULT_COMMANDS.copy()
+        self.commands = self._default_commands()
         self.save_commands()
+
+    def _add_newer_defaults(self, saved_version: int):
+        """Append defaults introduced after ``saved_version`` that the
+        list doesn't already cover, by phrase or by action."""
+        known_phrases = {p.lower() for c in self.commands for p in [c.phrase] + c.aliases}
+        known_actions = {(c.action_type, c.action) for c in self.commands}
+        for command in self._default_commands():
+            if self._DEFAULTS_SINCE.get(command.phrase, 1) <= saved_version:
+                continue
+            if command.phrase.lower() in known_phrases:
+                continue
+            if (command.action_type, command.action) in known_actions:
+                continue
+            self.commands.append(command)
     
     def save_commands(self):
         """Save commands to JSON file"""
         data = {
             'version': '1.0',
-            'match_threshold': self.match_threshold,
+            'defaults_version': self.DEFAULTS_VERSION,
             'commands': [
                 {
                     'phrase': cmd.phrase,
@@ -300,90 +363,44 @@ class VoiceCommandManager(QObject):
         except Exception:
             pass
     
-    def find_matching_command(self, spoken_text: str) -> Optional[Tuple[VoiceCommand, float]]:
+    def find_matching_command(self, spoken_text: str) -> Optional[VoiceCommand]:
+        """The command for what was heard, matched much as SuperVoice in
+        Trados does. No guessing at near misses: those used to fire the
+        wrong command.
+
+        1. The exact phrase or alias, ignoring case.
+        2. Otherwise the longest *multi-word* phrase found inside the
+           utterance on whole-word boundaries, after dropping Vosk's
+           "[unk]" markers for speech outside the grammar.
+
+        A one-word phrase only ever fires as the whole utterance. The
+        listener keeps running while the user dictates with another tool,
+        and Vosk turns a dictated sentence into fragments such as
+        "[unk] project tm next add [unk]" – which must not fire a "next"
+        command.
         """
-        Find the best matching command for spoken text.
-        Returns (command, confidence) or None if no match.
-        """
-        spoken_text = spoken_text.strip()
-        if not spoken_text:
+        heard_words = spoken_text.lower().split()
+        heard = " ".join(heard_words)
+        if not heard:
             return None
-        
-        best_match = None
-        best_score = 0.0
-        
-        for cmd in self.commands:
-            if not cmd.enabled:
-                continue
-            
-            is_match, score = cmd.matches(spoken_text, self.match_threshold)
-            if is_match and score > best_score:
-                best_match = cmd
-                best_score = score
-        
-        if best_match:
-            return (best_match, best_score)
-        return None
-    
-    # ── v1.10.197: deferred-keystroke control (for command PTT) ──
-
-    def set_defer_keystrokes(self, on: bool) -> None:
-        """Toggle the keystroke-deferral mode.
-
-        While ``on=True``, keystroke / AHK voice commands are queued
-        rather than executed — used by the command push-to-talk path
-        so the synthetic Ctrl+A doesn't collide with the user's still-
-        held Ctrl+Alt+V modifier keys. When called with ``on=False``,
-        the queue is drained immediately (callers wanting a delay
-        should schedule the call via QTimer.singleShot).
-
-        Internal-action commands (Python method calls) are unaffected
-        by this flag — they execute immediately in both modes.
-        """
-        was_on = self._defer_keystrokes
-        self._defer_keystrokes = bool(on)
-        if was_on and not self._defer_keystrokes:
-            self._drain_deferred_queue()
-
-    def _drain_deferred_queue(self) -> None:
-        """Execute everything queued during a deferral window, in order."""
-        queue = self._deferred_queue
-        self._deferred_queue = []
-        for command in queue:
-            try:
-                self._execute_command_real(command)
-            except Exception as e:
-                if self.main_window and hasattr(self.main_window, 'log'):
-                    self.main_window.log(
-                        f"❌ Deferred voice command failed ({command.phrase!r}): {e}"
-                    )
+        phrases = [
+            (" ".join(p.lower().split()), cmd)
+            for cmd in self.commands if cmd.enabled
+            for p in [cmd.phrase] + cmd.aliases
+        ]
+        for phrase, cmd in phrases:
+            if phrase == heard:
+                return cmd
+        padded = " " + " ".join(w for w in heard_words if w != "[unk]") + " "
+        best = None
+        for phrase, cmd in phrases:
+            if (" " in phrase and f" {phrase} " in padded
+                    and (best is None or len(phrase) > len(best[0]))):
+                best = (phrase, cmd)
+        return best[1] if best else None
 
     def execute_command(self, command: VoiceCommand) -> bool:
-        """Execute a voice command. Returns True on success.
-
-        v1.10.197: when ``_defer_keystrokes`` is on, keystroke / AHK
-        commands are queued for later execution and this returns True
-        (the queueing was successful). Internal commands run
-        immediately regardless of the flag — they don't synthesise
-        keystrokes so they're safe to fire even with modifier keys
-        held physically by the user.
-        """
-        if self._defer_keystrokes and command.action_type in (
-            "keystroke", "ahk_inline", "ahk_script"
-        ):
-            self._deferred_queue.append(command)
-            if self.main_window and hasattr(self.main_window, 'log'):
-                self.main_window.log(
-                    f"🎙️ Voice command queued for after PTT release: "
-                    f"{command.phrase!r}"
-                )
-            return True
-        return self._execute_command_real(command)
-
-    def _execute_command_real(self, command: VoiceCommand) -> bool:
-        """Actual execution path. Split from :meth:`execute_command` in
-        v1.10.197 so deferred commands can re-enter the same logic
-        without going back through the defer-check."""
+        """Execute a voice command. Returns True on success."""
         try:
             if command.action_type == "internal":
                 return self._execute_internal(command)
@@ -431,19 +448,24 @@ class VoiceCommandManager(QObject):
     def _execute_keystroke(self, command: VoiceCommand) -> bool:
         """Execute a keystroke command.
 
-        On Windows, converts the keystroke string (e.g. ``ctrl+alt+p``) to
-        AHK ``Send`` syntax and runs it via ``_run_ahk_code`` – the same
-        proven path used by ``ahk_inline`` voice commands.
+        On Windows the chord (e.g. ``ctrl+alt+p``) is sent with pynput's
+        keyboard controller (SendInput), so it works without AutoHotkey.
+        Up to v1.10.373 it went through AutoHotkey and failed with
+        "AutoHotkey not found" for anyone who didn't have it.
 
         On other platforms, delegates to ``CrossPlatformKeySender``.
         """
         if IS_WINDOWS:
-            ahk_keys = self._convert_to_ahk_keys(command.action)
-            ahk_code = f'SendInput "{ahk_keys}"'
+            try:
+                send_chord(command.action)
+            except Exception as e:
+                self.error_occurred.emit(f"Couldn't send {command.action!r}: {e}")
+                return False
             if self.main_window and hasattr(self.main_window, 'log'):
                 self.main_window.log(
-                    f"⌨️ Keystroke: Sending '{command.action}' to foreground window")
-            return self._run_ahk_code(ahk_code, command)
+                    f"⌨️ Keystroke: Sent '{command.action}' to foreground window")
+            self.command_executed.emit(command.phrase, f"✓ {command.description}")
+            return True
 
         # macOS / Linux: use CrossPlatformKeySender
         try:
@@ -559,60 +581,6 @@ ExitApp
             self.error_occurred.emit(f"Failed to run AHK code: {e}")
             return False
     
-    def _convert_to_ahk_keys(self, keystroke: str) -> str:
-        """Convert keystroke string to AHK Send format"""
-        # Map modifier names to AHK symbols
-        modifiers = {
-            'ctrl': '^',
-            'control': '^',
-            'alt': '!',
-            'shift': '+',
-            'win': '#',
-            'windows': '#'
-        }
-        
-        # Special key names
-        special_keys = {
-            'enter': '{Enter}',
-            'return': '{Enter}',
-            'tab': '{Tab}',
-            'escape': '{Esc}',
-            'esc': '{Esc}',
-            'space': '{Space}',
-            'backspace': '{Backspace}',
-            'delete': '{Delete}',
-            'del': '{Delete}',
-            'insert': '{Insert}',
-            'ins': '{Insert}',
-            'home': '{Home}',
-            'end': '{End}',
-            'pageup': '{PgUp}',
-            'pgup': '{PgUp}',
-            'pagedown': '{PgDn}',
-            'pgdn': '{PgDn}',
-            'up': '{Up}',
-            'down': '{Down}',
-            'left': '{Left}',
-            'right': '{Right}',
-            'f1': '{F1}', 'f2': '{F2}', 'f3': '{F3}', 'f4': '{F4}',
-            'f5': '{F5}', 'f6': '{F6}', 'f7': '{F7}', 'f8': '{F8}',
-            'f9': '{F9}', 'f10': '{F10}', 'f11': '{F11}', 'f12': '{F12}',
-        }
-        
-        parts = keystroke.lower().replace(' ', '').split('+')
-        result = ''
-        
-        for part in parts:
-            if part in modifiers:
-                result += modifiers[part]
-            elif part in special_keys:
-                result += special_keys[part]
-            else:
-                # Regular key
-                result += part
-        
-        return result
-    
     def _find_ahk_executable(self) -> Optional[str]:
         """Find AutoHotkey v2 executable"""
         # Common installation paths
@@ -637,25 +605,18 @@ ExitApp
         return None
     
     def process_spoken_text(self, spoken_text: str) -> Tuple[bool, str]:
+        """Run the command for what was heard.
+
+        Returns (True, "✓ description") or (True, "✗ Failed: phrase") when
+        a command matched, (False, spoken_text) when none did.
         """
-        Process spoken text - try to match command, return success status and message.
-        Returns (was_command, message_or_text)
-        - If command matched: (True, "Command executed: ...")
-        - If no match: (False, original_spoken_text) for dictation fallback
-        """
-        match_result = self.find_matching_command(spoken_text)
-        
-        if match_result:
-            command, confidence = match_result
-            success = self.execute_command(command)
-            if success:
-                return (True, f"✓ {command.phrase} ({confidence:.0%})")
-            else:
-                return (True, f"✗ Failed: {command.phrase}")
-        
-        # No command matched - return text for dictation
-        self.command_not_found.emit(spoken_text)
-        return (False, spoken_text)
+        command = self.find_matching_command(spoken_text)
+        if command is None:
+            self.command_not_found.emit(spoken_text)
+            return (False, spoken_text)
+        if self.execute_command(command):
+            return (True, f"✓ {command.description or command.phrase}")
+        return (True, f"✗ Failed: {command.phrase}")
     
     def add_command(self, command: VoiceCommand):
         """Add a new command"""
@@ -680,7 +641,6 @@ ExitApp
         """Export commands to a file"""
         data = {
             'version': '1.0',
-            'match_threshold': self.match_threshold,
             'commands': [
                 {
                     'phrase': cmd.phrase,
@@ -702,17 +662,9 @@ ExitApp
         with open(filepath, 'r', encoding='utf-8') as f:
             data = json.load(f)
         
-        imported_commands = []
-        for cmd_data in data.get('commands', []):
-            imported_commands.append(VoiceCommand(
-                phrase=cmd_data['phrase'],
-                aliases=cmd_data.get('aliases', []),
-                action_type=cmd_data.get('action_type', 'internal'),
-                action=cmd_data.get('action', ''),
-                description=cmd_data.get('description', ''),
-                category=cmd_data.get('category', 'general'),
-                enabled=cmd_data.get('enabled', True)
-            ))
+        imported_commands = [
+            c for c in map(self._command_from_dict, data.get('commands', [])) if c
+        ]
         
         if merge:
             # Add imported commands, skip duplicates
@@ -729,19 +681,14 @@ ExitApp
 
 class ContinuousVoiceListener(QObject):
     """
-    Continuous voice listening with Voice Activity Detection (VAD).
-    
-    How it works:
-    1. Continuously monitors microphone audio levels
-    2. When speech is detected (audio above threshold), starts recording
-    3. When silence is detected (audio below threshold for X ms), stops recording
-    4. Sends recording to Whisper for transcription
-    5. Processes result (command or dictation)
-    6. Repeats
-    
-    This eliminates the need to press F9 twice - just speak and it listens.
+    Listens for voice commands until stopped.
+
+    1. Monitors microphone audio levels (amplitude VAD).
+    2. Records an utterance from speech onset until a short silence.
+    3. Vosk, in grammar mode, turns it into a command phrase or "[unk]".
+    4. A matched command runs; anything else is reported, never typed.
     """
-    
+
     # Signals
     listening_started = pyqtSignal()
     listening_stopped = pyqtSignal()
@@ -749,52 +696,18 @@ class ContinuousVoiceListener(QObject):
     # to load, the microphone went away). Emitted after listening_stopped.
     stopped_unexpectedly = pyqtSignal()
     speech_detected = pyqtSignal(str)  # Raw transcribed text
-    command_detected = pyqtSignal(str, str)  # (phrase, result)
-    text_for_dictation = pyqtSignal(str)  # Text that didn't match any command
+    command_detected = pyqtSignal(str, str)  # (heard, result)
+    no_command_matched = pyqtSignal(str)  # heard, matched no command
     status_update = pyqtSignal(str)
     error_occurred = pyqtSignal(str)
-    vad_status_changed = pyqtSignal(str)  # "listening", "recording", "processing"
-    
-    # Recognition engine identifiers. ``'vosk'`` is the default and is
-    # purpose-built for command recognition (fixed-vocabulary, ~30 ms
-    # latency, free, no cloud round-trip). ``'faster_whisper'`` covers
-    # the running-text dictation case. ``'api'`` uses OpenAI Whisper's
-    # cloud endpoint for users who prefer it.
-    ENGINE_VOSK = "vosk"
-    ENGINE_FASTER_WHISPER = "faster_whisper"
-    ENGINE_API = "api"
+    vad_status_changed = pyqtSignal(str)  # "loading", "waiting", "recording", "processing", "stopped"
 
     def __init__(self, command_manager: VoiceCommandManager,
-                 model_name: str = "base",
-                 language: str = "auto",
-                 engine: str = ENGINE_VOSK,
-                 api_key: str = None,
                  user_data_path=None,
-                 vosk_model_key: str = None,
-                 mic_device: str = None,
-                 initial_prompt: str = None,
-                 replacements: list = None):
+                 mic_device: str = None):
         super().__init__()
         self.command_manager = command_manager
-        self.model_name = model_name
-        self.language = None if language == "auto" else language
-        # Vocabulary biasing (v1.10.26). Passed straight through to
-        # whichever Whisper backend the dictation path picks (cloud
-        # API or local faster-whisper). Both surfaces accept it; Vosk
-        # ignores it because Vosk runs in grammar mode and only ever
-        # transcribes phrases from its pre-built command list. See
-        # modules.voice_vocabulary for the builder + post-processor.
-        self.initial_prompt = initial_prompt
-        self.replacements = replacements
-        # Backward-compat: legacy callers may still pass ``use_api=True``;
-        # we map that to the API engine if ``engine`` was left at default.
-        # New callers should pass the engine string directly.
-        if engine not in (self.ENGINE_VOSK, self.ENGINE_FASTER_WHISPER, self.ENGINE_API):
-            engine = self.ENGINE_VOSK
-        self.engine = engine
-        self.api_key = api_key
-        self.user_data_path = user_data_path  # required for Vosk model storage
-        self.vosk_model_key = vosk_model_key  # auto-resolved from language if None
+        self.user_data_path = user_data_path  # where the Vosk model lives
         # Saved device *name* from the Voice tab's Microphone dropdown
         # (None ⇒ OS default). Resolved to a sounddevice index inside
         # the audio thread via modules.mic_devices, so we always pick up
@@ -807,18 +720,7 @@ class ContinuousVoiceListener(QObject):
         self.min_speech_duration = 0.3  # Minimum speech duration to process
         self.max_speech_duration = 15.0  # Maximum recording duration
         self.is_listening = False
-        # Pause flag, set by pause()/resume(). When true, the audio
-        # callback drops incoming chunks instead of forwarding them to
-        # the recognizer. Used to mute the always-on listener while
-        # push-to-talk dictation has the mic.
-        self._paused = False
         self._thread = None
-        self._whisper_model = None  # Cached Whisper model
-
-    @property
-    def use_api(self) -> bool:
-        """Backward-compat shim for older code that asks ``use_api``."""
-        return self.engine == self.ENGINE_API
         
     def start(self):
         """Start continuous listening"""
@@ -835,8 +737,7 @@ class ContinuousVoiceListener(QObject):
         self._thread.start()
         # Hot-reload Vosk's grammar when the user adds / edits / removes
         # / disables a command, so they don't have to stop and restart
-        # Always-On to teach the recogniser a new phrase. The handler is
-        # a no-op for non-Vosk engines.
+        # Always-On to teach the recogniser a new phrase.
         try:
             self.command_manager.commands_changed.connect(
                 self._on_commands_changed)
@@ -874,11 +775,8 @@ class ContinuousVoiceListener(QObject):
         """Slot for ``VoiceCommandManager.commands_changed``.
 
         Sets a flag on the worker thread so it picks up the new grammar
-        between transcriptions. No-op outside the Vosk engine and when
-        the listener isn't actively running."""
+        between transcriptions. No-op when the listener isn't running."""
         if not self.is_listening:
-            return
-        if self.engine != self.ENGINE_VOSK:
             return
         if self._thread is None:
             return
@@ -887,26 +785,6 @@ class ContinuousVoiceListener(QObject):
         except Exception:
             pass
 
-    def pause(self):
-        """Mute the listener temporarily without tearing down the thread.
-
-        Used when push-to-talk dictation needs sole access to the mic
-        for a few seconds. Audio chunks captured during the pause are
-        discarded by the callback rather than queued for transcription,
-        so a) the user's dictation isn't interpreted as a half-heard
-        command, and b) we don't waste CPU running Vosk on Whisper-
-        bound speech.
-        """
-        self._paused = True
-
-    def resume(self):
-        """Re-enable the listener after a :meth:`pause`."""
-        self._paused = False
-
-    @property
-    def is_paused(self) -> bool:
-        return self._paused
-    
     def set_sensitivity(self, level: str):
         """
         Set microphone sensitivity level.
@@ -931,8 +809,7 @@ class ContinuousVoiceListener(QObject):
         if was_command:
             self.command_detected.emit(text, result)
         else:
-            # Pass to dictation
-            self.text_for_dictation.emit(text)
+            self.no_command_matched.emit(text)
 
 
 class _VADListenerThread(QObject):
@@ -952,7 +829,7 @@ class _VADListenerThread(QObject):
         self.listener = listener
         self._running = False
         self._thread = None
-        self._model = None  # Cached whisper / Vosk recognizer
+        self._model = None  # Vosk KaldiRecognizer
         # Set externally (cross-thread) when the user mutates the
         # command list. The transcription worker checks this between
         # clips and rebuilds the Vosk grammar without restarting the
@@ -993,111 +870,77 @@ class _VADListenerThread(QObject):
             min_speech_duration = self.listener.min_speech_duration
             max_speech_duration = self.listener.max_speech_duration
 
-            engine = self.listener.engine
-
-            if engine == ContinuousVoiceListener.ENGINE_API and self.listener.api_key:
-                self.status_update.emit("🎤 Using OpenAI Whisper API (fast & accurate)")
-                self._model = None
-
-            elif engine == ContinuousVoiceListener.ENGINE_VOSK:
-                self.status_update.emit("🎤 Loading Vosk recognizer (commands-only, free)...")
-                self.vad_status.emit("loading")
-                try:
-                    from vosk import Model as VoskModel, KaldiRecognizer
-                except ImportError:
-                    self.error_occurred.emit(
-                        "Vosk is not installed.\n\n"
-                        "Re-install Supervertaler:\n"
-                        "  pip install --upgrade supervertaler\n\n"
-                        "Or switch the Voice engine to 'OpenAI Whisper API' / "
-                        "'faster-whisper' in the meantime."
-                    )
-                    self._running = False
-                    return
-
-                # Resolve which Vosk model to use. If the caller didn't pin a
-                # specific model, pick one based on the listener's language hint.
-                from modules.vosk_model_manager import (
-                    DEFAULT_MODEL_KEY, get_model_path,
-                    download_and_extract, pick_model_for_language,
+            self.status_update.emit("🎤 Loading Vosk recognizer (commands only, free)...")
+            self.vad_status.emit("loading")
+            try:
+                from vosk import Model as VoskModel, KaldiRecognizer
+            except ImportError:
+                self.error_occurred.emit(
+                    "Vosk is not installed.\n\n"
+                    "Re-install Supervertaler:\n"
+                    "  pip install --upgrade supervertaler"
                 )
-                model_key = (self.listener.vosk_model_key
-                             or pick_model_for_language(self.listener.language)
-                             or DEFAULT_MODEL_KEY)
+                self._running = False
+                return
 
-                user_data = self.listener.user_data_path
-                if not user_data:
-                    self.error_occurred.emit(
-                        "Vosk needs a user-data path to install the model into. "
-                        "This is a configuration bug – please report it."
-                    )
-                    self._running = False
-                    return
+            # Commands are English, so the model is always the English
+            # one, whatever the project's languages (as in Trados).
+            from modules.vosk_model_manager import (
+                DEFAULT_MODEL_KEY, get_model_path, download_and_extract,
+            )
+            model_key = DEFAULT_MODEL_KEY
 
-                model_dir = get_model_path(model_key, user_data)
-                if model_dir is None:
-                    # First-time fetch. Stream the ZIP, extract, then load.
-                    self.status_update.emit(
-                        f"📥 Downloading Vosk model '{model_key}' (~40 MB, one-time)..."
-                    )
+            user_data = self.listener.user_data_path
+            if not user_data:
+                self.error_occurred.emit(
+                    "Vosk needs a user-data path to install the model into. "
+                    "This is a configuration bug – please report it."
+                )
+                self._running = False
+                return
 
-                    def _vosk_progress(done, total):
-                        if total > 0:
-                            mb_d = done // (1024 * 1024)
-                            mb_t = total // (1024 * 1024)
-                            self.status_update.emit(
-                                f"📥 Vosk model: {mb_d} / {mb_t} MB"
-                            )
+            model_dir = get_model_path(model_key, user_data)
+            if model_dir is None:
+                # First-time fetch. Stream the ZIP, extract, then load.
+                self.status_update.emit(
+                    f"📥 Downloading Vosk model '{model_key}' (~40 MB, one-time)..."
+                )
 
-                    model_dir = download_and_extract(
-                        model_key, user_data, progress_callback=_vosk_progress)
-                    if model_dir is None:
-                        self.error_occurred.emit(
-                            "Failed to download the Vosk model. Check your internet "
-                            "connection and try again."
+                def _vosk_progress(done, total):
+                    if total > 0:
+                        mb_d = done // (1024 * 1024)
+                        mb_t = total // (1024 * 1024)
+                        self.status_update.emit(
+                            f"📥 Vosk model: {mb_d} / {mb_t} MB"
                         )
-                        self._running = False
-                        return
 
-                # Build a phrase grammar from the user's active commands so
-                # Vosk biases its recogniser toward those phrases. Free-form
-                # speech that doesn't match anything in the grammar still
-                # gets classified, just much faster (and "[unk]" returned).
-                command_phrases = self._collect_vosk_grammar()
-
-                vmodel = VoskModel(str(model_dir))
-                # KaldiRecognizer accepts (model, sample_rate, grammar_json).
-                # Grammar is a JSON-encoded list of permitted phrases; we
-                # always include "[unk]" as the catch-all for non-command
-                # speech so out-of-grammar utterances don't error out.
-                import json as _json
-                grammar = _json.dumps(command_phrases + ["[unk]"])
-                self._model = KaldiRecognizer(vmodel, 16000, grammar)
-                # Stash the underlying VoskModel so it isn't GC'd before
-                # the recognizer is done with it.
-                self._vosk_model_obj = vmodel
-
-            else:
-                # faster_whisper path (default for running-text dictation).
-                self.status_update.emit("🎤 Loading faster-whisper model...")
-                self.vad_status.emit("loading")
-                try:
-                    from faster_whisper import WhisperModel
-                except ImportError:
+                model_dir = download_and_extract(
+                    model_key, user_data, progress_callback=_vosk_progress)
+                if model_dir is None:
                     self.error_occurred.emit(
-                        "faster-whisper is not installed.\n\n"
-                        "Re-install Supervertaler:\n"
-                        "  pip install --upgrade supervertaler\n\n"
-                        "Or switch the Voice engine to 'Vosk' or "
-                        "'OpenAI Whisper API'."
+                        "Failed to download the Vosk model. Check your internet "
+                        "connection and try again."
                     )
                     self._running = False
                     return
-                self._model = WhisperModel(
-                    self.listener.model_name,
-                    device="cpu",
-                    compute_type="int8",
-                )
+
+            # Build a phrase grammar from the user's active commands so
+            # Vosk biases its recogniser toward those phrases. Free-form
+            # speech that doesn't match anything in the grammar still
+            # gets classified, just much faster (and "[unk]" returned).
+            command_phrases = self._collect_vosk_grammar()
+
+            vmodel = VoskModel(str(model_dir))
+            # KaldiRecognizer accepts (model, sample_rate, grammar_json).
+            # Grammar is a JSON-encoded list of permitted phrases; we
+            # always include "[unk]" as the catch-all for non-command
+            # speech so out-of-grammar utterances don't error out.
+            import json as _json
+            grammar = _json.dumps(command_phrases + ["[unk]"])
+            self._model = KaldiRecognizer(vmodel, 16000, grammar)
+            # Stash the underlying VoskModel so it isn't GC'd before
+            # the recognizer is done with it.
+            self._vosk_model_obj = vmodel
 
             self.status_update.emit("🎤 Always-on listening active (waiting for speech...)")
             self.vad_status.emit("waiting")
@@ -1116,17 +959,6 @@ class _VADListenerThread(QObject):
                 nonlocal audio_buffer, is_recording, silence_start, speech_start
 
                 if not self._running:
-                    return
-
-                # Paused: drop incoming audio so push-to-talk dictation has
-                # the mic to itself. Reset the in-flight recording state so
-                # we don't resume mid-utterance with a stale buffer.
-                if self.listener._paused:
-                    if is_recording:
-                        is_recording = False
-                        audio_buffer = []
-                        silence_start = None
-                        self.vad_status.emit("waiting")
                     return
 
                 rms = np.sqrt(np.mean(indata**2))
@@ -1259,14 +1091,7 @@ class _VADListenerThread(QObject):
                 wf.setframerate(sample_rate)
                 wf.writeframes(audio_int16.tobytes())
             
-            # Transcribe using whichever engine is active.
-            engine = self.listener.engine
-            if engine == ContinuousVoiceListener.ENGINE_API and self.listener.api_key:
-                text = self._transcribe_with_api(temp_path)
-            elif engine == ContinuousVoiceListener.ENGINE_VOSK:
-                text = self._transcribe_with_vosk(temp_path)
-            else:
-                text = self._transcribe_with_local(temp_path)
+            text = self._transcribe_with_vosk(temp_path)
             
             # Clean up
             try:
@@ -1282,95 +1107,13 @@ class _VADListenerThread(QObject):
             import traceback
             self.error_occurred.emit(f"Processing error: {e}\n{traceback.format_exc()}")
 
-    def _transcribe_with_api(self, audio_path: str) -> str:
-        """Transcribe using OpenAI Whisper API - much more accurate"""
-        try:
-            from openai import OpenAI
-            
-            client = OpenAI(api_key=self.listener.api_key)
-            
-            with open(audio_path, "rb") as audio_file:
-                # Use whisper-1 model (OpenAI's hosted Whisper)
-                kwargs = {"model": "whisper-1", "file": audio_file}
-
-                # Add language hint if specified
-                if self.listener.language:
-                    kwargs["language"] = self.listener.language
-
-                # v1.10.26: vocabulary biasing. Passed as the
-                # ``prompt`` field; biases the decoder toward known
-                # brand / technical terms.
-                if getattr(self.listener, 'initial_prompt', None):
-                    kwargs["prompt"] = self.listener.initial_prompt
-
-                response = client.audio.transcriptions.create(**kwargs)
-
-            return self._post_process_transcript(response.text.strip())
-
-        except Exception as e:
-            self.error_occurred.emit(f"OpenAI API error: {e}")
-            return ""
-
-    def _transcribe_with_local(self, audio_path: str) -> str:
-        """Transcribe using local faster-whisper model.
-
-        Returns a generator of segments + an info object. We just
-        concatenate the segment texts to get the full transcription.
-        Wrapped in ``hide_subprocess_console_windows`` defensively – the
-        CTranslate2 backend doesn't shell out to ffmpeg, but the wrapper
-        is a no-op when nothing spawns a process so it costs nothing.
-        """
-        try:
-            with hide_subprocess_console_windows():
-                lang = self.listener.language or None
-                transcribe_kwargs = dict(
-                    language=lang,
-                    beam_size=5,
-                    vad_filter=False,  # we run our own amplitude VAD upstream
-                )
-                # v1.10.26: vocabulary biasing. Same effect as the
-                # cloud API – tokenises the prompt into the decoder's
-                # preceding-context so words appearing in the prompt
-                # get a small probability boost.
-                if getattr(self.listener, 'initial_prompt', None):
-                    transcribe_kwargs["initial_prompt"] = self.listener.initial_prompt
-                segments, _info = self._model.transcribe(
-                    audio_path, **transcribe_kwargs
-                )
-                # segments is a generator – iterate to materialise the output.
-                text = "".join(seg.text for seg in segments)
-            return self._post_process_transcript(text.strip())
-        except Exception as e:
-            self.error_occurred.emit(f"Local transcription error: {e}")
-            return ""
-
-    def _post_process_transcript(self, text: str) -> str:
-        """Apply the default + user-supplied replacement table
-        (modules.voice_vocabulary) to a freshly-transcribed string.
-
-        Wrapped in try/except so a buggy user replacement entry
-        can't bring down the listener – worst case we return the
-        raw text. v1.10.26.
-        """
-        if not text:
-            return text
-        try:
-            from modules.voice_vocabulary import post_process_transcript
-            return post_process_transcript(
-                text, getattr(self.listener, 'replacements', None)
-            )
-        except Exception as e:
-            print(f"[VoiceListener] replacement post-process error: {e}")
-            return text
-
     def _maybe_rebuild_vosk_grammar(self):
         """Replace the active KaldiRecognizer with one built from the
         current command list, when the ``_needs_grammar_rebuild`` flag
         has been set by an external mutation.
 
-        Runs only when (a) the flag is set, (b) the engine is Vosk, and
-        (c) we have a cached VoskModel object to attach the new
-        recognizer to. Always clears the flag, even on failure, so a
+        Runs only when (a) the flag is set and (b) we have a cached
+        VoskModel object to attach the new recognizer to. Always clears the flag, even on failure, so a
         broken rebuild doesn't loop forever – the next legitimate
         change will retry.
         """
@@ -1379,8 +1122,6 @@ class _VADListenerThread(QObject):
         # rebuild deterministically.
         self._needs_grammar_rebuild = False
 
-        if self.listener.engine != ContinuousVoiceListener.ENGINE_VOSK:
-            return
         if self._vosk_model_obj is None:
             return
 
@@ -1476,8 +1217,3 @@ class _VADListenerThread(QObject):
             self.error_occurred.emit(f"Vosk transcription error: {e}")
             return ""
 
-
-# Legacy class for backwards compatibility
-class _ListenerThread(_VADListenerThread):
-    """Legacy alias for _VADListenerThread"""
-    pass

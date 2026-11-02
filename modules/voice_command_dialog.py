@@ -95,12 +95,13 @@ _ACTION_CHEAT_SHEETS = {
         "<li><code>translate_segment</code>, <code>batch_translate</code></li>"
         "<li><code>open_superlookup</code>, <code>concordance_search</code></li>"
         "<li><code>show_log</code>, <code>show_editor</code></li>"
-        "<li><code>start_dictation</code>, <code>stop_listening</code></li>"
+        "<li><code>stop_listening</code></li>"
         "</ul>"
     ),
     "keystroke": (
         "<b>Keystroke</b> sends a key combination to whichever app is in the "
-        "foreground (Trados, memoQ, Word, browser, etc.).<br><br>"
+        "foreground (Trados, memoQ, Word, browser, etc.). It doesn't need "
+        "AutoHotkey.<br><br>"
         "Click the <b>Keystroke</b> field above and press the keys you want "
         "to send – the field captures them and shows the platform-native "
         "symbols (⌘⇧⌥⌃ on macOS, Ctrl+Shift+Alt elsewhere).<br><br>"
@@ -134,8 +135,8 @@ _ACTION_CHEAT_SHEETS = {
         "<li><code>C:\\Users\\you\\Documents\\AHK\\my-macro.ahk</code></li>"
         "</ul><br>"
         "Tip: keep reusable scripts in one folder, reference them by full path. "
-        "Use the AutoHotkey Integration → <b>Open Scripts Folder</b> button on "
-        "the Voice tab to jump there."
+        "Use the <b>Scripts folder</b> button under the Voice tab's command "
+        "table to jump there."
     ),
 }
 
@@ -144,7 +145,7 @@ class VoiceCommandEditDialog(QDialog):
     """Dialog for adding/editing voice commands"""
 
     CATEGORIES = ["navigation", "editing", "translation", "lookup", "file",
-                  "view", "dictation", "memoq", "trados", "custom"]
+                  "view", "voice", "memoq", "trados", "custom"]
     ACTION_TYPES = [
         ("internal", "Internal Action (Supervertaler)"),
         ("keystroke", "Keystroke (e.g., ctrl+s)"),
@@ -246,7 +247,7 @@ class VoiceCommandEditDialog(QDialog):
             "translate_segment", "batch_translate",
             "open_superlookup", "concordance_search",
             "show_log", "show_editor",
-            "start_dictation", "stop_listening"
+            "stop_listening"
         ])
         self.internal_combo.currentTextChanged.connect(lambda t: self.action_edit.setPlainText(t))
         ia_layout.addWidget(self.internal_combo)

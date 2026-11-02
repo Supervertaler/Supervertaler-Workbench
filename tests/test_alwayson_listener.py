@@ -122,8 +122,7 @@ class Recorder:
 
 def make_listener(tmp_path):
     manager = VoiceCommandManager(user_data_path=tmp_path)
-    return ContinuousVoiceListener(manager, engine="vosk",
-                                   user_data_path=str(tmp_path))
+    return ContinuousVoiceListener(manager, user_data_path=str(tmp_path))
 
 
 # ── 1. a listener whose thread dies stops claiming to listen ─────────────
@@ -296,73 +295,28 @@ class StatusBar:
         self.cleared += 1
 
 
-@pytest.mark.parametrize("ptt_owned", [False, True])
-def test_unmatched_speech_is_reported_not_typed(S, ptt_owned):
-    typed, log = [], []
+def test_unmatched_speech_is_reported_not_typed(S):
+    log, heard = [], []
+    # No _insert_dictated_text any more: if anything tried to type the
+    # text, this stand-in would raise AttributeError.
     window = SimpleNamespace(
-        _voice_command_ptt_owned=ptt_owned,
-        # The pre-1.10.374 default that let the text through:
-        load_dictation_settings=lambda: {"alwayson_commands_only": False},
-        _insert_dictated_text=typed.append,
         log=log.append,
         status_bar=StatusBar(),
+        _add_to_voice_heard_list=lambda *a, **k: heard.append((a, k)),
     )
-    S.SupervertalerQt._on_alwayson_dictation(window, "[unk] project tm next add [unk]")
+    S.SupervertalerQt._on_alwayson_no_match(window, "[unk] project tm next add [unk]")
 
-    assert typed == []
     assert any("not typed" in line for line in log)
     assert any("No command matched" in m for m in window.status_bar.messages)
+    assert heard == [(("[unk] project tm next add [unk]", "no command matched"), {"ok": None})]
 
 
-def make_ptt_window(S, manager):
-    """A window mid-way through a command push-to-talk hold."""
-    toggles = []
-    window = SimpleNamespace(
-        _voice_command_ptt_owned=True,
-        _voice_command_ptt_pending_stop=True,
-        _voice_command_ptt_last_vad_state="recording",
-        voice_command_manager=manager,
-        voice_listener=SimpleNamespace(is_listening=False),
-        _toggle_alwayson_listening=lambda: toggles.append("toggle"),
-        log=lambda *a: None,
-        status_bar=StatusBar(),
-    )
-    window._do_voice_command_ptt_stop = (
-        lambda: S.SupervertalerQt._do_voice_command_ptt_stop(window))
-    return window, toggles
-
-
-def test_listener_death_during_a_push_to_talk_hold_ends_the_hold(S, tmp_path,
-                                                                 monkeypatch):
-    manager = VoiceCommandManager(user_data_path=tmp_path)
-    sent = []
-    monkeypatch.setattr(manager, "_execute_command_real", sent.append)
-    manager.set_defer_keystrokes(True)            # what the PTT press does
-    keystroke = next(c for c in manager.commands if c.action_type == "keystroke")
-    manager.execute_command(keystroke)            # queued during the hold
-    assert sent == []
-
-    window, toggles = make_ptt_window(S, manager)
+def test_listener_death_is_only_logged(S):
+    log = []
+    window = SimpleNamespace(log=log.append, status_bar=StatusBar())
     S.SupervertalerQt._on_alwayson_listener_died(window)
-
-    assert window._voice_command_ptt_owned is False
-    assert window._voice_command_ptt_pending_stop is False
-    assert window.status_bar.cleared == 1         # "Listening for command…" gone
-    assert manager._defer_keystrokes is False     # later commands aren't held back
-    assert sent == [keystroke]                    # the queued one went out once
-
-    # Releasing the key afterwards, or the 1.5 s stop timer firing, must
-    # not start a listener again or send anything twice.
-    S.SupervertalerQt._on_voice_command_ptt_release(window)
-    S.SupervertalerQt._do_voice_command_ptt_stop(window)
-    assert toggles == [] and sent == [keystroke]
-
-
-def test_listener_death_without_push_to_talk_is_harmless(S):
-    window = SimpleNamespace(voice_command_manager=None, log=lambda *a: None,
-                             status_bar=StatusBar())
-    S.SupervertalerQt._on_alwayson_listener_died(window)
-    assert window._voice_command_ptt_owned is False
+    assert log == ["🔇 Always-on listener stopped unexpectedly"]
+    assert window.status_bar.messages == [] and window.status_bar.cleared == 0
 
 
 def test_main_window_listens_for_the_listener_dying():

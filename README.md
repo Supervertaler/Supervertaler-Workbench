@@ -44,7 +44,7 @@ python Supervertaler.py
 - **Glossary System** - Project/Background glossary highlighting with forbidden term marking
 - **Superlookup** - Unified concordance search across TM, glossaries, MT, and web resources
 - **CAT Tool Integration** - memoQ XLIFF, Trados SDLPPX/SDLRPX, CafeTran, Phrase, Déjà Vu X3
-- **Voice Commands** - Hands-free translation with OpenAI Whisper
+- **Voice Commands** - Hands-free control with offline voice commands (Vosk); use any dictation tool for running text
 - **Document Support** - DOCX, bilingual DOCX/RTF, PDF, Markdown, plain text + built-in [Okapi Framework](https://okapiframework.org/) sidecar for industry-standard file extraction and round-trip export with full formatting preservation
 
 ---

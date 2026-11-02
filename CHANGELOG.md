@@ -18,12 +18,41 @@ Workbench no longer has a Clipboard Manager, so that it can concentrate on trans
 
 ### Fixed (Voice · Always-On voice commands work in the Windows download)
 
-- **Always-On and the voice-command push-to-talk key (Ctrl+Alt+V) work in the Windows download again.** Since v1.9.435 (May 2026), starting either one failed with "[WinError 2] … _internal\vosk", because the speech recogniser, Vosk, was missing from the download. Installs made with pip were not affected. The Windows download is about 14 MB larger. The first time you start Always-On, Workbench downloads a small speech model (about 40 MB), as before.
-- **Speech that matches no command is no longer typed.** Always-On used to type it into whichever program was in front, often as fragments such as "[unk] project tm next add". Now the status bar just says "No command matched". Dictation (push-to-talk) is unchanged.
+- **Voice commands (Always-On) work in the Windows download again.** Since v1.9.435 (May 2026), starting them failed with "[WinError 2] … _internal\vosk", because the speech recogniser, Vosk, was missing from the download. Installs made with pip were not affected. The Windows download is about 14 MB larger. The first time you start Always-On, Workbench downloads a small speech model (about 40 MB), as before.
+- **Speech that matches no command is no longer typed.** Always-On used to type it into whichever program was in front, often as fragments such as "[unk] project tm next add". Now the status bar just says "No command matched".
 - **The Voice tab no longer says "Listening for speech…" when nothing is listening.**
   - If Always-On stops by itself, for example because Vosk can't load or the microphone is unplugged, the tab now says "Not active", and **Start Always-On** starts it again. Before, it kept saying "Listening for speech…", and the next press of Ctrl+Alt+O did nothing.
   - While the speech model loads, or downloads the first time, the tab says "Starting…".
-  - If Always-On stops while you are holding Ctrl+Alt+V, the "Listening for command…" message goes away, and keystroke commands are no longer held back afterwards.
+
+### Removed (Voice · the built-in dictation – Voice is now commands only)
+
+The Voice tab now does voice commands only, the way SuperVoice works in Supervertaler for Trados: you switch it on and speak commands. For running text, use a dictation tool such as Windows voice typing (Win+H), Wispr Flow or Dragon. Voice commands keep listening while you dictate with it.
+
+- **These are gone:**
+  - dictation push-to-talk (Ctrl+Shift+Space) and the **🎤 Dictate** buttons
+  - the Whisper model, length and language settings
+  - the dictation vocabulary, and the 🎤 Voice column on the Termbases tab
+  - the hold-to-talk key for voice commands (Ctrl+Alt+V)
+  - the "Pause Always-On for external dictation" key
+  - **Settings → Voice**, which still pointed to Sidekick
+- **Voice commands stay.** Switch them on and off with Ctrl+Alt+O, the button on the Voice tab or the tray icon. You can give Ctrl+Alt+O another key in **Settings → Keyboard Shortcuts**, for example the key you used for hold-to-talk.
+- **The keys you used for dictation and hold-to-talk are free again.** Workbench no longer claims them, so they work normally in other programs.
+- **Your old settings stay on disk, unused.** Downloaded speech models aren't deleted, and you can delete them yourself:
+  - the Whisper models, in the folders called `models--Systran--faster-whisper-…` under `C:\Users\<you>\.cache\huggingface\hub` (75 MB to 2.9 GB each)
+  - the Dutch Vosk model, `vosk-model-small-nl-0.22` in your data folder's `vosk-models` folder
+- The Windows download is about 50 MB smaller.
+- In v1.10.373, dictation had also stopped working, with "open() got an unexpected keyword argument 'metadata_errors'". That was a clash between two speech libraries, and it goes away with the dictation.
+
+### Changed (Voice · a simpler tab and safer commands)
+
+- **The Voice tab is one box:** the microphone, the on/off switch with its hotkey, and mic sensitivity. Under it, **What I heard** lists the last 50 things Voice heard and what each did, for example "✓ Undo last action" or "no command matched". The list is cleared when Workbench closes.
+- **Commands are spoken in English** and always use the English speech model, whatever your project's languages. Before, a Dutch target language loaded the Dutch model, but the commands were English phrases.
+- **Commands are matched exactly.** Workbench no longer fires the "closest" command when it heard something similar.
+  - A command fires when you say its phrase on its own.
+  - A phrase of two or more words also fires when Voice hears it inside a longer utterance.
+  - A one-word command fires only when you say it on its own, never in the middle of a sentence you're dictating.
+- **The built-in commands are distinctive phrases,** for example "next segment", "translate segment" and "translate all segments". The everyday one-word alternatives ("next", "okay", "save" and so on) are gone for new users. Your own command list is left as it is, apart from "start dictation", which is removed. Keep your own phrases distinctive too, because Voice keeps listening while you dictate with another tool.
+- **Keystroke commands no longer need AutoHotkey.** Workbench presses the keys itself. AutoHotkey is still needed for **AHK Inline** and **AHK Script** commands.
 
 ## v1.10.373 - November 1, 2026
 

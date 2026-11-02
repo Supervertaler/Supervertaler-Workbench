@@ -92,7 +92,7 @@ dependencies = [
     # Basic Spellchecking (lightweight, works offline)
     "pyspellchecker>=0.7.0",
 
-    # Voice dictation/commands
+    # Voice commands (microphone)
     "sounddevice>=0.4.6",
     "numpy>=1.24.0",
 
@@ -109,7 +109,7 @@ dependencies = [
     # Cross-platform global hotkeys and keyboard control
     "pynput>=1.7.6",
 
-    # Windows-only AutoHotkey support for Dicta keystroke commands
+    # Windows-only AutoHotkey support
     "ahk>=1.0.0; platform_system == 'Windows'",
     "psutil>=5.9.0",
 
@@ -117,20 +117,16 @@ dependencies = [
     # Service on Linux (Windows uses its own DPAPI through ctypes)
     "keyring>=25.0; platform_system != 'Windows'",
 
-    # Voice recognition – both engines are now core deps so the Voice tab
-    # works out of the box without any "[local-whisper]" extra dance.
-    # Vosk is the default always-on engine (lightweight, free, commands-only,
-    # ~15 MB wheel + ~40 MB model on first use). faster-whisper handles
-    # running-text dictation (push-to-talk) and the optional always-on
-    # Whisper backend (~30 MB ctranslate2 wheel + model on first use).
+    # Voice commands: Vosk in grammar mode (offline, free, commands only;
+    # ~15 MB wheel + ~40 MB English model on first use). The built-in
+    # dictation and its faster-whisper engine were removed in v1.10.374.
     "vosk>=0.3.44",
-    "faster-whisper>=1.0.0",
 ]
 
 [project.optional-dependencies]
 # All extras kept as no-ops for backward compatibility – installing
-# ``supervertaler[local-whisper]`` is harmless on existing setups but
-# the underlying package is now a core dep. Since v1.9.474 the
+# ``supervertaler[local-whisper]`` is harmless on existing setups (it
+# installs nothing; the dictation it was for is gone). Since v1.9.474 the
 # Workbench has stopped advertising any modular install paths;
 # `pip install supervertaler` gives the full surface area in one go.
 # The empty buckets are preserved here only so existing scripts that

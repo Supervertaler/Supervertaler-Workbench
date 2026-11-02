@@ -56,21 +56,13 @@ PyQt6-WebEngine>=6.5.0
 # PDF text extraction and OCR (PDF Rescue)
 PyMuPDF>=1.23.0
 
-# [voice] - Voice Dictation (~150 MB, requires ffmpeg)
-# Voice commands and dictation using Whisper
+# [voice] - Voice commands
 numpy>=1.24.0
 sounddevice>=0.4.6
-# Vosk – the default Voice Always-On engine (offline, commands-only,
-# free). Lightweight wheel (~14 MB) plus a per-language model that downloads
-# on first use (small models are ~50 MB). Required because Always-On defaults
-# to Vosk – without it, the very first click on the Always-On toggle errors
-# with "Vosk is not installed". Users who'd rather use Whisper API or
-# faster-whisper can switch the engine in the Voice tab.
+# Vosk – the voice-command recogniser (offline, commands only, free).
+# Lightweight wheel (~14 MB) plus the English model, which downloads on
+# first use (~40 MB).
 vosk>=0.3.44
-# Optional (offline/local speech recognition). Heavy dependency (PyTorch).
-# Install only if you want Local Whisper mode:
-#   pip install supervertaler[local-whisper]
-# openai-whisper>=20230314
 
 # [mt] - Additional MT Providers (~30 MB)
 # DeepL API and Amazon Translate
@@ -91,8 +83,7 @@ pynput>=1.7.6
 # Accessibility permission.
 pyobjc-framework-Cocoa>=10.0; sys_platform == "darwin"
 
-# [windows] - Windows-only AutoHotkey support for keystroke commands
-# (used by Dicta voice commands of type 'keystroke', 'ahk_inline', 'ahk_script')
+# [windows] - Windows-only AutoHotkey support
 ahk>=1.0.0; sys_platform == "win32"
 
 # API keys locked to the computer: the Keychain on a Mac, the Secret Service on
@@ -104,4 +95,3 @@ keyring>=25.0; sys_platform != "win32"
 # - Linux: Install Hunspell dictionaries: sudo apt install hunspell-<lang>
 # - macOS: All features available
 # - Windows: All features available
-# - Supervoice: Requires ffmpeg system package on all platforms

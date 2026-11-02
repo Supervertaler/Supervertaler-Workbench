@@ -192,28 +192,6 @@ class ShortcutManager:
             "action": "force_refresh_matches"
         },
 
-        # Special
-        "voice_dictate": {
-            "category": "Special",
-            "description": "Voice dictation / push-to-talk",
-            "default": "Ctrl+Shift+Space",
-            "action": "start_voice_dictation",
-            "global": True,
-        },
-        # v1.10.193: push-to-talk for voice COMMANDS (next segment, add
-        # term, etc.) so users can pair Supervertaler's command listener
-        # with an external dictation app (Wispr Flow, etc.) without the
-        # always-on mic open all the time. Holding the chord temporarily
-        # starts the ContinuousVoiceListener; releasing stops it. Same
-        # code path as the Ctrl+Alt+O toggle, just gated by a hold.
-        "voice_command_ptt": {
-            "category": "Special",
-            "description": "Voice commands push-to-talk (hold to listen for commands)",
-            "default": "Ctrl+Alt+V",
-            "action": "voice_command_ptt",
-            "global": True,
-        },
-
         # Match Insertion (Direct)
         "match_insert_1": {
             "category": "Match Insertion",
@@ -795,7 +773,6 @@ class ShortcutManager:
             'global_superlookup':       'tools_universal_lookup',
             'global_quicktrans':        'mt_quick_lookup',
             'global_sidekick':          'sidekick_open',
-            'global_pushtotalk':        'voice_dictate',
             'global_alwayson_toggle':   'voice_alwayson_toggle',
         }
         merge_changed = False
@@ -855,7 +832,6 @@ class ShortcutManager:
             'global_superlookup':     'tools_universal_lookup',
             'global_quicktrans':      'mt_quick_lookup',
             'global_sidekick':        'sidekick_open',
-            'global_pushtotalk':      'voice_dictate',
             'global_alwayson_toggle':       'voice_alwayson_toggle',
             # Voice rename (v1.9.491): AutoFingers → Voice
             'autofingers_alwayson_toggle':  'voice_alwayson_toggle',
