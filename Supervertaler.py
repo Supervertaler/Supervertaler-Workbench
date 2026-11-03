@@ -10672,12 +10672,12 @@ class SupervertalerQt(QMainWindow):
         plugin's TermLensPopupForm behaviour.
 
         Keyboard inside the popup:
-          - Right / Down / Tab  → next chip (wraps)
-          - Left / Up           → previous chip
+          - Right / Tab         → next chip (wraps)
+          - Left / Shift+Tab    → previous chip
           - Enter               → insert current chip
           - 1–9                 → insert chip N directly
-          - E                   → open editor for current chip
-          - I                   → toggle metadata sticky popup for current chip
+          - E / Up              → open editor for current chip
+          - I / Down            → toggle metadata sticky popup for current chip
           - Esc                 → close
 
         Auto-closes on mouse movement (>4 px), focus loss, or any other key

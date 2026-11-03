@@ -5,6 +5,24 @@ All notable changes to Supervertaler Workbench are documented in this file.
 **Current Version:** v1.10.374 (November 3, 2026)
 
 
+## Unreleased
+
+### Changed (TermLens pop-up · Up edits an entry, Down shows its info)
+
+In the TermLens pop-up that opens when you tap Ctrl, the Up and Down arrows did the same as Left and Right. They now have jobs of their own:
+
+- **Up** opens the highlighted entry for editing, like **E**.
+- **Down** shows or hides the highlighted entry's details, like **I**. Holding Down shows them once; they don't flicker.
+- **Left** and **Right** move between the chips, as before. All other keys work as before.
+
+The line at the bottom of the pop-up now reads "← → cycle · Enter insert · 1–9 insert · ↑/E edit · ↓/I info · Esc close · F1 help".
+
+### Fixed (TermLens pop-up · the first chip is selected again when it opens)
+
+- When the pop-up opened, no chip was selected, so Enter, E and I did nothing until you had pressed an arrow key. The first chip is selected again when it opens. This had been broken since v1.10.283.
+- **Tab** and **Shift+Tab** now move between the chips. Before, Tab moved the keyboard focus away from the chips, and the arrow keys then scrolled the pop-up instead.
+
+
 ## v1.10.374 - November 3, 2026
 
 ### Removed (the Clipboard Manager – Supervertaler Sidekick is the clipboard tool)

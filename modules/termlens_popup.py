@@ -19,13 +19,15 @@ running through the same ``TermBlock`` code path.
 
 Keyboard
 ────────
-- Right / Down / Tab          → next chip (wraps)
-- Left / Up / Shift+Tab       → previous chip
+- Right / Tab                 → next chip (wraps)
+- Left / Shift+Tab            → previous chip
 - 1-9, Alt+1-9                → directly insert chip N (same numbering
                                 as the docked panel's Alt-shortcut)
 - Enter                       → insert currently-highlighted chip
-- E                           → open editor for the highlighted chip
-- I                           → toggle the sticky metadata popup
+- E / Up                      → open editor for the highlighted chip
+- I / Down                    → toggle the sticky metadata popup
+                                (a held-down Down toggles once, not
+                                at the key-repeat rate)
 - Esc                         → close
 - Anything else not in this set → close (with a carve-out for pure
                                   modifier presses so the Ctrl-release
@@ -244,7 +246,7 @@ class TermLensPopup(QFrame):
         # is tagged with the help topic below) and is mentioned in the
         # hint string for discoverability.
         self._hint_label = QLabel(
-            "← → cycle  ·  Enter insert  ·  1–9 insert  ·  E edit  ·  I info  ·  Esc close  ·  F1 help"
+            "← → cycle  ·  Enter insert  ·  1–9 insert  ·  ↑/E edit  ·  ↓/I info  ·  Esc close  ·  F1 help"
         )
         self._hint_label.setStyleSheet(
             "color: #888; font-size: 8pt; padding: 3px 6px; background: transparent;"
@@ -295,11 +297,9 @@ class TermLensPopup(QFrame):
         QTimer.singleShot(0, self._fit_height_to_content)
         QTimer.singleShot(80, self._fit_height_to_content)
 
-        # ── Highlight the first chip ──────────────────────────────────
-        blocks = self._inner.get_term_blocks(only_with_matches=True)
-        if blocks:
-            self._current_index = 0
-            blocks[0].set_current(True)
+        # The first chip is highlighted in showEvent: the inner widget
+        # renders its chips only once it is visible (v1.10.283), so at
+        # this point there are none yet.
 
         # v1.10.90 — belt-and-suspenders Esc binding. Our keyPressEvent
         # also handles Esc, but in some focus configurations (e.g. when
@@ -560,6 +560,15 @@ class TermLensPopup(QFrame):
 
     def showEvent(self, event):
         super().showEvent(event)
+        # Highlight the first chip. Qt shows children before sending the
+        # parent its show event, so the inner widget has rendered its
+        # deferred chips by now. Before this, no chip was highlighted
+        # on open and Enter / E / I did nothing until an arrow press.
+        if self._current_index < 0:
+            blocks = self._inner.get_term_blocks(only_with_matches=True)
+            if blocks:
+                self._current_index = 0
+                blocks[0].set_current(True)
         # Capture the cursor baseline AFTER the popup is on-screen so
         # the first paint doesn't shift the cursor and tear us down on
         # tick #1.
@@ -668,11 +677,11 @@ class TermLensPopup(QFrame):
             event.accept()
             return
 
-        if key in (Qt.Key.Key_Right, Qt.Key.Key_Down, Qt.Key.Key_Tab):
+        if key in (Qt.Key.Key_Right, Qt.Key.Key_Tab):
             self._move_selection(+1)
             event.accept()
             return
-        if key in (Qt.Key.Key_Left, Qt.Key.Key_Up):
+        if key == Qt.Key.Key_Left:
             self._move_selection(-1)
             event.accept()
             return
@@ -693,6 +702,22 @@ class TermLensPopup(QFrame):
 
         if key == Qt.Key.Key_I and mods == Qt.KeyboardModifier.NoModifier:
             self._toggle_info_for_current()
+            event.accept()
+            return
+
+        # v1.10.375 — Up = E (edit) and Down = I (info); Left / Right
+        # alone cycle. Same no-modifier rule as E and I, ignoring the
+        # keypad flag (numpad arrows; every arrow on macOS). A held
+        # Down toggles once rather than flickering the info popup at
+        # the key-repeat rate.
+        plain = (mods & ~Qt.KeyboardModifier.KeypadModifier) == Qt.KeyboardModifier.NoModifier
+        if key == Qt.Key.Key_Up and plain:
+            self._edit_current()
+            event.accept()
+            return
+        if key == Qt.Key.Key_Down and plain:
+            if not event.isAutoRepeat():
+                self._toggle_info_for_current()
             event.accept()
             return
 
@@ -720,6 +745,12 @@ class TermLensPopup(QFrame):
             return
 
         super().keyPressEvent(event)
+
+    def focusNextPrevChild(self, forward: bool) -> bool:
+        # Tab / Shift+Tab cycle the chips (keyPressEvent). Without this,
+        # QWidget handles Tab as focus navigation first: it moved focus
+        # into the inner scroll area, which then took the arrow keys.
+        return False
 
     def keyReleaseEvent(self, event: QKeyEvent):
         # v1.10.90 — second-Ctrl-tap-to-close. If Ctrl is released
