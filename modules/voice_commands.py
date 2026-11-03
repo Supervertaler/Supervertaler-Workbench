@@ -255,10 +255,12 @@ class VoiceCommandManager(QObject):
                 lambda message: main_window.log(f"❌ Voice command: {message}"))
 
     def _log_missing(self, method_name: str):
-        """Log when a method is missing from main_window"""
+        """Log when a method is missing from main_window. Returns False,
+        so the command is reported as failed, not done."""
         print(f"⚠️ Voice command: Method '{method_name}' not found on main window")
         if self.main_window and hasattr(self.main_window, 'log'):
             self.main_window.log(f"⚠️ Voice command: Method '{method_name}' not found")
+        return False
 
     def _show_tab(self, main_window, tab_name: str):
         """Helper to switch to a specific tab"""
@@ -269,11 +271,20 @@ class VoiceCommandManager(QObject):
                     return
     
     def _stop_voice_recognition(self):
-        """Stop the voice recognition system"""
-        if self.main_window and hasattr(self.main_window, 'voice_command_listener'):
-            listener = self.main_window.voice_command_listener
-            if listener and hasattr(listener, 'stop'):
-                listener.stop()
+        """Switch Always-On off the way its button, the tray icon and
+        Ctrl+Alt+O do, so the Voice tab, the tray and the status bar all
+        show it stopped. Returns False when nothing is listening: the
+        toggle would *start* the listener then.
+
+        Up to v1.10.374 this looked for ``voice_command_listener``, which
+        never existed (it is ``voice_listener``), so "stop listening"
+        did nothing and was still listed with a ✓.
+        """
+        listener = getattr(self.main_window, 'voice_listener', None)
+        if listener is None or not listener.is_listening:
+            return False
+        self.main_window._toggle_alwayson_listening()
+        return True
     
     @classmethod
     def _default_commands(cls) -> List[VoiceCommand]:
@@ -424,6 +435,13 @@ class VoiceCommandManager(QObject):
         if handler:
             try:
                 result = handler()
+                # A handler returns False when it could do nothing (no
+                # listener to stop, a missing method). Other results,
+                # None included, mean it ran.
+                if result is False:
+                    if self.main_window and hasattr(self.main_window, 'log'):
+                        self.main_window.log(f"⚠️ Voice command did nothing: {command.phrase} → {command.action}")
+                    return False
                 # Log success to main window if available
                 if self.main_window and hasattr(self.main_window, 'log'):
                     self.main_window.log(f"✓ Voice command executed: {command.phrase} → {command.action}")
