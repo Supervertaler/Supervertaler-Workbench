@@ -7,6 +7,10 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ## Unreleased
 
+### Changed (app icon · Workbench is green)
+
+Workbench's icon is now a green Sv rather than a blue one: in the taskbar, the tray, the title bar and the installer, on Windows and macOS. The blue Sv belongs to Supervertaler for Trados, so a Trados user who saw it in the taskbar could take Workbench for the Trados plugin. The green is the one the Workbench pages on supervertaler.com and in the docs already use.
+
 ### Changed (TermLens pop-up · Up edits an entry, Down shows its info)
 
 In the TermLens pop-up that opens when you tap Ctrl, the Up and Down arrows did the same as Left and Right. They now have jobs of their own:
