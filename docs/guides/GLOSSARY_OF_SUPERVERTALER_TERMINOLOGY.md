@@ -11,12 +11,11 @@
   - Image Context
   - Prompt Manager 
 - Tools:
-  - Voice (voice commands and dictation; was named AutoFingers prior to v1.9.491)
+  - Voice (voice commands; was named AutoFingers prior to v1.9.491)
   - PDF Rescue (AI OCR)
   - Superbench (LLM Translation Quality Benchmarking System)
   - Superlookup: unified concordance search
   - Superbrowser (Multi-Chat AI Browser)
-  - Supervoice: dictation stuff
   - Text Encoding Repair
   - TMX Editor
   - Tracked Changes  

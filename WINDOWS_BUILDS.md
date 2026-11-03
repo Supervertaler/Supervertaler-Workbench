@@ -6,8 +6,7 @@ Supervertaler Windows releases are published as a **single ZIP asset**:
 
 - **File:** `Supervertaler-v<version>-Windows.zip` (e.g. `Supervertaler-v1.10.325-Windows.zip`)
 - **Size:** ~480 MB (compressed)
-- **Contents:** Full application (all core CAT-tool features, LLM translation, TM/glossaries, voice dictation via the OpenAI Whisper API)
-- **Excludes:** offline Local Whisper (PyTorch) — that ML stack conflicts with PyInstaller, so voice dictation ships via the OpenAI API only.
+- **Contents:** Full application (all core CAT-tool features, LLM translation, TM/glossaries, voice commands with the offline Vosk recogniser)
 
 > The older two-flavor CORE / FULL split (and the offline Local Whisper "FULL" build) was retired; there is now just one build.
 

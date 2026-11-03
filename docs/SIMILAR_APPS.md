@@ -142,7 +142,7 @@ A curated list of translation tools and AI-powered assistants that offer similar
 | Full Context Translation | ✅ | ❌ | ✅ (entire documents) | ❌ (segment-by-seg) | ❓ | ❌ | ❌ | ✅ (context-aware) | ❓ |
 | Translation Memory | ✅ SQLite + TMX | ❌ | ➖ (uses Trados TM) | ➖ (uses Trados TM) | ✅ | ✅ | ✅ | ✅ (XAligner) | ✅ |
 | Terminology Management | ✅ | ❌ | ➖ (exports from Trados) | ➖ (uses Trados TB) | ✅ | ✅ | ✅ | ❓ | ✅ |
-| Voice Dictation | ✅ Whisper | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Voice Commands | ✅ Offline (Vosk) | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Open Source | ✅ MIT License | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Free | ✅ | Freemium (pay-per-char) | Freemium (500 words) | ✅ (API costs) | ❓ | From $40/mo | Custom/Enterprise | ✅ Free | Paid |
 
