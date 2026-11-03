@@ -126,6 +126,17 @@ def test_editing_a_command_never_edits_the_defaults(tmp_path):
     assert before == after
 
 
+def test_the_command_dialog_only_suggests_multi_word_phrases(app):
+    # Up to v1.10.374 the Aliases placeholder suggested "confirm, done, okay".
+    from modules.voice_command_dialog import VoiceCommandEditDialog
+    dialog = VoiceCommandEditDialog()
+    for edit in (dialog.phrase_edit, dialog.aliases_edit):
+        text = edit.placeholderText()
+        examples = text.removeprefix("e.g., ").split(" (")[0].split(", ")
+        assert all(" " in e for e in examples), text
+        assert not EVERYDAY & set(examples), text
+
+
 # ── saved lists from v1.10.373 ───────────────────────────────────────────
 
 def write_old_list(tmp_path, commands):

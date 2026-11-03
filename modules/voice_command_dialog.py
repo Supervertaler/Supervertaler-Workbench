@@ -177,7 +177,9 @@ class VoiceCommandEditDialog(QDialog):
         aliases_layout = QHBoxLayout()
         aliases_layout.addWidget(QLabel("Aliases:"))
         self.aliases_edit = QLineEdit()
-        self.aliases_edit.setPlaceholderText("e.g., confirm, done, okay (comma-separated)")
+        # Multi-word examples, as the Voice tab advises: an everyday word
+        # ("done", "okay") would fire while the user dictates elsewhere.
+        self.aliases_edit.setPlaceholderText("e.g., segment done, mark as confirmed (comma-separated)")
         aliases_layout.addWidget(self.aliases_edit)
         layout.addLayout(aliases_layout)
 
