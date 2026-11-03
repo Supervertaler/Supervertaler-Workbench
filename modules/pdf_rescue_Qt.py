@@ -203,7 +203,8 @@ class PDFRescueQt:
         self.model_combo.addItem("--- Claude (Anthropic) ---")
         self.model_combo.addItems(["claude-sonnet-5-5", "claude-opus-5-5", "claude-fable-5-1"])
         self.model_combo.addItem("--- Gemini (Google) ---")
-        self.model_combo.addItems(["gemini-3.1-flash-lite", "gemini-2.5-pro", "gemini-3.1-pro-preview"])
+        self.model_combo.addItems(["gemini-3.1-flash-lite", "gemini-2.5-pro", "gemini-3.1-pro-preview",
+                                   "gemini-4-argon"])
 
         # Set default and style separator items
         self.model_combo.setCurrentText("gpt-6.1-sol")
@@ -250,7 +251,8 @@ class PDFRescueQt:
 • claude-opus-5-5: Anthropic's newest Opus; best for dense, complex or technical documents
 • claude-fable-5-1: Anthropic's most capable model; for the hardest pages when cost is secondary
 • gemini-3.1-flash-lite: Fast and economical Google option; good for high-volume, straightforward pages
-• gemini-2.5-pro: Premium Google option; strong on complex layouts and dense documents"""
+• gemini-2.5-pro: Premium Google option; strong on complex layouts and dense documents
+• gemini-4-argon: Google's most capable model; for the hardest pages when cost is secondary"""
         self.model_descriptions_text.setPlainText(model_descriptions)
         options_layout.addWidget(self.model_descriptions_text)
         

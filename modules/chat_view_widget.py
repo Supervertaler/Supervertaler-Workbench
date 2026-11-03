@@ -655,7 +655,8 @@ class ChatViewWidget(QWidget):
             ("gemini", "Google", {
                 "gemini-3.1-flash-lite": {"name": "Gemini 3.1 Flash-Lite", "description": "Fast & economical"},
                 "gemini-2.5-pro": {"name": "Gemini 2.5 Pro", "description": "High quality"},
-                "gemini-3.1-pro-preview": {"name": "Gemini 3.1 Pro", "description": "Latest, most capable"},
+                "gemini-3.1-pro-preview": {"name": "Gemini 3.1 Pro", "description": "The Pro before Gemini 4 Argon"},
+                "gemini-4-argon": {"name": "Gemini 4 Argon", "description": "Google's most capable, 1M context"},
                 "gemma-4-26b-a4b-it": {"name": "Gemma 4 26B MoE", "description": "Open model, lightweight"},
             }),
             ("mistral", "Mistral", LLMClient.MISTRAL_MODELS),

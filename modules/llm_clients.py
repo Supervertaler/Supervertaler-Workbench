@@ -8,7 +8,7 @@ Can be used standalone or imported by other applications.
 Supported Providers:
 - OpenAI (GPT-6 Astra, GPT-6.1 Sol, GPT-6 Luna)
 - Anthropic (Claude Sonnet 5.5, Opus 5.5, Fable 5.1)
-- Google (Gemini 3.1 Flash-Lite, 2.5 Pro, 3.1 Pro Preview, Gemma 4 26B MoE)
+- Google (Gemini 3.1 Flash-Lite, 2.5 Pro, 3.1 Pro Preview, 4 Argon, Gemma 4 26B MoE)
 - Mistral AI (Mistral Large, Mistral Small)
 - DeepSeek (V4 Pro, V4 Flash)
 
@@ -569,7 +569,8 @@ class LLMClient:
             "gemini-3.1-flash-lite",
             "gemini-3.5-flash",
             "gemini-2.5-pro",
-            "gemini-3.1-pro-preview"
+            "gemini-3.1-pro-preview",
+            "gemini-4-argon"
         ]
     }
 

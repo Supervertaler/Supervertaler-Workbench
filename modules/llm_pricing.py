@@ -131,6 +131,11 @@ def _cache_multipliers(model: str) -> Tuple[float, float]:
     if lc.startswith("deepseek") or "deepseek/" in lc:
         return (0.1, 1.0)
 
+    # Gemini 4 reads its implicit cache at 95% off: $0.10 against $2 on Argon
+    # (Google's pricing page, checked 2026-10-29, as in the Trados plugin).
+    if lc.startswith("gemini-4") or lc.startswith("google/gemini-4"):
+        return (0.05, 1.0)
+
     # Gemini 2.5+ implicit caching: 75% off cache reads.
     if (lc.startswith("gemini-2.5") or lc.startswith("gemini-3")
             or lc.startswith("google/gemini-2.5") or lc.startswith("google/gemini-3")):

@@ -1,6 +1,12 @@
 {
   "note": "Canonical LLM price list shared by Supervertaler for Trados and Supervertaler Workbench. Single source of truth. Prices are USD per 1,000,000 tokens (input, output). To override prices for BOTH products at once, copy this file to <home>/Supervertaler/pricing.json and edit it there; each app prefers that shared copy over its bundled default. Cache-discount multipliers are applied in code per provider and are not listed here. Keep the bundled copies in both repos in sync.",
-  "version": "2026-10-07",
+  "version": "2026-11-01",
+  "mt_note": "Machine-translation engines (SuperBench): USD per 1,000,000 CHARACTERS, not tokens, at list price for characters beyond a plan's allowance - DeepL Growth, Google NMT, Microsoft S1 standard translation, as the vendors' pages gave them on 30 Oct 2026. Workbench does not read this section.",
+  "mt": {
+    "deepl": 27.50,
+    "google": 20.00,
+    "microsoft": 10.00
+  },
   "models": {
     "gpt-6-astra": { "input": 10.0, "output": 50.0 },
     "gpt-6.1-sol": { "input": 2.0, "output": 10.0 },
@@ -28,6 +34,7 @@
     "gemini-3.5-flash": { "input": 1.5, "output": 9.0 },
     "gemini-2.5-pro": { "input": 1.25, "output": 10.0 },
     "gemini-3.1-pro-preview": { "input": 2.0, "output": 12.0 },
+    "gemini-4-argon": { "input": 4.0, "output": 20.0 },
     "gemini-3.8-flash": { "input": 0.75, "output": 3.75 },
     "gemini-3.7-flash": { "input": 0.75, "output": 3.75 },
     "gemini-3.6-flash": { "input": 0.75, "output": 3.75 },
@@ -59,6 +66,7 @@
     "openai/gpt-4o": { "input": 2.5, "output": 10.0 },
     "google/gemini-3.8-flash": { "input": 0.75, "output": 3.75 },
     "google/gemini-3.1-pro-preview": { "input": 2.0, "output": 12.0 },
+    "google/gemini-4-argon": { "input": 4.0, "output": 20.0 },
     "google/gemini-3-flash-preview": { "input": 0.5, "output": 3.0 },
     "google/gemma-4-31b-it": { "input": 0.09, "output": 0.34 },
     "google/gemma-4-26b-a4b-it": { "input": 0.09, "output": 0.3 },
