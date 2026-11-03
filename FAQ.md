@@ -31,7 +31,7 @@ Supervertaler is **The Ultimate Translation Workbench**. It works alongside your
 - **Project termbases** with automatic term extraction
 - **Translation memory** with fuzzy matching
 - **AI Assistant** for conversational prompt generation
-- **Voice dictation** (100+ languages via Whisper)
+- **Voice commands** for hands-free control
 - **Unified prompt library** with 38+ built-in prompts
 - **CAT tool integration** (memoQ, Trados, CafeTran)
 
@@ -76,7 +76,7 @@ Developed with assistance from **Claude AI** (Anthropic) using collaborative hum
 - ✅ Works *alongside* CAT tools as companion
 - ✅ Better AI integration with prompt management
 - ✅ Conversational AI Assistant for prompt generation
-- ✅ Voice dictation built-in (100+ languages)
+- ✅ Voice commands built in, for hands-free control
 - ⚠️ Not a full CAT tool replacement (no alignment, LiveDocs, etc.)
 
 **vs. AI Translation Plugins:**
@@ -88,7 +88,7 @@ Developed with assistance from **Claude AI** (Anthropic) using collaborative hum
 **Unique Selling Points:**
 - **2-Layer Prompt Architecture** with AI-generated custom prompts
 - **Project Termbases** with automatic term extraction
-- **Supervoice** - F9 voice dictation in 100+ languages
+- **Voice Commands** - control Workbench hands-free with spoken commands
 - **Superbench** - Benchmark AI models on YOUR projects
 - **Universal Lookup** - Ctrl+Alt+L system-wide TM search
 
@@ -281,11 +281,11 @@ Full guide: [INSTALLATION.md](INSTALLATION.md)
 - Attach files (PDF, DOCX, TXT, MD) for context
 - Ask questions about segments and terminology
 
-**🎤 Supervoice Voice Dictation**
-- F9 global hotkey (press-to-start/stop)
-- 100+ language support via OpenAI Whisper
-- 5 model sizes (tiny to large)
-- Dictate directly into target cells
+**🎤 Voice Commands**
+- Ctrl+Alt+O switches them on and off, from any app
+- Say a command such as "next segment" or "translate segment"
+- Recognised offline, on your own computer
+- For running text, use a dictation tool such as Windows voice typing (Win+H)
 
 **📊 Superbench (LLM Benchmarking)**
 - Test GPT-4o, Claude, Gemini on YOUR projects
@@ -405,7 +405,7 @@ Load images to provide visual context for AI translation - essential for technic
 
 **Main Translation:**
 - F5: Translate selected segments (or active segment if none selected)
-- F9: Start/stop voice dictation (global hotkey - works in any app)
+- Ctrl+Alt+O: Switch voice commands on/off (global hotkey - works in any app)
 - Ctrl+Alt+L: Universal Lookup (system-wide TM search)
 - Ctrl+P: Open Unified Prompt Library
 
@@ -557,7 +557,7 @@ Supervertaler provides AI with multiple layers of context:
 - **openai:** OpenAI API client
 - **anthropic:** Claude API client
 - **google-generativeai:** Gemini API client
-- **openai-whisper (optional):** Offline/local voice dictation (very large dependency; installs PyTorch). The default/recommended path uses the OpenAI Whisper API via `openai`.
+- **vosk:** Offline speech recognition for voice commands
 - **Pillow (PIL):** Image processing for figure context
 
 **Architecture:**
@@ -589,10 +589,10 @@ Supervertaler provides AI with multiple layers of context:
 - Project management
 - All UI features except AI translation
 
-**Voice Dictation (Supervoice):**
-- Fully offline if using "tiny" or "base" Whisper models
-- Downloads once, runs locally on your machine
-- No internet required after initial model download
+**Voice Commands:**
+- Recognised offline, on your own computer
+- A small English speech model (about 40 MB) downloads the first time you switch them on
+- No internet required after that
 
 **Local LLM (Ollama):**
 - Fully offline AI translation on your own computer
@@ -658,9 +658,8 @@ ollama pull translategemma:4b
 - **Disk:** SSD for faster TM searches
 - **Display:** 1920x1080 or higher resolution
 
-**For Voice Dictation (Supervoice):**
-- **RAM:** 8 GB minimum (16 GB for "large" model)
-- **Disk:** 1-3 GB for Whisper models (varies by size)
+**For Voice Commands:**
+- **Disk:** About 40 MB for the speech model
 - **Microphone:** Any USB or built-in microphone
 
 **For Local LLM (Ollama):**
@@ -770,11 +769,11 @@ This is a **known false positive** that affects applications built with PyInstal
    - Save project (Ctrl+S) for future reference
    - Deliver to client or reimport to CAT tool
 
-**Voice Dictation Workflow:**
-1. Press F9 to start dictating (works system-wide)
-2. Speak your translation
-3. Press F9 to stop and insert text
-4. Edit as needed in Grid View
+**Hands-free with Voice Commands:**
+1. Press Ctrl+Alt+O to switch voice commands on (works system-wide)
+2. Say a command, such as "next segment" or "translate segment"
+3. To dictate your translation, use a dictation tool such as Windows voice typing (Win+H); voice commands keep listening alongside it
+4. Press Ctrl+Alt+O again to switch them off
 
 ### How do I handle large documents?
 
@@ -973,30 +972,20 @@ This setting affects menus, buttons, labels, tabs, and all other UI text through
 - Change sort order (appearance / alphabetical / length)
 - Create more specific termbase entries
 
-### Voice dictation (Supervoice) not working
+### Voice commands not working
 
-**Issue:** F9 doesn't start recording
-
-**Solution:**
-1. Check Supervoice is enabled: Settings → General → Enable Supervoice
-2. Ensure Whisper model is downloaded: First use downloads model automatically
-3. Check microphone permissions (Windows: Settings → Privacy → Microphone)
-4. Test microphone in other apps to verify it works
-
-**Issue:** Recording starts but no text appears
+**Issue:** Nothing happens when I say a command
 
 **Solution:**
-- Wait a moment - processing takes a few seconds
-- Check if you spoke loudly/clearly enough
-- Try larger Whisper model (base or small instead of tiny)
-- Ensure microphone volume is adequate
+1. Check that the Voice tab says "Listening for speech…". If it says "Not active", click **Start Always-On** or press Ctrl+Alt+O
+2. Look under **What I heard** on the Voice tab: it lists what Voice heard and what each did
+3. Say the command's phrase, or one of its aliases, exactly as it appears in the command list, in English
+4. Check microphone permissions (Windows: Settings → Privacy → Microphone), and try another **Mic sensitivity** on the Voice tab
 
-**Issue:** Wrong language recognized
+**Issue:** I want to dictate my translation
 
 **Solution:**
-- Supervoice uses target language by default
-- Make sure target language is set correctly for your project
-- Some accents may be harder to recognize - try clearer pronunciation
+- Workbench has had no built-in dictation since v1.10.374. Use a dictation tool such as Windows voice typing (Win+H), Wispr Flow or Dragon. Voice commands keep listening while you dictate with it.
 
 ### Universal Lookup not working
 
@@ -1034,7 +1023,7 @@ This setting affects menus, buttons, labels, tabs, and all other UI text through
    - What you expected vs what happened
 
 3. **Context:**
-   - Which feature were you using? (AI translation, voice dictation, TM, etc.)
+   - Which feature were you using? (AI translation, voice commands, TM, etc.)
    - File formats involved (DOCX, TMX, XLIFF, etc.)
    - Any relevant settings or configuration
 
@@ -1060,7 +1049,7 @@ Michael Beijer, a professional translator, created Supervertaler to:
 - Enable custom prompts and domain expertise
 - Support multiple AI providers (avoid vendor lock-in)
 - Integrate with existing CAT tools (TMX, XLIFF, bilingual DOCX)
-- Offer professional features (TM, termbases, voice dictation)
+- Offer professional features (TM, termbases, voice commands)
 - Share openly with translation community (open source)
 
 **Philosophy:**
@@ -1260,7 +1249,7 @@ Michael Beijer, a professional translator, created Supervertaler to:
 
 **Feature Guides:**
 - [UNIFIED_PROMPT_LIBRARY_GUIDE.md](../UNIFIED_PROMPT_LIBRARY_GUIDE.md) - Prompt system
-- [VOICE_DICTATION_GUIDE.md](../VOICE_DICTATION_GUIDE.md) - Supervoice setup
+- [Voice commands](https://docs.supervertaler.com/workbench/voice/overview/) - The Voice tab and Always-On listening
 - [AI_ASSISTANT_GUIDE.md](../AI_ASSISTANT_GUIDE.md) - AI Assistant features
 - [SUPERBROWSER_GUIDE.md](../SUPERBROWSER_GUIDE.md) - Document viewer
 - [IMAGE_CONTEXT_FEATURE.md](../IMAGE_CONTEXT_FEATURE.md) - Figure context

@@ -138,14 +138,14 @@ Insert memoQ placeholder tags from source segment.
 
 | Shortcut | Action | Notes |
 |----------|--------|-------|
-| **F9** | Start/stop voice dictation | Supervoice (Whisper) |
+| **Ctrl+Alt+O** | Switch voice commands on/off | System-wide hotkey |
 | **Ctrl+Alt+L** | Universal TM lookup | System-wide hotkey |
 
-**Supervoice (F9):**
-- Press F9 to start recording
-- Speak your translation
-- Press F9 again to stop
-- Transcription appears at cursor
+**Voice commands (Ctrl+Alt+O):**
+- Press Ctrl+Alt+O to switch voice commands on or off (or use the Voice tab or the tray icon)
+- Say a command, such as "next segment" or "translate segment"
+- Speech that isn't a command is ignored
+- For running text, use a dictation tool such as Windows voice typing (Win+H)
 
 **Universal Lookup (Ctrl+Alt+L):**
 - Works from ANY application

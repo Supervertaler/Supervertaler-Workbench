@@ -260,7 +260,7 @@ On first launch, macOS will ask for several permissions:
    - Required for global hotkeys (⌃⌘L Superlookup, ⌃⌘M QuickTrans)
 
 2. **Microphone** (automatic prompt)
-   - Required for voice dictation feature
+   - Required for voice commands
 
 3. **Gatekeeper** (first launch of unsigned app)
    - Right-click → Open → "Open Anyway" on first launch
