@@ -2,10 +2,10 @@
 
 All notable changes to Supervertaler Workbench are documented in this file.
 
-**Current Version:** v1.10.374 (November 3, 2026)
+**Current Version:** v1.10.375 (November 3, 2026)
 
 
-## Unreleased
+## v1.10.375 - November 3, 2026
 
 ### Changed (app icon · Workbench is green)
 
@@ -25,6 +25,29 @@ The line at the bottom of the pop-up now reads "← → cycle · Enter insert ·
 
 - When the pop-up opened, no chip was selected, so Enter, E and I did nothing until you had pressed an arrow key. The first chip is selected again when it opens. This had been broken since v1.10.283.
 - **Tab** and **Shift+Tab** now move between the chips. Before, Tab moved the keyboard focus away from the chips, and the arrow keys then scrolled the pop-up instead.
+
+### Added (AI · Gemini 4 Argon)
+
+Gemini 4 Argon, Google's most capable model (1M context), is now in every Gemini list: Settings → AI, Settings → QuickTrans, the AI Assistant's model menu and PDF Rescue, and through OpenRouter. Supervertaler for Trados and for memoQ have offered it since release 203. It costs $4/$20 per million tokens. Until 30 November 2026 Google charges $2/$10, so until then the costs Workbench shows for it are about twice your bill. Cached input is costed at 95% off, as Google bills it. Gemini 3.1 Pro is still offered but is no longer labelled the latest. The default Gemini model is still Gemini 3.1 Flash-Lite.
+
+### Fixed (Voice · "stop listening" switches Always-On off)
+
+Saying "stop listening" never stopped anything. Since v1.9.50 the command looked for the listener under the wrong name, and "What I heard" still listed it with a ✓. It now switches Always-On off exactly as the Voice tab's button, the tray icon and Ctrl+Alt+O do, so the Voice tab, the tray icon and the status bar all show it stopped. A voice command that could not do anything is now listed with ✗ instead of ✓.
+
+### Fixed (OpenRouter · the model list matches the Trados plugin's)
+
+Qwen 3.6 Plus (Free) is no longer offered: OpenRouter has withdrawn it, so choosing it failed. The OpenRouter models in Settings → AI, Settings → QuickTrans and the AI Assistant are now the same as in Supervertaler for Trados and for memoQ: Claude Sonnet 5.5, Opus 5.5 and Fable 5.1, GPT-6 Astra, GPT-6.1 Sol and GPT-6 Luna, Gemini 3.8 Flash and Gemini 4 Argon, Gemma 4 31B and 26B MoE, Mistral Small 4, Qwen 3.8 27B (Free), and DeepSeek V4 Pro and Flash. A new OpenRouter setup starts on Claude Sonnet 5.5 instead of Sonnet 5.
+
+- **The model you chose is kept.** If it has left the list (Claude Sonnet 5, Gemini 3.1 Pro, Qwen 3.6 Plus, or a model you typed in), Settings shows it as "your current model", and saving keeps it rather than switching you to another model. The Gemini list in Settings → AI now works the same way.
+- Providers of free models may keep what you send, so don't use Qwen 3.8 27B (Free) for confidential work.
+
+### Fixed (Voice · the command dialog suggests distinctive phrases)
+
+In the Add/Edit Voice Command dialog, the Aliases box suggested "confirm, done, okay": the everyday words the Voice tab warns against, because Voice keeps listening while you dictate with another tool. It now suggests "segment done, mark as confirmed".
+
+### Changed (docs · no more F9 dictation in the FAQ and guides)
+
+The FAQ, the keyboard shortcuts guide and a few other documents still described F9 dictation, which was removed in v1.10.374. They now describe voice commands instead: Ctrl+Alt+O switches them on and off, and for running text you use a dictation tool such as Windows voice typing (Win+H). The two old dictation guides, VOICE_DICTATION_GUIDE.md and SUPERVOICE_TROUBLESHOOTING.md, are no longer in the docs folder or the Windows download.
 
 
 ## v1.10.374 - November 3, 2026
