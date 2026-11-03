@@ -132,7 +132,7 @@ def _select_saved_model(combo, model_id):
     whatever the list shows: falling back to the first entry switched
     the user to another model without a word."""
     for i in range(combo.count()):
-        if combo.itemText(i).split()[0] == model_id:
+        if (combo.itemText(i).split() or [''])[0] == model_id:
             combo.setCurrentIndex(i)
             return
     if model_id:
