@@ -2,10 +2,10 @@
 
 All notable changes to Supervertaler Workbench are documented in this file.
 
-**Current Version:** v1.10.373 (November 1, 2026)
+**Current Version:** v1.10.374 (November 3, 2026)
 
 
-## Unreleased
+## v1.10.374 - November 3, 2026
 
 ### Removed (the Clipboard Manager – Supervertaler Sidekick is the clipboard tool)
 
