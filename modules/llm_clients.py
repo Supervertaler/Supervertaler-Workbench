@@ -372,7 +372,7 @@ class LLMClient:
         "deepseek": "deepseek-v4-pro",  # DeepSeek V4 Pro (flagship)
         "ollama": "translategemma:12b",  # Local LLM via Ollama - purpose-built translation model
         "custom_openai": "custom-model",  # Custom OpenAI-compatible endpoint
-        "openrouter": "anthropic/claude-sonnet-5"  # OpenRouter gateway (200+ models)
+        "openrouter": "anthropic/claude-sonnet-5.5"  # OpenRouter gateway (200+ models): the first of OPENROUTER_MODELS
     }
 
     # Available Mistral models with descriptions
@@ -407,20 +407,33 @@ class LLMClient:
         }
     }
 
-    # Available OpenRouter models (curated selection)
+    # Available OpenRouter models (curated selection): the Trados and memoQ
+    # plugins' list (LlmModels.OpenRouterModels in their shared core, IDs
+    # checked there against openrouter.ai/api/v1/models), in the same order;
+    # the first is the default. Superseded entries (Claude Sonnet 5 and Opus 5,
+    # Gemini 3.1 Pro, Gemini 3 Flash) left the list but not pricing.json, so a
+    # saved one still runs, is still costed, and Settings shows it as "your
+    # current model". Qwen 3.6 Plus (Free) left because OpenRouter withdrew it:
+    # choosing it failed.
     # OpenRouter is an API gateway – users can also type any model ID from openrouter.ai/models
     OPENROUTER_MODELS = {
-        "anthropic/claude-sonnet-5": {
-            "name": "Claude Sonnet 5",
-            "description": "Anthropic flagship Sonnet – near-Opus quality, fast",
+        "anthropic/claude-sonnet-5.5": {
+            "name": "Claude Sonnet 5.5",
+            "description": "Newest Sonnet – near-Opus quality at Sonnet cost, 1M context",
             "strengths": ["General translation", "Multilingual", "Fast"],
             "use_case": "Recommended for most translation tasks"
         },
-        "anthropic/claude-opus-5": {
-            "name": "Claude Opus 5",
-            "description": "Anthropic's flagship Opus – 1M context, top-tier reasoning",
+        "anthropic/claude-opus-5.5": {
+            "name": "Claude Opus 5.5",
+            "description": "Anthropic's newest Opus – 1M context, top choice for hard legal/technical work",
             "strengths": ["Legal translation", "Technical documents", "Complex reasoning", "1M context"],
             "use_case": "Specialised legal/technical translation, long-context jobs"
+        },
+        "anthropic/claude-fable-5.1": {
+            "name": "Claude Fable 5.1",
+            "description": "Anthropic's most capable model, at 2.5x Opus pricing",
+            "strengths": ["Hardest translation problems", "Deepest reasoning", "1M context"],
+            "use_case": "The hardest work, when cost is secondary"
         },
         "openai/gpt-6-astra": {
             "name": "GPT-6 Astra",
@@ -440,29 +453,41 @@ class LLMClient:
             "strengths": ["Fast", "Cost-effective", "Multilingual"],
             "use_case": "High-volume translation"
         },
-        "google/gemini-3.1-pro-preview": {
-            "name": "Gemini 3.1 Pro",
-            "description": "Google latest – strong multilingual",
-            "strengths": ["Multilingual", "Large context", "High quality"],
-            "use_case": "General translation"
-        },
-        "google/gemini-3-flash-preview": {
-            "name": "Gemini 3 Flash",
-            "description": "Google fast – great for high volume",
+        "google/gemini-3.8-flash": {
+            "name": "Gemini 3.8 Flash",
+            "description": "Google's newest Flash – strong quality at low cost, 1M context",
             "strengths": ["Fast", "Cost-effective", "Multilingual"],
             "use_case": "High-volume translation"
         },
+        "google/gemini-4-argon": {
+            "name": "Gemini 4 Argon",
+            "description": "Google's most capable model, 1M context",
+            "strengths": ["Multilingual", "Large context", "Highest accuracy"],
+            "use_case": "Hard translation work"
+        },
+        "google/gemma-4-31b-it": {
+            "name": "Gemma 4 31B",
+            "description": "Open-source – strong multilingual quality, 256K context",
+            "strengths": ["Open model", "Multilingual", "Cost-effective"],
+            "use_case": "General translation at low cost"
+        },
+        "google/gemma-4-26b-a4b-it": {
+            "name": "Gemma 4 26B MoE",
+            "description": "Open-source – near-31B quality at a fraction of the cost",
+            "strengths": ["Open model", "Fast", "Cost-effective"],
+            "use_case": "High-volume translation"
+        },
         "mistralai/mistral-small-2603": {
-            "name": "Mistral Small",
-            "description": "Mistral cost-effective – strong European languages",
+            "name": "Mistral Small 4",
+            "description": "Very fast and cheap – strong European languages",
             "strengths": ["European languages", "Fast", "Cost-effective"],
             "use_case": "European language translation"
         },
-        "qwen/qwen3.6-plus:free": {
-            "name": "Qwen 3.6 Plus (Free)",
-            "description": "Free tier – no cost, good quality",
-            "strengths": ["Free", "Multilingual", "100+ languages"],
-            "use_case": "Testing or budget-constrained projects"
+        "qwen/qwen3.8-27b:free": {
+            "name": "Qwen 3.8 27B (Free)",
+            "description": "Free and rate-limited – providers of free models may keep what you send, so not for confidential work",
+            "strengths": ["Free", "Multilingual"],
+            "use_case": "Testing, never confidential work"
         },
         "deepseek/deepseek-v4-pro": {
             "name": "DeepSeek V4 Pro",

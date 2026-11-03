@@ -123,6 +123,23 @@ def _select_lang_in_combo(combo, value):
     combo.setCurrentIndex(combo.count() - 1)
 
 
+def _select_saved_model(combo, model_id):
+    """Select the saved model in a Settings model list whose entries read
+    "<model id> (<label>)". The match is exact: a substring test found
+    "anthropic/claude-sonnet-5" inside "anthropic/claude-sonnet-5.5". A
+    saved model that has left the list is added as "<model id> (your
+    current model)" and selected, because saving Settings writes back
+    whatever the list shows: falling back to the first entry switched
+    the user to another model without a word."""
+    for i in range(combo.count()):
+        if combo.itemText(i).split()[0] == model_id:
+            combo.setCurrentIndex(i)
+            return
+    if model_id:
+        combo.addItem(f"{model_id} (your current model)")
+        combo.setCurrentIndex(combo.count() - 1)
+
+
 def get_resource_path(relative_path: str) -> Path:
     """Get absolute path to resource, works for dev and for PyInstaller bundled app."""
     if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
@@ -24431,11 +24448,7 @@ class SupervertalerQt(QMainWindow):
             "  $2/$10 until 30 Nov 2026), 1M context.\n"
             "Gemma 4 26B MoE: Google's open model, lightweight and capable."
         )
-        current_gemini_model = settings.get('gemini_model', 'gemini-3.1-flash-lite')
-        for i in range(gemini_combo.count()):
-            if current_gemini_model in gemini_combo.itemText(i):
-                gemini_combo.setCurrentIndex(i)
-                break
+        _select_saved_model(gemini_combo, settings.get('gemini_model', 'gemini-3.1-flash-lite'))
         gemini_combo.setEnabled(gemini_radio.isChecked())
         model_layout.addWidget(gemini_combo)
 
@@ -24494,32 +24507,32 @@ class SupervertalerQt(QMainWindow):
 
         openrouter_combo = QComboBox()
         openrouter_combo.setEditable(True)
+        # The same models as LLMClient.OPENROUTER_MODELS and the Trados and
+        # memoQ plugins' OpenRouter list, in the same order.
         openrouter_combo.addItems([
-            "anthropic/claude-sonnet-5 (Recommended)",
-            "anthropic/claude-opus-5 (Premium)",
+            "anthropic/claude-sonnet-5.5 (Recommended)",
+            "anthropic/claude-opus-5.5 (Premium)",
+            "anthropic/claude-fable-5.1 (Maximum - 2.5x Opus Price)",
             "openai/gpt-6-astra (OpenAI's most capable)",
             "openai/gpt-6.1-sol (OpenAI recommended)",
             "openai/gpt-6-luna (OpenAI's cheapest)",
-            "google/gemini-3.1-pro-preview (Latest Gemini)",
-            "google/gemini-3-flash-preview (Fast Gemini)",
+            "google/gemini-3.8-flash (Fast Gemini)",
+            "google/gemini-4-argon (Smartest Gemini)",
+            "google/gemma-4-31b-it (Open Model)",
+            "google/gemma-4-26b-a4b-it (Open Model - Lightweight)",
             "mistralai/mistral-small-2603 (European Languages)",
-            "qwen/qwen3.6-plus:free (Free)"
+            "qwen/qwen3.8-27b:free (Free - Not for Confidential Work)",
+            "deepseek/deepseek-v4-pro (DeepSeek Flagship)",
+            "deepseek/deepseek-v4-flash (DeepSeek Fast)"
         ])
         openrouter_combo.setToolTip(
             "OpenRouter gives you access to 200+ models with a single API key.\n"
             "Select a model from the dropdown or type any model ID from openrouter.ai/models.\n\n"
-            "Pricing varies per model – see openrouter.ai for details."
+            "Pricing varies per model – see openrouter.ai for details.\n"
+            "Providers of free models may keep what you send: not for confidential work."
         )
-        current_openrouter_model = settings.get('openrouter_model', 'anthropic/claude-sonnet-5')
-        # Try to select from dropdown, or set as typed text
-        found = False
-        for i in range(openrouter_combo.count()):
-            if current_openrouter_model in openrouter_combo.itemText(i):
-                openrouter_combo.setCurrentIndex(i)
-                found = True
-                break
-        if not found:
-            openrouter_combo.setEditText(current_openrouter_model)
+        _select_saved_model(openrouter_combo,
+                            settings.get('openrouter_model', 'anthropic/claude-sonnet-5.5'))
         openrouter_combo.setEnabled(openrouter_radio.isChecked())
         model_layout.addWidget(openrouter_combo)
 
@@ -25737,16 +25750,22 @@ class SupervertalerQt(QMainWindow):
                 ("deepseek-v4-pro", "DeepSeek V4 Pro (Recommended)"),
                 ("deepseek-v4-flash", "DeepSeek V4 Flash (Fast)"),
             ]),
+            # The same models as LLMClient.OPENROUTER_MODELS, in the same order.
             ("openrouter", "OpenRouter (200+ models)", "openrouter", [
-                ("anthropic/claude-sonnet-5", "Claude Sonnet 5 (Recommended)"),
-                ("anthropic/claude-opus-5", "Claude Opus 5 (Premium)"),
+                ("anthropic/claude-sonnet-5.5", "Claude Sonnet 5.5 (Recommended)"),
+                ("anthropic/claude-opus-5.5", "Claude Opus 5.5 (Premium)"),
+                ("anthropic/claude-fable-5.1", "Claude Fable 5.1 (Maximum)"),
                 ("openai/gpt-6-astra", "GPT-6 Astra (OpenAI's most capable)"),
                 ("openai/gpt-6.1-sol", "GPT-6.1 Sol (OpenAI recommended)"),
                 ("openai/gpt-6-luna", "GPT-6 Luna (OpenAI's cheapest)"),
-                ("google/gemini-3.1-pro-preview", "Gemini 3.1 Pro (Latest Gemini)"),
-                ("google/gemini-3-flash-preview", "Gemini 3 Flash (Fast Gemini)"),
-                ("mistralai/mistral-small-2603", "Mistral Small (European Languages)"),
-                ("qwen/qwen3.6-plus:free", "Qwen 3.6 Plus (Free)"),
+                ("google/gemini-3.8-flash", "Gemini 3.8 Flash (Fast Gemini)"),
+                ("google/gemini-4-argon", "Gemini 4 Argon (Smartest Gemini)"),
+                ("google/gemma-4-31b-it", "Gemma 4 31B (Open)"),
+                ("google/gemma-4-26b-a4b-it", "Gemma 4 26B MoE (Open)"),
+                ("mistralai/mistral-small-2603", "Mistral Small 4 (European Languages)"),
+                ("qwen/qwen3.8-27b:free", "Qwen 3.8 27B (Free)"),
+                ("deepseek/deepseek-v4-pro", "DeepSeek V4 Pro"),
+                ("deepseek/deepseek-v4-flash", "DeepSeek V4 Flash (Fast)"),
             ]),
         ]
 
@@ -29364,7 +29383,7 @@ class SupervertalerQt(QMainWindow):
             'gemini_model': gemini_combo.currentText().split()[0],
             'mistral_model': mistral_combo.currentText().split()[0] if mistral_combo else 'mistral-large-latest',
             'deepseek_model': deepseek_combo.currentText().split()[0] if deepseek_combo else 'deepseek-v4-pro',
-            'openrouter_model': openrouter_combo.currentText().split()[0] if openrouter_combo else 'anthropic/claude-sonnet-5',
+            'openrouter_model': openrouter_combo.currentText().split()[0] if openrouter_combo else 'anthropic/claude-sonnet-5.5',
             'ollama_model': ollama_model,
             'custom_openai_model': active_model,
             'custom_openai_endpoint': active_endpoint,
