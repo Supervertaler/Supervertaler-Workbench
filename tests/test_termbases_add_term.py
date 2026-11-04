@@ -1,10 +1,12 @@
-"""Termbases tab: "+ Add Term" opens the Add Term dialog, and the splitter works.
+"""Termbases tab: the terms open in a window of their own, and "+ Add Term"
+opens the Add Term dialog.
 
 Up to 1.10.375 "+ Add Term" saved an EMPTY term at once (sorted to the top of
 page 1, out of sight) and put the cursor on the page's last row, an existing
-term, which the user then typed over. The splitter between the termbase list
-and the Terms panel could hardly move, and past that it snapped a whole panel
-shut; the English/Dutch columns were squeezed to ~40 px.
+term, which the user then typed over. The Terms panel sat beside the termbase
+list, split by a divider that could hardly move and, dragged past that, snapped
+a whole panel shut; the English/Dutch columns were squeezed to ~40 px. Now the
+tab is the termbase list only, and right-click → Edit Terms… opens the terms.
 
 These tests build the real Termbases tab (Supervertaler.py's
 create_termbases_tab) against a temporary database with a 12,000-term
@@ -55,7 +57,7 @@ def db(tmp_path):
 
 @pytest.fixture
 def tab(S, db):
-    """The Termbases tab with a 12,000-term en→nl termbase selected."""
+    """The Termbases tab, with a 12,000-term en→nl termbase open in the Terms window."""
     tbs = TermbaseManager(db, lambda *_: None)
     big = tbs.create_termbase("BIG (en-nl)", source_lang="en", target_lang="nl")
     db.connection.executemany(
@@ -79,16 +81,16 @@ def tab(S, db):
     host.show()
     QApplication.processEvents()
 
-    table = host.termbase_table
-    row = next(r for r in range(table.rowCount()) if table.item(r, 1).text().startswith("BIG"))
-    table.selectRow(row)
+    host._open_termbase_terms(big, "BIG (en-nl)")   # what right-click → Edit Terms… does
     QApplication.processEvents()
 
     t = type("Tab", (), {})()
     t.host, t.widget, t.db, t.tb_id = host, widget, db, big
-    t.terms = next(w for w in widget.findChildren(type(table)) if w.columnCount() == 10)  # Terms grid
-    t.add_button = next(b for b in widget.findChildren(QPushButton) if b.text() == "+ Add Term")
+    t.window = host.termbase_terms_window
+    t.terms = host.termbase_terms_table
+    t.add_button = next(b for b in t.window.findChildren(QPushButton) if b.text() == "+ Add Term")
     yield t
+    t.window.hide()
     host.hide()   # not close(): the real closeEvent shuts the whole app down
 
 
@@ -156,6 +158,9 @@ def test_add_term_saves_every_field_and_shows_the_new_term_selected(tab, monkeyp
     dialog = opened[0]
     assert dialog.windowTitle() == "Add Term to Termbase — BIG (en-nl)"
     assert dialog._src_caption == "English" and dialog._tgt_caption == "Dutch"   # the termbase's own columns
+    assert dialog._src_caption_label.text() == "<b>English (source):</b>"
+    assert dialog._tgt_caption_label.text() == "<b>Dutch (target):</b>"
+    assert dialog.parent() is tab.window                    # opens over the Terms window
     assert messages == []
 
     row = tab.db.connection.execute(
@@ -177,7 +182,7 @@ def test_add_term_saves_every_field_and_shows_the_new_term_selected(tab, monkeyp
 
 def t_page_label(t):
     from PyQt6.QtWidgets import QLabel
-    return next(l.text() for l in t.widget.findChildren(QLabel) if l.text().startswith("Page "))
+    return next(l.text() for l in t.window.findChildren(QLabel) if l.text().startswith("Page "))
 
 
 def test_a_term_in_the_middle_of_the_list_opens_on_its_own_page(tab, monkeypatch, messages):
@@ -270,31 +275,74 @@ def test_a_locked_database_gives_a_clear_message_and_no_crash(tab, monkeypatch, 
     assert messages == [] and count(db, "source_term = 'gebogen'") == 1
 
 
-# ── the splitter ─────────────────────────────────────────────────────────
+# ── the list, and the Terms window ───────────────────────────────────────
 
-def test_the_splitter_moves_both_ways_without_collapsing_a_panel(tab):
-    splitter = tab.widget.findChild(QSplitter)
-    assert not splitter.childrenCollapsible()
-    left, right = splitter.widget(0), splitter.widget(1)
-    total = sum(splitter.sizes())
-    # Each panel can give up most of its half: the old fixed rows made the
-    # minimums add up to nearly the whole width.
-    assert left.minimumSizeHint().width() + right.minimumSizeHint().width() < 0.7 * total
+def _row_of(table, name):
+    return next(r for r in range(table.rowCount()) if table.item(r, 1).text() == name)
 
-    for position in (0, total):           # drag fully left, then fully right
-        splitter.moveSplitter(position, 1)
-        QApplication.processEvents()
-        assert min(splitter.sizes()) > 0, splitter.sizes()
+
+def test_the_tab_is_the_termbase_list_only(tab):
+    assert tab.widget.findChild(QSplitter) is None
+    assert tab.window.isWindow() and tab.window.parent() is tab.host   # closes with Workbench
+    assert tab.window not in tab.widget.findChildren(type(tab.window))
+
+
+def test_selecting_a_termbase_only_selects_it(tab):
+    tab.window.hide()
+    table = tab.host.termbase_table
+    table.selectRow(_row_of(table, "Small (nl-en)"))
+    QApplication.processEvents()
+    assert not tab.window.isVisible()
+
+
+def test_right_click_edit_terms_opens_that_termbases_terms(tab, S, monkeypatch):
+    tab.window.hide()
+    chosen = []
+
+    def choose_default(menu, *_args):          # "click" the bold first entry
+        chosen.append(menu.defaultAction().text())
+        menu.defaultAction().trigger()
+    monkeypatch.setattr(S.QMenu, "exec", choose_default)
+
+    table = tab.host.termbase_table
+    row = _row_of(table, "Small (nl-en)")
+    pos = table.visualItemRect(table.item(row, 1)).center()
+    tab.host._show_termbase_context_menu(pos, table, tab.host.termbase_mgr,
+                                         tab.host.termbase_tab_refresh_callback)
+    QApplication.processEvents()
+    assert chosen == ["📝 Edit Terms…"]
+    assert tab.window.isVisible()
+    assert tab.window.windowTitle() == "Terms – Small (nl-en)"
+    assert tab.terms.horizontalHeaderItem(0).text() == "Dutch"      # that termbase's own direction
+    assert tab.terms.rowCount() == 0 and tab.add_button.isEnabled()
+
+
+def test_the_window_shows_the_first_page_of_terms(tab):
+    assert tab.window.isVisible()
+    assert tab.window.windowTitle() == "Terms – BIG (en-nl)"
+    assert tab.terms.rowCount() == 100
+    assert tab.terms.item(0, 0).text() == "a term 00000"
+    assert t_page_label(tab) == "Page 1 of 120"
+
+
+def test_renaming_the_shown_termbase_renames_the_window_and_deleting_it_closes_it(tab):
+    mgr = tab.host.termbase_mgr
+    mgr.rename_termbase(tab.tb_id, "BIG renamed")
+    tab.host.termbase_tab_refresh_callback()
+    assert tab.window.windowTitle() == "Terms – BIG renamed"
+
+    mgr.delete_termbase(tab.tb_id)
+    tab.host.termbase_tab_refresh_callback()
+    assert not tab.window.isVisible()
 
 
 def test_the_term_columns_stay_readable_and_take_the_spare_width(tab):
-    splitter = tab.widget.findChild(QSplitter)
     header = tab.terms.horizontalHeader()
-    for position in (sum(splitter.sizes()), 0):   # Terms panel at its narrowest, then widest
-        splitter.moveSplitter(position, 1)
+    for width in (500, 2000):                     # a narrow window, then a wide one
+        tab.window.resize(width, 800)
         QApplication.processEvents()
         assert header.sectionSize(0) >= 160 and header.sectionSize(1) >= 160
-    # At its widest the panel's spare width goes to the two term columns.
+    # When wide, the spare width goes to the two term columns.
     others = sum(header.sectionSize(c) for c in range(2, header.count()))
     assert header.sectionSize(0) + header.sectionSize(1) >= tab.terms.viewport().width() - others - 2
 

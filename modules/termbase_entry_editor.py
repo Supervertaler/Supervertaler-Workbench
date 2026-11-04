@@ -272,6 +272,11 @@ class TermbaseEntryEditor(QDialog):
         # Either way, ISO codes ("nl", "en") get expanded to full
         # human-readable names ("Dutch", "English") for readability.
         src_caption, tgt_caption = "Source", "Target"
+        # " (source)" / " (target)" after the language names, for adding to
+        # one chosen termbase: its direction may be the reverse of the
+        # project's (an en→nl termbase read by an nl→en project), and a term
+        # typed into the wrong field is never matched.
+        src_role, tgt_role = "", ""
         try:
             # Walk up the parent chain — this dialog can be opened from
             # surfaces (TermLens, results panel) that aren't the main
@@ -359,6 +364,7 @@ class TermbaseEntryEditor(QDialog):
                     if row:
                         if row[0] and row[1]:
                             src_lang_for_caption, tgt_lang_for_caption = row[0], row[1]
+                            src_role, tgt_role = " (source)", " (target)"
                         if row[2]:
                             self.setWindowTitle(f"Add Term to Termbase — {row[2]}")
                 except Exception:
@@ -381,7 +387,7 @@ class TermbaseEntryEditor(QDialog):
         # so the captions need to flip).
         source_col = QVBoxLayout()
         source_col.setSpacing(2)
-        self._src_caption_label = QLabel(f"<b>{src_caption}:</b>")
+        self._src_caption_label = QLabel(f"<b>{src_caption}{src_role}:</b>")
         source_col.addWidget(self._src_caption_label)
         self.source_edit = QLineEdit(self.source_term)
         self.source_edit.setStyleSheet("padding: 4px;")
@@ -394,7 +400,7 @@ class TermbaseEntryEditor(QDialog):
         # Target column: term, abbreviation, (later) synonyms
         target_col = QVBoxLayout()
         target_col.setSpacing(2)
-        self._tgt_caption_label = QLabel(f"<b>{tgt_caption}:</b>")
+        self._tgt_caption_label = QLabel(f"<b>{tgt_caption}{tgt_role}:</b>")
         target_col.addWidget(self._tgt_caption_label)
         self.target_edit = QLineEdit(self.target_term)
         self.target_edit.setStyleSheet("padding: 4px;")

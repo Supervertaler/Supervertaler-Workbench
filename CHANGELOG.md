@@ -7,19 +7,21 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ## Unreleased
 
+### Changed (Termbases tab · a termbase's terms open in their own window)
+
+The Termbases tab is now just the list of termbases. To see, add or edit a termbase's terms, right-click it and choose **Edit Terms…**: its terms open in a window of their own, with the same filter, sorting, pages and columns as before. Opening another termbase shows it in the same window. Before, the terms sat beside the list, behind a divider that could hardly be moved and that, dragged a little too far, closed one half completely.
+
+In the terms window, the source and target columns (English and Dutch, say) get the spare width and never shrink below a readable width: in a narrow window the list scrolls sideways instead. In the termbase list, the Name column gets the spare width. SuperLookup's "go to termbase entry" opens the terms window too.
+
 ### Fixed (Termbases tab · "+ Add Term" opens a dialog)
 
-"+ Add Term" under the Terms list did not open anything. Each click saved an empty term to the selected termbase straight away (out of sight, at the top of page 1 when sorted A→Z) and put the cursor on the last row of the page, which is an existing term, so whatever you typed next replaced that term. It now opens the Add Term to Termbase dialog the Editor already uses, captioned in the termbase's own languages: the two terms, abbreviations, synonyms, definition, domain, notes, URL, client, project, non-translatable and forbidden. Save adds the term, and the Terms list opens on the page that holds it, in your sort order, with the term selected.
+"+ Add Term" under the Terms list did not open anything. Each click saved an empty term to the termbase straight away (out of sight, at the top of page 1 when sorted A→Z) and put the cursor on the last row of the page, which is an existing term, so whatever you typed next replaced that term. It now opens the Add Term to Termbase dialog the Editor already uses. Its two fields are labelled with the termbase's own languages, for example "English (source)" and "Dutch (target)", so the term goes in the right column even when your project runs the other way. It has the two terms, abbreviations, synonyms, definition, domain, notes, URL, client, project, non-translatable and forbidden. Save adds the term, and the Terms list opens on the page that holds it, in your sort order, with the term selected.
 
 - Save is refused while either term is empty. The dialog stays open with what you typed.
 - A term that is already in the termbase is not added twice: you are told so, and the existing entry is selected.
 - If the database is locked by another program, or is read-only, you get a message saying so and nothing is half-saved. A failed save no longer leaves Workbench unable to see terms that the Trados plugin adds afterwards.
 
 Empty terms added by the old button are still in your termbase. In the Terms list they are the blank rows at the top of page 1 (sorted A→Z): delete them with 🗑.
-
-### Fixed (Termbases tab · the divider between the two halves)
-
-The divider between the termbase list and the Terms list could hardly be moved, and dragging it a little too far closed one half completely. Each half now stops at a sensible minimum width instead of disappearing, and the rows of buttons above the lists wrap onto a second line when a half is narrow. The English and Dutch (source and target) columns get the spare width and never shrink below a readable width: when the Terms half is narrow, the list scrolls sideways instead. In the termbase list, the Name column gets the spare width.
 
 ## v1.10.375 - November 3, 2026
 

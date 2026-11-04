@@ -20356,9 +20356,6 @@ class SupervertalerQt(QMainWindow):
 
         set_help_topic(tab, HelpTopics.GLOSSARY_BASICS)
 
-        # ========== MAIN SPLITTER ==========
-        main_splitter = QSplitter(Qt.Orientation.Horizontal)
-        
         # ========== LEFT PANEL: Termbase List ==========
         left_panel = QWidget()
         left_layout = QVBoxLayout(left_panel)
@@ -20381,7 +20378,8 @@ class SupervertalerQt(QMainWindow):
             "• <b>Write</b> (blue ✓): Termbase is updated with new terms<br>"
             "• <b>Project</b> (pink ✓): Set as Project Termbase (highest priority, one at a time)<br>"
             "• <b>AI</b> (orange ✓): Send termbase terms to LLM with every translation (increases prompt size)<br>"
-            "• <b>🔍 SuperLookup</b> (teal ✓): Termbase is searched by SuperLookup (independent of Read)"
+            "• <b>🔍 SuperLookup</b> (teal ✓): Termbase is searched by SuperLookup (independent of Read)<br>"
+            "To see, add or edit a termbase's terms, right-click it → <b>Edit Terms…</b>"
         )
         help_msg.setWordWrap(True)
         help_msg.setStyleSheet("background-color: #e3f2fd; padding: 8px; border-radius: 4px; color: #1976d2;")
@@ -20565,10 +20563,18 @@ class SupervertalerQt(QMainWindow):
         tb_write_header_checkbox.toggled.connect(toggle_all_tb_write)
         tb_superlookup_header_checkbox.toggled.connect(toggle_all_tb_superlookup)
         
-        # ========== RIGHT PANEL: Terms Editor ==========
-        right_panel = QWidget()
+        # ========== TERMS WINDOW ==========
+        # The terms of one termbase, in a window of their own (right-click a
+        # termbase → Edit Terms…). Until the 4 Nov 2026 change this panel sat
+        # beside the termbase list, split by a divider that could hardly move.
+        # One window, reused: opening another termbase loads it into the same
+        # window. It is a child of the main window, so it closes with it.
+        right_panel = QWidget(self, Qt.WindowType.Window)
+        terms_window = right_panel
+        self.termbase_terms_window = terms_window
+        terms_window.resize(1300, 800)
         right_layout = QVBoxLayout(right_panel)
-        right_layout.setContentsMargins(5, 0, 0, 0)
+        right_layout.setContentsMargins(10, 10, 10, 10)
         
         # Terms header with termbase name
         terms_header_layout = QHBoxLayout()
@@ -21005,14 +21011,18 @@ class SupervertalerQt(QMainWindow):
             finally:
                 terms_table.blockSignals(False)
         
+        def show_termbase_name(tb_name):
+            selected_tb_label.setText(f"<b>{tb_name}</b>")
+            selected_tb_label.setToolTip(tb_name)
+            terms_window.setWindowTitle(f"Terms – {tb_name}")
+
         def load_terms_for_termbase(tb_id, tb_name):
             """Load terms from selected termbase into the terms table (resets to page 1)"""
             current_terms_tb_id[0] = tb_id
             terms_current_page[0] = 0  # Reset to first page
             terms_filter_text[0] = ''  # Clear filter
             terms_search_box.clear()  # Clear search box
-            selected_tb_label.setText(f"<b>{tb_name}</b>")
-            selected_tb_label.setToolTip(tb_name)
+            show_termbase_name(tb_name)
             selected_tb_label.setStyleSheet("color: #1976d2; font-weight: bold;")
 
             # Update Source/Target column headers with the termbase's actual
@@ -21096,7 +21106,7 @@ class SupervertalerQt(QMainWindow):
         def delete_term(term_id):
             """Delete a term from the termbase"""
             reply = QMessageBox.question(
-                self, "Delete Term",
+                terms_window, "Delete Term",
                 "Are you sure you want to delete this term?",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
             )
@@ -21120,7 +21130,7 @@ class SupervertalerQt(QMainWindow):
                     # stops showing up as a match.
                     self._post_termbase_delete_refresh()
                 except Exception as e:
-                    QMessageBox.warning(self, "Error", f"Failed to delete term: {e}")
+                    QMessageBox.warning(terms_window, "Error", f"Failed to delete term: {e}")
         
         def save_term_edit(row, column):
             """Save edited term to database"""
@@ -21237,7 +21247,7 @@ class SupervertalerQt(QMainWindow):
 
             from modules.termbase_entry_editor import TermbaseEntryEditor
             from modules.termbase_manager import normalize_term_for_save
-            dialog = TermbaseEntryEditor(self, db_manager=self.db_manager, termbase_id=tb_id)
+            dialog = TermbaseEntryEditor(terms_window, db_manager=self.db_manager, termbase_id=tb_id)
             if dialog.exec() != QDialog.DialogCode.Accepted:
                 return
             meta = dialog.get_metadata()
@@ -21247,7 +21257,7 @@ class SupervertalerQt(QMainWindow):
 
             def already_there(existing_id):
                 QMessageBox.information(
-                    self, self.tr("Already in the termbase"),
+                    terms_window, self.tr("Already in the termbase"),
                     f"“{source} → {target}” is already in {tb_name}, so it was not "
                     f"added again.\n\nIt is selected in the list.")
                 show_term(existing_id)
@@ -21255,7 +21265,7 @@ class SupervertalerQt(QMainWindow):
             try:
                 existing_id = termbase_mgr.find_duplicate_term(tb_id, source, target)
             except Exception as e:
-                QMessageBox.warning(self, self.tr("Term not added"),
+                QMessageBox.warning(terms_window, self.tr("Term not added"),
                                     f"Workbench could not read {tb_name}:\n\n{e}")
                 return
             if existing_id:
@@ -21285,7 +21295,7 @@ class SupervertalerQt(QMainWindow):
                     already_there(existing_id)
                 else:
                     QMessageBox.warning(
-                        self, self.tr("Term not added"),
+                        terms_window, self.tr("Term not added"),
                         f"Workbench could not save “{source} → {target}” to {tb_name}.\n\n"
                         "Another program may be using the database (it is locked), or the "
                         "database file is read-only. The Session Log has the details.")
@@ -21314,21 +21324,29 @@ class SupervertalerQt(QMainWindow):
         terms_btn_layout.addStretch()
         right_layout.addLayout(terms_btn_layout)
         
-        # Connect termbase table selection to load terms
+        def open_terms_window(tb_id, tb_name):
+            """Show tb_id's terms in the Terms window and bring it to the front."""
+            load_terms_for_termbase(tb_id, tb_name)
+            add_term_btn.setEnabled(True)
+            if terms_window.isMinimized():
+                terms_window.showNormal()
+            terms_window.show()
+            terms_window.raise_()
+            terms_window.activateWindow()
+
         def on_termbase_selected():
-            """Handle termbase selection change"""
+            """Open the Terms window for the termbase selected in the list.
+            Not connected to selection changes (selecting a row only selects
+            it); SuperLookup's "go to termbase entry" calls it."""
             selected_rows = termbase_table.selectionModel().selectedRows()
             if selected_rows:
-                row = selected_rows[0].row()
-                name_item = termbase_table.item(row, 1)
+                name_item = termbase_table.item(selected_rows[0].row(), 1)
                 if name_item:
-                    tb_id = name_item.data(Qt.ItemDataRole.UserRole)
-                    tb_name = name_item.text()
-                    load_terms_for_termbase(tb_id, tb_name)
-                    add_term_btn.setEnabled(True)
-        
+                    open_terms_window(name_item.data(Qt.ItemDataRole.UserRole), name_item.text())
+
         self._on_termbase_selected = on_termbase_selected  # Store for external access
-        termbase_table.itemSelectionChanged.connect(on_termbase_selected)
+        self._open_termbase_terms = open_terms_window  # the list's right-click menu
+        self.termbase_terms_table = terms_table  # SuperLookup selects the first match in it
         
         # Populate termbase list
         def refresh_termbase_list():
@@ -21639,6 +21657,16 @@ class SupervertalerQt(QMainWindow):
             # See the matching disable call at the top of this function.
             termbase_table.setSortingEnabled(_prev_sorting)
 
+            # Keep the Terms window honest: renamed → new title; deleted → closed.
+            shown_id = current_terms_tb_id[0]
+            if shown_id is not None:
+                shown = next((tb for tb in termbases if tb['id'] == shown_id), None)
+                if shown is None:
+                    current_terms_tb_id[0] = None
+                    terms_window.hide()
+                else:
+                    show_termbase_name(shown['name'])
+
         # Store callback as instance attribute so add_term_to_termbase can call it
         self.termbase_tab_refresh_callback = refresh_termbase_list
         
@@ -21687,17 +21715,7 @@ class SupervertalerQt(QMainWindow):
         button_layout.addStretch()
         left_layout.addLayout(button_layout)
         
-        # Add panels to splitter
-        main_splitter.addWidget(left_panel)
-        main_splitter.addWidget(right_panel)
-        main_splitter.setSizes([500, 500])  # Equal initial split
-        # Dragging past a panel's minimum width used to collapse that whole
-        # panel to nothing; now it just stops there.
-        main_splitter.setChildrenCollapsible(False)
-        main_splitter.setStretchFactor(0, 1)
-        main_splitter.setStretchFactor(1, 1)
-        
-        layout.addWidget(main_splitter, stretch=1)
+        layout.addWidget(left_panel, stretch=1)
         
         return tab
     
@@ -22250,6 +22268,13 @@ class SupervertalerQt(QMainWindow):
         
         menu = QMenu(self)
         
+        # Edit Terms… opens the termbase's terms in their own window
+        edit_terms_action = QAction(self.tr("📝 Edit Terms…"), self)
+        edit_terms_action.triggered.connect(lambda: self._open_termbase_terms(tb_id, tb_name))
+        menu.addAction(edit_terms_action)
+        menu.setDefaultAction(edit_terms_action)
+        menu.addSeparator()
+
         # Rename action
         rename_action = QAction("✏️ Rename Termbase", self)
         rename_action.triggered.connect(
