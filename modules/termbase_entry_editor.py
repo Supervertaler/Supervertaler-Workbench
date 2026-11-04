@@ -346,6 +346,23 @@ class TermbaseEntryEditor(QDialog):
                             self.termbase_id = real_tb_id
                 except Exception:
                     pass  # fall through to project direction
+            elif self.termbase_id is not None and self.db_manager is not None:
+                # Add mode for one chosen termbase (the Termbases tab's
+                # "+ Add Term"): the user types straight into that
+                # termbase's columns, so caption them by its own direction,
+                # as the Terms grid does, and name it in the title.
+                try:
+                    row = self.db_manager.connection.execute(
+                        "SELECT source_lang, target_lang, name FROM termbases WHERE id = ?",
+                        (self.termbase_id,),
+                    ).fetchone()
+                    if row:
+                        if row[0] and row[1]:
+                            src_lang_for_caption, tgt_lang_for_caption = row[0], row[1]
+                        if row[2]:
+                            self.setWindowTitle(f"Add Term to Termbase — {row[2]}")
+                except Exception:
+                    pass  # fall through to project direction
 
             src_caption = self._language_display_name(src_lang_for_caption) or "Source"
             tgt_caption = self._language_display_name(tgt_lang_for_caption) or "Target"
@@ -713,7 +730,7 @@ class TermbaseEntryEditor(QDialog):
                     return
 
             # Don't allow the main source term as a synonym
-            if synonym.lower() == self.source_term.lower():
+            if synonym.lower() == self.get_source_term().lower():
                 QMessageBox.warning(self, "Invalid Synonym", "Cannot add the main source term as a synonym.")
                 return
 
@@ -888,7 +905,7 @@ class TermbaseEntryEditor(QDialog):
                     return
 
             # Don't allow the main target term as a synonym
-            if synonym.lower() == self.target_term.lower():
+            if synonym.lower() == self.get_target_term().lower():
                 QMessageBox.warning(self, "Invalid Synonym", "Cannot add the main target term as a synonym.")
                 return
 
@@ -1023,7 +1040,22 @@ class TermbaseEntryEditor(QDialog):
         return []
 
     def _accept_and_save(self):
-        """Save termbase selections (no-op shim) and accept the dialog."""
+        """Add mode: refuse an empty term (the dialog stays open, nothing
+        typed is lost), then accept. A non-translatable entry may leave the
+        target empty: it becomes a copy of the source."""
+        if not self.get_source_term():
+            QMessageBox.warning(self, "Term missing",
+                                f"Please type the {self._src_caption} term.")
+            self.source_edit.setFocus()
+            return
+        if not self.get_target_term():
+            if self.nontranslatable_check.isChecked():
+                self.target_edit.setText(self.get_source_term())
+            else:
+                QMessageBox.warning(self, "Term missing",
+                                    f"Please type the {self._tgt_caption} term.")
+                self.target_edit.setFocus()
+                return
         self._save_termbase_selections()
         self.accept()
 

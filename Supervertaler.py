@@ -20387,12 +20387,25 @@ class SupervertalerQt(QMainWindow):
         help_msg.setStyleSheet("background-color: #e3f2fd; padding: 8px; border-radius: 4px; color: #1976d2;")
         left_layout.addWidget(help_msg)
         
-        # Bulk action controls
-        tb_bulk_layout = QHBoxLayout()
-        tb_bulk_layout.addWidget(QLabel(self.tr("Quick Actions:")))
+        # Bulk action controls. They wrap onto a second line when the panel is
+        # narrow: one fixed row of seven controls made the left panel at least
+        # ~770 px wide, so the splitter could hardly move.
+        from modules.termlens_widget import FlowLayout
+        from modules.table_column_fit import FillColumns
+
+        def _side_by_side(*widgets):
+            group = QWidget()
+            row = QHBoxLayout(group)
+            row.setContentsMargins(0, 0, 0, 0)
+            row.setSpacing(4)
+            for w in widgets:
+                row.addWidget(w)
+            return group
+
+        tb_bulk_container = QWidget()
+        tb_bulk_layout = FlowLayout(tb_bulk_container, margin=0, spacing=6)
 
         tb_read_header_checkbox = CheckmarkCheckBox(self.tr("Select All Read"))
-        tb_bulk_layout.addWidget(tb_read_header_checkbox)
 
         # v1.10.173: explicit "Clear All" button next to the checkbox.
         # The checkbox toggles all-on/all-off, but for users it reads as
@@ -20401,28 +20414,26 @@ class SupervertalerQt(QMainWindow):
         tb_clear_all_read_btn = QPushButton(self.tr("Clear All Read"))
         tb_clear_all_read_btn.setToolTip(self.tr("Uncheck the Read flag on every termbase"))
         tb_clear_all_read_btn.clicked.connect(lambda: toggle_all_tb_read(False))
-        tb_bulk_layout.addWidget(tb_clear_all_read_btn)
 
         tb_write_header_checkbox = BlueCheckmarkCheckBox("Select All Write")
-        tb_bulk_layout.addWidget(tb_write_header_checkbox)
 
         tb_clear_all_write_btn = QPushButton(self.tr("Clear All Write"))
         tb_clear_all_write_btn.setToolTip(self.tr("Uncheck the Write flag on every termbase"))
         tb_clear_all_write_btn.clicked.connect(lambda: toggle_all_tb_write(False))
-        tb_bulk_layout.addWidget(tb_clear_all_write_btn)
 
         # v1.10.247: SuperLookup bulk toggles (include/exclude every termbase
         # from SuperLookup). Late-binding via toggle_all_tb_superlookup below.
         tb_superlookup_header_checkbox = TealCheckmarkCheckBox(self.tr("Select All SuperLookup"))
-        tb_bulk_layout.addWidget(tb_superlookup_header_checkbox)
 
         tb_clear_all_superlookup_btn = QPushButton(self.tr("Clear All SuperLookup"))
         tb_clear_all_superlookup_btn.setToolTip(self.tr("Uncheck the SuperLookup flag on every termbase (exclude all from SuperLookup)"))
         tb_clear_all_superlookup_btn.clicked.connect(lambda: toggle_all_tb_superlookup(False))
-        tb_bulk_layout.addWidget(tb_clear_all_superlookup_btn)
 
-        tb_bulk_layout.addStretch()
-        left_layout.addLayout(tb_bulk_layout)
+        tb_bulk_layout.addWidget(_side_by_side(
+            QLabel(self.tr("Quick Actions:")), tb_read_header_checkbox, tb_clear_all_read_btn))
+        tb_bulk_layout.addWidget(_side_by_side(tb_write_header_checkbox, tb_clear_all_write_btn))
+        tb_bulk_layout.addWidget(_side_by_side(tb_superlookup_header_checkbox, tb_clear_all_superlookup_btn))
+        left_layout.addWidget(tb_bulk_container)
         
         # Termbase list with table
         termbase_table = QTableWidget()
@@ -20445,6 +20456,7 @@ class SupervertalerQt(QMainWindow):
         termbase_table.setColumnWidth(6, 60)   # Priority
         termbase_table.setColumnWidth(7, 40)   # AI checkbox
         termbase_table.setColumnWidth(8, 100)  # 🔍 SuperLookup checkbox
+        FillColumns(termbase_table, (1,), minimum=180)  # Name takes the spare width
         termbase_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         termbase_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         termbase_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)  # Disable inline editing
@@ -20566,8 +20578,10 @@ class SupervertalerQt(QMainWindow):
         
         selected_tb_label = QLabel(self.tr("Select a termbase to view/edit terms"))
         selected_tb_label.setStyleSheet("color: #666; font-style: italic;")
-        terms_header_layout.addWidget(selected_tb_label)
-        terms_header_layout.addStretch()
+        # A long termbase name is cut off (full name in the tooltip) rather
+        # than setting the panel's minimum width.
+        selected_tb_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        terms_header_layout.addWidget(selected_tb_label, 1)
         right_layout.addLayout(terms_header_layout)
         
         # Search/filter for terms
@@ -20594,8 +20608,10 @@ class SupervertalerQt(QMainWindow):
         # _SORT_OPTIONS below.
         terms_sort_order = ['source_term COLLATE NOCASE ASC']
 
-        pagination_layout = QHBoxLayout()
-        pagination_layout.setContentsMargins(0, 5, 0, 5)
+        # The controls wrap onto a second line when the panel is narrow (one
+        # fixed row made the Terms panel at least ~700 px wide).
+        pagination_container = QWidget()
+        pagination_layout = FlowLayout(pagination_container, margin=0, spacing=12)
 
         # Page size selector
         page_size_label = QLabel(self.tr("Show:"))
@@ -20603,10 +20619,7 @@ class SupervertalerQt(QMainWindow):
         page_size_combo.addItems(["50", "100", "250", "500", "All"])
         page_size_combo.setCurrentText("100")
         page_size_combo.setFixedWidth(70)
-        pagination_layout.addWidget(page_size_label)
-        pagination_layout.addWidget(page_size_combo)
-
-        pagination_layout.addSpacing(15)
+        pagination_layout.addWidget(_side_by_side(page_size_label, page_size_combo))
 
         # Sort selector (v1.10.65). Label → SQL ORDER BY clause.
         # The order-by strings are NEVER user-supplied; they're keyed
@@ -20631,8 +20644,7 @@ class SupervertalerQt(QMainWindow):
             "Tip: 'Created (newest first)' is the quickest way to find\n"
             "(and fix or delete) a batch of terms you just added."
         )
-        pagination_layout.addWidget(sort_label)
-        pagination_layout.addWidget(sort_combo)
+        pagination_layout.addWidget(_side_by_side(sort_label, sort_combo))
 
         def on_sort_changed(idx):
             if 0 <= idx < len(_SORT_OPTIONS):
@@ -20658,8 +20670,6 @@ class SupervertalerQt(QMainWindow):
                     load_terms_page()
         sort_combo.currentIndexChanged.connect(on_sort_changed)
 
-        pagination_layout.addSpacing(20)
-        
         # Navigation buttons
         first_page_btn = QPushButton("⏮")
         first_page_btn.setFixedWidth(30)
@@ -20678,21 +20688,14 @@ class SupervertalerQt(QMainWindow):
         last_page_btn.setFixedWidth(30)
         last_page_btn.setToolTip(self.tr("Last page"))
         
-        pagination_layout.addWidget(first_page_btn)
-        pagination_layout.addWidget(prev_page_btn)
-        pagination_layout.addWidget(page_info_label)
-        pagination_layout.addWidget(next_page_btn)
-        pagination_layout.addWidget(last_page_btn)
-        
-        pagination_layout.addSpacing(20)
-        
         # Total count label
         total_terms_label = QLabel(self.tr("(0 terms total)"))
         total_terms_label.setStyleSheet("color: #666;")
-        pagination_layout.addWidget(total_terms_label)
-        
-        pagination_layout.addStretch()
-        right_layout.addLayout(pagination_layout)
+
+        pagination_layout.addWidget(_side_by_side(
+            first_page_btn, prev_page_btn, page_info_label, next_page_btn, last_page_btn,
+            total_terms_label))
+        right_layout.addWidget(pagination_container)
         
         # Terms table - columns: Source, Target, Domain, Notes, Project, Client, Forbidden, Created, Delete
         # v1.10.65: added the **Created** column (read-only timestamp,
@@ -20705,8 +20708,7 @@ class SupervertalerQt(QMainWindow):
         terms_table.setColumnCount(10)
         terms_table.setHorizontalHeaderLabels(["Source Term", "Target Term", "Domain", "Notes", "Project", "Client", "Forbidden", "Created", "Synonyms", ""])
         terms_table.horizontalHeader().setStretchLastSection(False)
-        terms_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)      # Source – fills remaining space
-        terms_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)      # Target – fills remaining space
+        # Source and Target (cols 0, 1) are sized by FillColumns below.
         terms_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)  # Domain
         terms_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive)  # Notes
         terms_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Interactive)  # Project
@@ -20748,6 +20750,10 @@ class SupervertalerQt(QMainWindow):
             6: ('forbidden',                    None),  # 0/1 numeric
             7: ('created_date',                 2),     # → dropdown "Created (newest first)"
         }
+        # Source and Target share the spare width, at least 160 px each; when
+        # the panel is narrow the grid scrolls sideways instead. (They used
+        # to be Stretch columns, which shrank to ~40 px.)
+        FillColumns(terms_table, (0, 1), minimum=160)
         right_layout.addWidget(terms_table, stretch=1)
 
         # Store current termbase ID for the terms panel
@@ -21006,6 +21012,7 @@ class SupervertalerQt(QMainWindow):
             terms_filter_text[0] = ''  # Clear filter
             terms_search_box.clear()  # Clear search box
             selected_tb_label.setText(f"<b>{tb_name}</b>")
+            selected_tb_label.setToolTip(tb_name)
             selected_tb_label.setStyleSheet("color: #1976d2; font-weight: bold;")
 
             # Update Source/Target column headers with the termbase's actual
@@ -21172,37 +21179,136 @@ class SupervertalerQt(QMainWindow):
         # Add new term button
         terms_btn_layout = QHBoxLayout()
         add_term_btn = QPushButton(self.tr("+ Add Term"))
+        add_term_btn.setToolTip(self.tr("Add a term to the selected termbase"))
         add_term_btn.setEnabled(False)
-        
-        def add_new_term():
-            """Add a new empty term to the current termbase"""
-            if current_terms_tb_id[0] is None:
-                return
-            
+
+        def term_position(term_id):
+            """0-based position of term_id in the Terms grid's current filter
+            and sort order, or None if the filter hides it. Same WHERE and
+            ORDER BY as load_terms_page; reads ids only and stops at the term."""
+            where = "termbase_id = CAST(? AS TEXT)"
+            params = [current_terms_tb_id[0]]
+            if terms_filter_text[0]:
+                where += " AND (LOWER(source_term) LIKE ? OR LOWER(target_term) LIKE ?)"
+                params += [f'%{terms_filter_text[0]}%'] * 2
+            rows = self.db_manager.connection.execute(
+                f"SELECT id FROM termbase_terms WHERE {where} ORDER BY {terms_sort_order[0]}",
+                params)
+            for pos, row in enumerate(rows):
+                if row[0] == term_id:
+                    return pos
+            return None
+
+        def show_term(term_id):
+            """Open the page holding term_id and select its row, keeping the
+            user's sort. A filter that hides the term is cleared."""
             try:
-                # Don't specify id - let SQLite auto-generate it (INTEGER PRIMARY KEY AUTOINCREMENT)
-                self.db_manager.cursor.execute(
-                    """INSERT INTO termbase_terms (termbase_id, source_term, target_term, priority, domain, notes, project, client, forbidden) 
-                       VALUES (CAST(? AS TEXT), '', '', 50, '', '', '', '', 0)""",
-                    (current_terms_tb_id[0],)
-                )
-                self.db_manager.connection.commit()
-                
-                # Reload terms and refresh termbase list
-                for row in range(termbase_table.rowCount()):
-                    name_item = termbase_table.item(row, 1)
-                    if name_item and name_item.data(Qt.ItemDataRole.UserRole) == current_terms_tb_id[0]:
-                        load_terms_for_termbase(current_terms_tb_id[0], name_item.text())
-                        break
-                refresh_termbase_list()
-                
-                # Select the new row for editing
-                terms_table.setCurrentCell(terms_table.rowCount() - 1, 0)
-                terms_table.editItem(terms_table.item(terms_table.rowCount() - 1, 0))
-                
+                pos = term_position(term_id)
+                if pos is None and terms_filter_text[0]:
+                    terms_search_box.clear()  # reloads page 1 unfiltered
+                    pos = term_position(term_id)
             except Exception as e:
-                QMessageBox.warning(self, "Error", f"Failed to add term: {e}")
-        
+                self.log(f"⚠️ Could not locate term {term_id} in the grid: {e}")
+                return
+            if pos is None:
+                return
+            page_size = terms_page_size[0]
+            terms_current_page[0] = pos // page_size if page_size > 0 else 0
+            load_terms_page()
+            for r in range(terms_table.rowCount()):
+                item = terms_table.item(r, 0)
+                if item and item.data(Qt.ItemDataRole.UserRole) == term_id:
+                    terms_table.selectRow(r)
+                    terms_table.scrollToItem(item, QAbstractItemView.ScrollHint.PositionAtCenter)
+                    break
+
+        def add_new_term():
+            """Add a term to the selected termbase through the Add Term dialog
+            (the one the Editor uses), then show it selected in the grid.
+
+            Up to 1.10.375 this button saved an EMPTY term straight away and
+            put the cursor on the page's last row - an existing term, which
+            the user then typed over."""
+            tb_id = current_terms_tb_id[0]
+            if tb_id is None:
+                return
+            tb = termbase_mgr.get_termbase(tb_id) or {}
+            tb_name = tb.get('name') or str(tb_id)
+
+            from modules.termbase_entry_editor import TermbaseEntryEditor
+            from modules.termbase_manager import normalize_term_for_save
+            dialog = TermbaseEntryEditor(self, db_manager=self.db_manager, termbase_id=tb_id)
+            if dialog.exec() != QDialog.DialogCode.Accepted:
+                return
+            meta = dialog.get_metadata()
+            source, target = dialog.get_source_term(), dialog.get_target_term()
+            if not meta['is_nontranslatable']:  # as add_term will store them
+                source, target = normalize_term_for_save(source), normalize_term_for_save(target)
+
+            def already_there(existing_id):
+                QMessageBox.information(
+                    self, self.tr("Already in the termbase"),
+                    f"“{source} → {target}” is already in {tb_name}, so it was not "
+                    f"added again.\n\nIt is selected in the list.")
+                show_term(existing_id)
+
+            try:
+                existing_id = termbase_mgr.find_duplicate_term(tb_id, source, target)
+            except Exception as e:
+                QMessageBox.warning(self, self.tr("Term not added"),
+                                    f"Workbench could not read {tb_name}:\n\n{e}")
+                return
+            if existing_id:
+                already_there(existing_id)
+                return
+
+            term_id = termbase_mgr.add_term(
+                termbase_id=tb_id, source_term=source, target_term=target,
+                source_lang=self._convert_language_to_code(tb.get('source_lang') or '') or None,
+                target_lang=self._convert_language_to_code(tb.get('target_lang') or '') or None,
+                domain=meta['domain'], notes=meta['notes'],
+                project=meta['project'], client=meta['client'],
+                forbidden=meta['forbidden'], is_nontranslatable=meta['is_nontranslatable'],
+                definition=meta['definition'], url=meta['url'],
+                source_abbreviation=meta['source_abbreviation'],
+                target_abbreviation=meta['target_abbreviation'],
+            )
+            if not term_id:
+                # add_term says None both for a duplicate (another program,
+                # e.g. the Trados plugin, may have just added the same pair)
+                # and for a failure; its log line has the error.
+                try:
+                    existing_id = termbase_mgr.find_duplicate_term(tb_id, source, target)
+                except Exception:
+                    existing_id = None
+                if existing_id:
+                    already_there(existing_id)
+                else:
+                    QMessageBox.warning(
+                        self, self.tr("Term not added"),
+                        f"Workbench could not save “{source} → {target}” to {tb_name}.\n\n"
+                        "Another program may be using the database (it is locked), or the "
+                        "database file is read-only. The Session Log has the details.")
+                return
+
+            # The dialog's captions follow this termbase's own direction, so its
+            # source/target synonym lists map straight onto the stored columns.
+            for language, synonyms in (('source', dialog.get_source_synonyms()),
+                                       ('target', dialog.get_target_synonyms())):
+                for syn in synonyms:
+                    if not termbase_mgr.add_synonym(term_id, syn['text'], language=language,
+                                                    display_order=syn['order'],
+                                                    forbidden=syn['forbidden']):
+                        self.log(f"✗ Could not add {language} synonym: {syn['text']}")
+            self.log(f"✓ Added term to termbase '{tb_name}': {source} → {target}")
+
+            refresh_termbase_list()  # term count
+            try:
+                self.force_refresh_matches()  # TermLens and matches see the new term
+            except Exception as e:
+                self.log(f"⚠️ Refresh after adding a term failed: {e}")
+            show_term(term_id)
+
         add_term_btn.clicked.connect(add_new_term)
         terms_btn_layout.addWidget(add_term_btn)
         terms_btn_layout.addStretch()
@@ -21585,6 +21691,9 @@ class SupervertalerQt(QMainWindow):
         main_splitter.addWidget(left_panel)
         main_splitter.addWidget(right_panel)
         main_splitter.setSizes([500, 500])  # Equal initial split
+        # Dragging past a panel's minimum width used to collapse that whole
+        # panel to nothing; now it just stops there.
+        main_splitter.setChildrenCollapsible(False)
         main_splitter.setStretchFactor(0, 1)
         main_splitter.setStretchFactor(1, 1)
         

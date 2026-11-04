@@ -859,6 +859,8 @@ class TermbaseManager:
         Returns:
             Term ID or None if failed (returns None if duplicate found)
         """
+        connection = self.db_manager.connection
+        was_in_transaction = connection.in_transaction
         try:
             import uuid
             cursor = self.db_manager.cursor
@@ -871,15 +873,7 @@ class TermbaseManager:
                 source_term = normalize_term_for_save(source_term)
                 target_term = normalize_term_for_save(target_term)
 
-            # Check for duplicate (case-insensitive check)
-            cursor.execute("""
-                SELECT id FROM termbase_terms
-                WHERE termbase_id = ?
-                AND LOWER(source_term) = LOWER(?)
-                AND LOWER(target_term) = LOWER(?)
-            """, (termbase_id, source_term, target_term))
-
-            existing = cursor.fetchone()
+            existing = self.find_duplicate_term(termbase_id, source_term, target_term)
             if existing:
                 self.log(f"⚠️ Duplicate term not added: {source_term} → {target_term} (already exists in termbase {termbase_id})")
                 return None
@@ -907,7 +901,35 @@ class TermbaseManager:
             return term_id
         except Exception as e:
             self.log(f"✗ Error adding term: {e}")
+            # A failed INSERT (e.g. "database is locked" while the Trados
+            # plugin writes) leaves the transaction Python opened for it
+            # running, and until something commits, this connection reads
+            # an old snapshot: other programs' changes stay invisible. End
+            # it - but only if it is ours, never someone else's pending work.
+            if not was_in_transaction and connection.in_transaction:
+                try:
+                    connection.rollback()
+                except Exception as rollback_error:
+                    self.log(f"✗ Rollback after failed add failed too: {rollback_error}")
             return None
+
+    def find_duplicate_term(self, termbase_id: int, source_term: str,
+                            target_term: str) -> Optional[int]:
+        """Return the id of the entry add_term would refuse as a duplicate, else None.
+
+        Pass the pair as it will be stored (for a translatable term, after
+        normalize_term_for_save). Compared case-insensitively within one
+        termbase - add_term's own rule. Lets a caller tell "already there"
+        apart from "could not be saved", which add_term reports the same way
+        (None). Raises on a database error.
+        """
+        row = self.db_manager.connection.execute("""
+            SELECT id FROM termbase_terms
+            WHERE termbase_id = ?
+            AND LOWER(source_term) = LOWER(?)
+            AND LOWER(target_term) = LOWER(?)
+        """, (termbase_id, source_term, target_term)).fetchone()
+        return row[0] if row else None
 
     def find_merge_matches(self, termbase_id: int, source_term: str,
                            target_term: str) -> List[Dict]:

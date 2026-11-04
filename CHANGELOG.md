@@ -5,6 +5,22 @@ All notable changes to Supervertaler Workbench are documented in this file.
 **Current Version:** v1.10.375 (November 3, 2026)
 
 
+## Unreleased
+
+### Fixed (Termbases tab · "+ Add Term" opens a dialog)
+
+"+ Add Term" under the Terms list did not open anything. Each click saved an empty term to the selected termbase straight away (out of sight, at the top of page 1 when sorted A→Z) and put the cursor on the last row of the page, which is an existing term, so whatever you typed next replaced that term. It now opens the Add Term to Termbase dialog the Editor already uses, captioned in the termbase's own languages: the two terms, abbreviations, synonyms, definition, domain, notes, URL, client, project, non-translatable and forbidden. Save adds the term, and the Terms list opens on the page that holds it, in your sort order, with the term selected.
+
+- Save is refused while either term is empty. The dialog stays open with what you typed.
+- A term that is already in the termbase is not added twice: you are told so, and the existing entry is selected.
+- If the database is locked by another program, or is read-only, you get a message saying so and nothing is half-saved. A failed save no longer leaves Workbench unable to see terms that the Trados plugin adds afterwards.
+
+Empty terms added by the old button are still in your termbase. In the Terms list they are the blank rows at the top of page 1 (sorted A→Z): delete them with 🗑.
+
+### Fixed (Termbases tab · the divider between the two halves)
+
+The divider between the termbase list and the Terms list could hardly be moved, and dragging it a little too far closed one half completely. Each half now stops at a sensible minimum width instead of disappearing, and the rows of buttons above the lists wrap onto a second line when a half is narrow. The English and Dutch (source and target) columns get the spare width and never shrink below a readable width: when the Terms half is narrow, the list scrolls sideways instead. In the termbase list, the Name column gets the spare width.
+
 ## v1.10.375 - November 3, 2026
 
 ### Changed (app icon · Workbench is green)
