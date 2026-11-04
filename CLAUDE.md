@@ -73,3 +73,23 @@ pytest tests/
 ```
 
 Manual smoke test: import DOCX → translate → export, save/load `.svproj`, TM + termbase matching, AI translation, SDLPPX round-trip.
+
+## Recording what a session learns
+
+Sessions get archived and forgotten; this file and `CHANGELOG.md` don't. When
+a session settles something a later session would need, ask the user whether
+to write it down. Ask in one line, at a natural pause (after a fix is verified,
+before committing), and name the file and roughly what the entry would say.
+Write it only after a yes, and drop it after a no.
+
+Worth asking about:
+
+- **`CLAUDE.md`**: a pitfall whose cause wasn't obvious, a design decision and
+  the reason for it, a convention, or a check to run before touching some area
+  (Pitfall 6 is the model).
+- **`CHANGELOG.md`**: something users should know that no entry covers yet,
+  such as a known limitation or a decision to leave a behaviour as it is.
+
+The usual `CHANGELOG.md` entry for the change being made needs no asking; write
+it as before. Don't ask about anything already recorded, and don't ask twice
+about the same thing.
