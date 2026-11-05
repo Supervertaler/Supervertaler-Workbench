@@ -12313,7 +12313,8 @@ class SupervertalerQt(QMainWindow):
         superbrowser_action = QAction(self.tr("🌐 Super&browser..."), self)
         superbrowser_action.setToolTip(self.tr(
             "ChatGPT, Claude, and Gemini side by side in one window, with "
-            "persistent logins – compare answers without switching tabs"))
+            "persistent logins – ask all three the same question at once, "
+            "in private chats if you like"))
         superbrowser_action.triggered.connect(self.open_superbrowser_window)
         tools_menu.addAction(superbrowser_action)
 
@@ -13529,9 +13530,10 @@ class SupervertalerQt(QMainWindow):
         Removed in v1.9.385's simplification series, restored in v1.10.365
         because a user asked after it. Its old home - the Tools tab - no
         longer exists, so it now follows the same open-in-own-window pattern
-        as the other tools; the widget itself returned from git unchanged,
-        and any workbench/superbrowser_profiles/ folder left behind by the
-        removal (deliberately not deleted then) brings old logins back.
+        as the other tools; the widget itself returned from git unchanged
+        (it has since gained "Send to all three" and private chats), and any
+        workbench/superbrowser_profiles/ folder left behind by the removal
+        (deliberately not deleted then) brings old logins back.
         """
         from PyQt6.QtCore import Qt
         from modules.superbrowser import SuperbrowserWidget

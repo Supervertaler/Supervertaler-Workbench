@@ -25,6 +25,33 @@ As translators and writers, we often need to:
 - **Claude** (center, copper) - Anthropic's helpful, harmless, and honest AI
 - **Gemini** (right, blue) - Google's multimodal AI assistant
 
+### 💬 Ask All Three at Once
+The question box under the columns sends one question to ChatGPT, Claude and Gemini together:
+- **Enter** or **Send to all three ▶** sends. **Shift+Enter** starts a new line.
+- **New chat for each question** (on by default) starts every question in a new, empty chat, so earlier questions can't affect the answers. Untick it to ask follow-ups in the chats already open.
+- **＋ New chats** opens a new, empty chat in all three columns.
+- The question stays in the box after sending. Answers vary from run to run, so asking again takes one key.
+
+### 🕶 Private Chats
+**🕶 Private chats: On** opens each service's own private chat:
+
+| Service | Private chat | How Superbrowser opens it |
+|---------|--------------|---------------------------|
+| ChatGPT | Temporary Chat | The address `chatgpt.com/?temporary-chat=true` (not documented by OpenAI) |
+| Claude | Incognito chat | The address `claude.ai/new?incognito` (not documented by Anthropic); the ghost button is also checked and pressed if it reads as off |
+| Gemini | Temporary chat | Opens a new chat and presses the Temporary chat button (Gemini has no address for it) |
+
+These chats aren't saved to your history and don't use or update what the AI remembers about you. That makes them useful for seeing how each AI describes **you or your business to someone it doesn't know**. You stay signed in, so some account settings, such as ChatGPT's custom instructions, may still apply.
+
+Switching Private chats off leaves the open chats alone, because a temporary chat is lost once you leave it.
+
+### ✅ What Happened in Each Column
+A note at the top of each column reports the last action:
+- `🕶 New incognito chat – not saved, no memory`: Superbrowser read from the page that the private chat is on.
+- `🕶 Opened a new Temporary Chat – check ChatGPT shows it`: the private chat was requested, but the page doesn't say whether it took. Look for the site's own private-chat sign before relying on it.
+- `✓ Question sent` means the site took the question; its message box emptied.
+- `⚠ …` means something went wrong, and the note says what. If a column didn't get the question, your question is put on the clipboard to paste in by hand. If a private chat couldn't be switched on, that column doesn't get the question at all.
+
 ### 🔧 Collapsible Configuration
 - **Start Visible** - Configuration panel shows on first open
 - **Quick Toggle** - Click "▼ Hide Configuration" to maximize chat space
@@ -57,8 +84,7 @@ Each column has:
 
 ### 1. Access Superbrowser
 1. Open Supervertaler
-2. Navigate to **Specialised Tools** tab
-3. Click **🌐 Superbrowser**
+2. Choose **Tools → 🌐 Superbrowser…** (it opens in its own window)
 
 ### 2. First-Time Setup
 The configuration panel is visible by default:
@@ -84,6 +110,15 @@ Log in to each AI service once:
 Once set up, click **"▼ Hide Configuration"** to maximize screen space for your chats.
 
 ## Use Cases
+
+### How Do the AIs Describe You?
+**Scenario:** You want to know what ChatGPT, Claude and Gemini tell people about you or your business.
+
+**Workflow:**
+1. Switch on **🕶 Private chats**, so your own history and the AIs' memory of you don't affect the answers
+2. Ask "Who is *your name*?" and send it to all three
+3. Ask "What is *your business or product*?", then a question where you'd hope to be mentioned unprompted, such as "What are the best tools for …?"
+4. Ask each question two or three times, because the answers vary from run to run
 
 ### Translation Quality Comparison
 **Scenario:** You want to see how different AI models translate a technical passage.
@@ -145,6 +180,7 @@ Once set up, click **"▼ Hide Configuration"** to maximize screen space for you
 - **Session Lost?** - Try logging in again; profile storage may have been cleared
 - **Page Not Loading?** - Click the reload button (↻) or check your internet connection
 - **Column Too Narrow?** - Drag the dividers between columns to adjust widths
+- **⚠ in a column after sending?** - The note says what went wrong. Usually you're signed out there, or the site has changed its page. Paste the question (it's on the clipboard) and press Enter in that column. If it keeps happening on one site, the selectors in `CHAT_SERVICES` (see below) need updating.
 
 ## Technical Details
 
@@ -153,6 +189,13 @@ Once set up, click **"▼ Hide Configuration"** to maximize screen space for you
 - **Main Class:** `SuperbrowserWidget`
 - **Browser Engine:** `QtWebEngine` (Chromium-based)
 - **Profile Management:** `QWebEngineProfile` with persistent storage
+
+### Driving the Chat Sites
+None of the three sites offers an interface for other programs, so "Send to all three" and private chats work by operating the pages:
+- **`CHAT_SERVICES`** in `modules/superbrowser.py` holds everything site-specific: the selectors for the message box, send button and private-chat button, and the private-chat addresses. When a site changes its page, this table is where the fix goes.
+- **The question is typed with `document.execCommand('insertText')`**, so the sites' editors (ProseMirror on ChatGPT and Claude, Quill on Gemini) take it as real typing. Superbrowser then clicks the send button, or presses Enter if there isn't one. It counts the question as sent only once the message box has emptied.
+- **All waiting happens on Qt timers** (`_ColumnJob`), never in the page, so the window stays responsive while three sites load.
+- **Tests:** `tests/test_superbrowser.py` drives the real jobs through QtWebEngine against local pages built like the chat sites.
 
 ### Storage Structure
 ```
@@ -199,6 +242,11 @@ https://github.com/michaelbeijer/Supervertaler/issues
 
 ## Version History
 
+- **Unreleased** - Ask all three at once and private chats
+  - Question box under the columns: Enter sends to ChatGPT, Claude and Gemini
+  - 🕶 Private chats: ChatGPT Temporary Chat, Claude incognito chat, Gemini Temporary chat
+  - Per-column notes on what happened; clipboard fallback when a site can't be reached
+- **v1.10.365** (2026-07-31) - Restored after removal in v1.9.385; opens from Tools → 🌐 Superbrowser…
 - **v1.6.4** (2025-11-18) - Initial release of Superbrowser
   - Three-column layout with ChatGPT, Claude, and Gemini
   - Persistent sessions with profile management
