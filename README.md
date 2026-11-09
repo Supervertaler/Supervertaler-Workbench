@@ -73,7 +73,7 @@ python Supervertaler.py
 ## Contributing
 
 - [Report bugs](https://github.com/Supervertaler/Supervertaler-Workbench/issues)
-- [Request features & ask questions](https://github.com/orgs/Supervertaler/discussions)
+- [Ask questions and share ideas on r/Supervertaler](https://www.reddit.com/r/Supervertaler/)
 - [Contributing guide](CONTRIBUTING.md)
 
 ### Translations

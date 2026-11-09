@@ -1,16 +1,16 @@
 # The "New issue" chooser. Bug reports and feature requests use the forms below
 # and become normal GitHub issues ([Bug] / [Feature]); questions and general
-# discussion are routed to GitHub Discussions (the org-level board that spans
-# both products). blank_issues_enabled stays true so the maintainer can open
+# discussion are routed to r/Supervertaler on Reddit (the community that spans
+# all the products). blank_issues_enabled stays true so the maintainer can open
 # issues directly.
 blank_issues_enabled: true
 contact_links:
   - name: ❓ Questions & how-to help
-    url: https://github.com/orgs/Supervertaler/discussions
-    about: For usage questions, setup help and general discussion of the Workbench, please post in GitHub Discussions.
+    url: https://www.reddit.com/r/Supervertaler/
+    about: For usage questions, setup help and general discussion of the Workbench, please post on r/Supervertaler, our community on Reddit.
   - name: 🧩 Supervertaler for Trados (plugin)
     url: https://github.com/Supervertaler/Supervertaler-for-Trados
     about: This tracker is for the free Workbench app – for the Trados Studio plugin, see its repository.
   - name: 🗣️ General discussion
-    url: https://github.com/orgs/Supervertaler/discussions
+    url: https://www.reddit.com/r/Supervertaler/
     about: Tips, workflows and anything else about Supervertaler.
