@@ -62,6 +62,7 @@ def _load_pricing() -> Dict[str, Tuple[float, float]]:
         "gpt-5.6-terra": (2.0, 12.0),
         "gpt-5.6-luna": (0.20, 1.20),
         "gpt-5.5": (5.0, 30.0),
+        "claude-fable-5-2": (8.0, 40.0),
         "claude-fable-5-1": (10.0, 50.0),
         "claude-fable-5": (10.0, 50.0),
         "claude-opus-5-5": (4.0, 20.0),
@@ -106,12 +107,15 @@ def _cache_multipliers(model: str) -> Tuple[float, float]:
 
     # Anthropic native + OpenRouter→Anthropic: 90% off reads, 25% write surcharge -
     # except that reads are 0.05x on Claude Opus 5.5 and 0.025x on Claude Fable 5.1
-    # and Mythos 5.1 (Anthropic's pricing page, checked 2026-09-28).
+    # and 5.2 and Mythos 5.1 and 5.2 (Anthropic's pricing page, checked 2026-09-28;
+    # 5.2's $0.20 against $8 checked 2026-11-10).
     if "claude" in lc or lc.startswith("anthropic/"):
         if "opus-5-5" in lc or "opus-5.5" in lc:
             return (0.05, 1.25)
         if ("fable-5-1" in lc or "fable-5.1" in lc
-                or "mythos-5-1" in lc or "mythos-5.1" in lc):
+                or "fable-5-2" in lc or "fable-5.2" in lc
+                or "mythos-5-1" in lc or "mythos-5.1" in lc
+                or "mythos-5-2" in lc or "mythos-5.2" in lc):
             return (0.025, 1.25)
         return (0.1, 1.25)
 

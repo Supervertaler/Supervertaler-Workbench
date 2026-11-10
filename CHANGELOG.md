@@ -5,6 +5,12 @@ All notable changes to Supervertaler Workbench are documented in this file.
 **Current Version:** v1.10.376 (November 4, 2026)
 
 
+## Unreleased
+
+### Changed (AI models · Claude Fable 5.2 replaces Fable 5.1)
+
+Claude Fable 5.2 takes Fable 5.1's place in the Claude and OpenRouter model lists, in Settings, in the AI Assistant and in PDF Rescue. Fable 5.2 is Anthropic's most capable model, released on 10 November 2026, and costs less than 5.1: $8/$40 per million tokens instead of $10/$50, double Claude Opus 5.5 rather than 2.5 times. The cost figures know its prices. If you had Fable 5.1 chosen, it stays chosen and keeps working, and its runs are still costed; pick Fable 5.2 from the list to switch.
+
 ## v1.10.376 - November 4, 2026
 
 ### Changed (Termbases tab · a termbase's terms open in their own window)

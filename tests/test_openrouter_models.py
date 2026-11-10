@@ -27,9 +27,9 @@ from PyQt6.QtWidgets import QApplication, QComboBox
 from modules.llm_clients import LLMClient
 from modules.llm_pricing import estimate_cost
 
-# The plugins' OpenRouter list as of core 544e50b (Supervertaler for Trados).
+# The plugins' OpenRouter list as of core 6893544 (Supervertaler for Trados).
 PLUGINS = [
-    "anthropic/claude-sonnet-5.5", "anthropic/claude-opus-5.5", "anthropic/claude-fable-5.1",
+    "anthropic/claude-sonnet-5.5", "anthropic/claude-opus-5.5", "anthropic/claude-fable-5.2",
     "openai/gpt-6-astra", "openai/gpt-6.1-sol", "openai/gpt-6-luna",
     "google/gemini-3.8-flash", "google/gemini-4-argon",
     "google/gemma-4-31b-it", "google/gemma-4-26b-a4b-it",

@@ -7,7 +7,7 @@ Can be used standalone or imported by other applications.
 
 Supported Providers:
 - OpenAI (GPT-6 Astra, GPT-6.1 Sol, GPT-6 Luna)
-- Anthropic (Claude Sonnet 5.5, Opus 5.5, Fable 5.1)
+- Anthropic (Claude Sonnet 5.5, Opus 5.5, Fable 5.2)
 - Google (Gemini 3.1 Flash-Lite, 2.5 Pro, 3.1 Pro Preview, 4 Argon, Gemma 4 26B MoE)
 - Mistral AI (Mistral Large, Mistral Small)
 - DeepSeek (V4 Pro, V4 Flash)
@@ -429,9 +429,9 @@ class LLMClient:
             "strengths": ["Legal translation", "Technical documents", "Complex reasoning", "1M context"],
             "use_case": "Specialised legal/technical translation, long-context jobs"
         },
-        "anthropic/claude-fable-5.1": {
-            "name": "Claude Fable 5.1",
-            "description": "Anthropic's most capable model, at 2.5x Opus pricing",
+        "anthropic/claude-fable-5.2": {
+            "name": "Claude Fable 5.2",
+            "description": "Anthropic's most capable model, at double Opus pricing",
             "strengths": ["Hardest translation problems", "Deepest reasoning", "1M context"],
             "use_case": "The hardest work, when cost is secondary"
         },
@@ -584,10 +584,11 @@ class LLMClient:
         "claude": [
             "claude-sonnet-5-5",
             "claude-opus-5-5",
-            "claude-fable-5-1",
+            "claude-fable-5-2",
             "claude-sonnet-5",
             "claude-haiku-4-5-20251001",
             "claude-opus-5",
+            "claude-fable-5-1",
             "claude-fable-5"
         ],
         "gemini": [
@@ -653,12 +654,12 @@ class LLMClient:
             "pricing": {"input": 4, "output": 20},  # USD per million tokens
             "use_case": "Top choice for hard legal/technical translation and long-context jobs"
         },
-        "claude-fable-5-1": {
-            "name": "Claude Fable 5.1",
-            "description": "Anthropic's most capable model - deepest reasoning, always-on thinking, 2.5x Opus pricing",
-            "released": "2026-09-01",
+        "claude-fable-5-2": {
+            "name": "Claude Fable 5.2",
+            "description": "Anthropic's most capable model - deepest reasoning, always-on thinking, double Opus pricing",
+            "released": "2026-11-10",
             "strengths": ["Hardest translation problems", "Whole-document review", "Deepest reasoning", "1M context"],
-            "pricing": {"input": 10, "output": 50},  # USD per million tokens
+            "pricing": {"input": 8, "output": 40},  # USD per million tokens
             "use_case": "For the hardest jobs only - always-on thinking adds billed reasoning tokens per call, so overkill for routine segment translation"
         }
     }

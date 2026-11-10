@@ -24532,14 +24532,14 @@ class SupervertalerQt(QMainWindow):
         claude_combo.addItems([
             "claude-sonnet-5-5 (Recommended)",
             "claude-opus-5-5 (Premium - Highest Quality)",
-            "claude-fable-5-1 (Maximum - Deepest Reasoning, 2.5x Opus Price)"
+            "claude-fable-5-2 (Maximum - Deepest Reasoning, 2x Opus Price)"
         ])
         claude_combo.setToolTip(
             "Claude Sonnet 5.5: Recommended - near-Opus quality at Sonnet cost ($2/$10, 1M context).\n"
             "Claude Opus 5.5: Anthropic's newest Opus - highest quality for hard\n"
             "  legal/technical work ($4/$20, 1M context).\n"
-            "Claude Fable 5.1: Anthropic's most capable model overall - always-on reasoning,\n"
-            "  2.5x Opus pricing; for the hardest work when cost is secondary."
+            "Claude Fable 5.2: Anthropic's most capable model overall - always-on reasoning,\n"
+            "  double Opus pricing ($8/$40); for the hardest work when cost is secondary."
         )
         current_claude_model = settings.get('claude_model', 'claude-sonnet-5-5')
         # Exact match on the model ID. A substring test found "claude-sonnet-5"
@@ -24646,7 +24646,7 @@ class SupervertalerQt(QMainWindow):
         openrouter_combo.addItems([
             "anthropic/claude-sonnet-5.5 (Recommended)",
             "anthropic/claude-opus-5.5 (Premium)",
-            "anthropic/claude-fable-5.1 (Maximum - 2.5x Opus Price)",
+            "anthropic/claude-fable-5.2 (Maximum - 2x Opus Price)",
             "openai/gpt-6-astra (OpenAI's most capable)",
             "openai/gpt-6.1-sol (OpenAI recommended)",
             "openai/gpt-6-luna (OpenAI's cheapest)",
@@ -24872,7 +24872,7 @@ class SupervertalerQt(QMainWindow):
             friendly = {
                 "gpt-6-astra": "GPT-6 Astra", "gpt-6.1-sol": "GPT-6.1 Sol", "gpt-6-luna": "GPT-6 Luna",
                 "gpt-5.5": "GPT-5.5", "gpt-5.4-mini": "GPT-5.4 Mini",
-                "claude-sonnet-5-5": "Claude Sonnet 5.5", "claude-opus-5-5": "Claude Opus 5.5", "claude-fable-5-1": "Claude Fable 5.1",
+                "claude-sonnet-5-5": "Claude Sonnet 5.5", "claude-opus-5-5": "Claude Opus 5.5", "claude-fable-5-2": "Claude Fable 5.2", "claude-fable-5-1": "Claude Fable 5.1",
                 "claude-sonnet-5": "Claude Sonnet 5", "claude-opus-5": "Claude Opus 5", "claude-fable-5": "Claude Fable 5",
                 "claude-haiku-4-5-20251001": "Claude Haiku 4.5",
                 "gemini-3.1-flash-lite": "Gemini 3.1 Flash-Lite", "gemini-3.5-flash": "Gemini 3.5 Flash",
@@ -25862,7 +25862,7 @@ class SupervertalerQt(QMainWindow):
             ("claude", "Claude", "claude", [
                 ("claude-sonnet-5-5", "Claude Sonnet 5.5 (Recommended)"),
                 ("claude-opus-5-5", "Claude Opus 5.5 (Premium)"),
-                ("claude-fable-5-1", "Claude Fable 5.1 (Maximum)"),
+                ("claude-fable-5-2", "Claude Fable 5.2 (Maximum)"),
             ]),
             ("openai", "OpenAI", "openai", [
                 ("gpt-6-astra", "GPT-6 Astra (Premium)"),
@@ -25888,7 +25888,7 @@ class SupervertalerQt(QMainWindow):
             ("openrouter", "OpenRouter (200+ models)", "openrouter", [
                 ("anthropic/claude-sonnet-5.5", "Claude Sonnet 5.5 (Recommended)"),
                 ("anthropic/claude-opus-5.5", "Claude Opus 5.5 (Premium)"),
-                ("anthropic/claude-fable-5.1", "Claude Fable 5.1 (Maximum)"),
+                ("anthropic/claude-fable-5.2", "Claude Fable 5.2 (Maximum)"),
                 ("openai/gpt-6-astra", "GPT-6 Astra (OpenAI's most capable)"),
                 ("openai/gpt-6.1-sol", "GPT-6.1 Sol (OpenAI recommended)"),
                 ("openai/gpt-6-luna", "GPT-6 Luna (OpenAI's cheapest)"),
