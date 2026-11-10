@@ -13,6 +13,14 @@ File > Import > Phrase (Memsource) now has **MXLIFF (.mxliff)…** next to the b
 
 The export changes only what you changed: the translation and the confirmed flag (a segment that is Confirmed, Proofread or Approved in Workbench is confirmed in Phrase). Everything else in the file – Phrase's MT and TM suggestions, timestamps, the preview – stays exactly as Phrase wrote it; a file exported without changes is identical to the original. An empty segment in Workbench leaves the file's translation alone. The export refuses, and writes nothing, if the project no longer matches the file (segments split or joined, or a different file picked), and a file that is not a Phrase MXLIFF is refused at import with the reason. Tested with 20,000 segments: about 1.5 seconds to read, under a second to export.
 
+### Changed (WYSIWYG view · Phrase tags show as formatting)
+
+In WYSIWYG view, Phrase's tags in MXLIFF and Phrase bilingual DOCX projects now show as the formatting they stand for: `{b>…<b}` as bold, `{i>…<i}` as italic, `{u>…<u}` as underlined, `{bi>…<bi}` and other combinations as both, and `{sup>…<sup}`/`{sub>…<sub}` as superscript/subscript. Numbered tags such as `{1}` show as small grey markers. Before, they showed as raw text. When you edit such a segment in WYSIWYG view, it is saved with Phrase's own tags (`{b>…<b}`), never Workbench's `<b>`, so the file still goes back to Phrase correctly. Tags and Compact view still show the tags themselves, and the stored text is unchanged.
+
+### Fixed (Phrase bilingual DOCX · export after reopening a project)
+
+A project imported from a Phrase bilingual DOCX now remembers that file when you save and reopen it. Before, File > Export > Phrase (Memsource) > Bilingual asked you to find the original DOCX again every time you reopened the project. Like the other bilingual imports, such a project no longer allows segments to be split or joined, because the export pairs each segment with its row in the original file.
+
 ### Changed (AI models · Claude Fable 5.2 replaces Fable 5.1)
 
 Claude Fable 5.2 takes Fable 5.1's place in the Claude and OpenRouter model lists, in Settings, in the AI Assistant and in PDF Rescue. Fable 5.2 is Anthropic's most capable model, released on 10 November 2026, and costs less than 5.1: $8/$40 per million tokens instead of $10/$50, double Claude Opus 5.5 rather than 2.5 times. The cost figures know its prices. If you had Fable 5.1 chosen, it stays chosen and keeps working, and its runs are still costed; pick Fable 5.2 from the list to switch.

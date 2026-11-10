@@ -871,6 +871,76 @@ def apply_formatting_tags(text: str, tag: str) -> str:
     return text
 
 
+# Phrase (Memsource) inline tags, as in MXLIFF and the Phrase bilingual DOCX:
+# formatting pairs {b>…<b}, {bi>…<bi}, {i>, {u>, {sup>, {sub>, and numbered
+# codes {1}, {2>…<2}. Compiled once: WYSIWYG rendering runs per grid cell.
+_PHRASE_TAG_RE = re.compile(
+    r'(\{(?:[biu]{1,3}|sup|sub)>|<(?:[biu]{1,3}|sup|sub)\}|\{\d+[}>]|<\d+\})')
+_PHRASE_MARKER_STYLE = 'color:#888888; font-size:small;'
+
+
+def has_phrase_tags(text: str) -> bool:
+    """True when ``text`` contains Phrase inline tags (``{b>``, ``{1}``, …)."""
+    return bool(text) and '{' in text and _PHRASE_TAG_RE.search(text) is not None
+
+
+def phrase_tags_to_html(text: str) -> str:
+    """HTML for WYSIWYG display of text with Phrase tags.
+
+    Formatting pairs become real bold/italic/underline/sub/superscript;
+    numbered codes stay visible as small grey markers, so they are literal
+    text in the editor and come back unchanged when the cell is edited.
+    Anything else – including a literal ``<b>`` – is shown as written.
+    """
+    import html
+    out = []
+    for i, part in enumerate(_PHRASE_TAG_RE.split(text)):
+        if not part:
+            continue
+        if i % 2 == 0:                       # text between tags
+            out.append(html.escape(part))
+        elif part[0] == '{' and part[-1] == '>' and not part[1].isdigit():
+            out.append(''.join(f'<{t}>' for t in _phrase_tag_names(part[1:-1])))
+        elif part[0] == '<' and part[-1] == '}' and not part[1].isdigit():
+            out.append(''.join(f'</{t}>' for t in reversed(_phrase_tag_names(part[1:-1]))))
+        else:                                # {1}, {2>, <2}
+            out.append(f'<span style="{_PHRASE_MARKER_STYLE}">{html.escape(part)}</span>')
+    return f'<span style="white-space: pre-wrap;">{"".join(out)}</span>'
+
+
+def _phrase_tag_names(name: str) -> list:
+    """``'bi'`` → ``['b', 'i']``; ``'sup'`` → ``['sup']``."""
+    return [name] if name in ('sup', 'sub') else list(name)
+
+
+def wysiwyg_runs_to_phrase_text(runs) -> str:
+    """Serialise ``[(text, active_tag_names)]`` runs (as read back from a
+    WYSIWYG cell) into Phrase tag syntax: ``{b>…<b}``, ``{bi>…<bi}``,
+    ``{sup>…<sup}``. Phrase writes combined formatting as one flat tag, so
+    adjacent runs with the same formatting are merged first."""
+    merged = []
+    for text, active in runs:
+        active = list(active)
+        if merged and merged[-1][1] == active:
+            merged[-1][0] += text
+        else:
+            merged.append([text, active])
+    parts = []
+    for text, active in merged:
+        key = ''.join(t for t in ('b', 'i', 'u') if t in active)
+        script = 'sup' if 'sup' in active else ('sub' if 'sub' in active else '')
+        if key:
+            parts.append(f'{{{key}>')
+        if script:
+            parts.append(f'{{{script}>')
+        parts.append(text)
+        if script:
+            parts.append(f'<{script}}}')
+        if key:
+            parts.append(f'<{key}}}')
+    return ''.join(parts)
+
+
 def get_formatted_html_display(text: str) -> str:
     """
     Convert our simple tags to HTML for rich text display.
@@ -881,6 +951,9 @@ def get_formatted_html_display(text: str) -> str:
     Returns:
         HTML string suitable for QTextEdit.setHtml()
     """
+    if has_phrase_tags(text):
+        return phrase_tags_to_html(text)
+
     # Escape HTML entities first (except our tags)
     import html
 
@@ -1972,6 +2045,7 @@ class Project:
     memoq_source_path: str = None  # Path to original memoQ bilingual DOCX for round-trip export
     mqxliff_source_path: str = None  # Path to original memoQ XLIFF for round-trip export
     mxliff_source_path: str = None  # Path to original Phrase MXLIFF for round-trip export
+    phrase_source_path: str = None  # Path to original Phrase bilingual DOCX for round-trip export
     cafetran_source_path: str = None  # Path to original CafeTran bilingual DOCX for round-trip export
     sdlppx_source_path: str = None  # Path to original Trados SDLPPX package for SDLRPX export
     sdlxliff_source_paths: list = None  # Paths to standalone .sdlxliff files for round-trip export
@@ -2066,6 +2140,8 @@ class Project:
             result['mqxliff_source_path'] = self.mqxliff_source_path
         if self.mxliff_source_path:
             result['mxliff_source_path'] = self.mxliff_source_path
+        if self.phrase_source_path:
+            result['phrase_source_path'] = self.phrase_source_path
         if self.cafetran_source_path:
             result['cafetran_source_path'] = self.cafetran_source_path
         if self.sdlppx_source_path:
@@ -2161,6 +2237,8 @@ class Project:
             project.mqxliff_source_path = data['mqxliff_source_path']
         if 'mxliff_source_path' in data:
             project.mxliff_source_path = data['mxliff_source_path']
+        if 'phrase_source_path' in data:
+            project.phrase_source_path = data['phrase_source_path']
         # Store CafeTran source path if it exists
         if 'cafetran_source_path' in data:
             project.cafetran_source_path = data['cafetran_source_path']
@@ -6540,8 +6618,10 @@ class EditableGridTextEditor(QTextEdit):
             # The TagHighlighter will colorize the tags
             self.setPlainText(text)
         else:
-            # WYSIWYG view: Apply formatting
-            if has_formatting_tags(text):
+            # WYSIWYG view: Apply formatting. Remember whether the formatting
+            # came from Phrase tags, so an edit saves it back as {b>…<b}.
+            self._phrase_tags = has_phrase_tags(text)
+            if self._phrase_tags or has_formatting_tags(text):
                 html = get_formatted_html_display(text)
                 self.setHtml(html)
             else:
@@ -60749,7 +60829,12 @@ class SupervertalerQt(QMainWindow):
                 it += 1
             block = block.next()
 
-        rebuilt = self._wysiwyg_runs_to_tagged_text(runs)
+        # A cell rendered from Phrase tags ({b>…<b}) is saved back in Phrase
+        # syntax: <b> in an MXLIFF or Phrase DOCX target is not a Phrase tag.
+        if getattr(text_edit, '_phrase_tags', False):
+            rebuilt = wysiwyg_runs_to_phrase_text(runs)
+        else:
+            rebuilt = self._wysiwyg_runs_to_tagged_text(runs)
         # QTextEdit uses U+2028/U+2029 for soft/line breaks; normalise to \n.
         return rebuilt.replace(chr(0x2028), '\n').replace(chr(0x2029), '\n')
 

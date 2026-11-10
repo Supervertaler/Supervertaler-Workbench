@@ -43,6 +43,7 @@ _BILINGUAL_ORIGIN_ATTRS = (
     "memoq_source_path",
     "mqxliff_source_path",
     "mxliff_source_path",
+    "phrase_source_path",
     "cafetran_source_path",
     "sdlppx_source_path",
     "dejavu_source_path",
