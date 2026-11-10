@@ -7,6 +7,12 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ## Unreleased
 
+### Added (Phrase · MXLIFF import and export)
+
+File > Import > Phrase (Memsource) now has **MXLIFF (.mxliff)…** next to the bilingual DOCX, and File > Export > Phrase (Memsource) has **MXLIFF - Translated (.mxliff)…**, which writes the translation back into the file so you can upload it to the job in Phrase. Existing translations come in with the file: confirmed segments are Confirmed, machine translations MT and TM matches Pre-translated, with their match percentage. Locked segments are locked in Workbench too and never written to. Phrase's inline tags, such as `{b>…<b}` and `{1}`, stay in the text as they are, as with the bilingual DOCX.
+
+The export changes only what you changed: the translation and the confirmed flag (a segment that is Confirmed, Proofread or Approved in Workbench is confirmed in Phrase). Everything else in the file – Phrase's MT and TM suggestions, timestamps, the preview – stays exactly as Phrase wrote it; a file exported without changes is identical to the original. An empty segment in Workbench leaves the file's translation alone. The export refuses, and writes nothing, if the project no longer matches the file (segments split or joined, or a different file picked), and a file that is not a Phrase MXLIFF is refused at import with the reason. Tested with 20,000 segments: about 1.5 seconds to read, under a second to export.
+
 ### Changed (AI models · Claude Fable 5.2 replaces Fable 5.1)
 
 Claude Fable 5.2 takes Fable 5.1's place in the Claude and OpenRouter model lists, in Settings, in the AI Assistant and in PDF Rescue. Fable 5.2 is Anthropic's most capable model, released on 10 November 2026, and costs less than 5.1: $8/$40 per million tokens instead of $10/$50, double Claude Opus 5.5 rather than 2.5 times. The cost figures know its prices. If you had Fable 5.1 chosen, it stays chosen and keeps working, and its runs are still costed; pick Fable 5.2 from the list to switch.

@@ -42,6 +42,7 @@ _BILINGUAL_ORIGIN_ATTRS = (
     "trados_source_path",
     "memoq_source_path",
     "mqxliff_source_path",
+    "mxliff_source_path",
     "cafetran_source_path",
     "sdlppx_source_path",
     "dejavu_source_path",

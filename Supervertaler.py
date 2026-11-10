@@ -1971,6 +1971,7 @@ class Project:
     trados_source_path: str = None  # Path to original Trados bilingual DOCX for round-trip export
     memoq_source_path: str = None  # Path to original memoQ bilingual DOCX for round-trip export
     mqxliff_source_path: str = None  # Path to original memoQ XLIFF for round-trip export
+    mxliff_source_path: str = None  # Path to original Phrase MXLIFF for round-trip export
     cafetran_source_path: str = None  # Path to original CafeTran bilingual DOCX for round-trip export
     sdlppx_source_path: str = None  # Path to original Trados SDLPPX package for SDLRPX export
     sdlxliff_source_paths: list = None  # Paths to standalone .sdlxliff files for round-trip export
@@ -2063,6 +2064,8 @@ class Project:
             result['memoq_source_path'] = self.memoq_source_path
         if self.mqxliff_source_path:
             result['mqxliff_source_path'] = self.mqxliff_source_path
+        if self.mxliff_source_path:
+            result['mxliff_source_path'] = self.mxliff_source_path
         if self.cafetran_source_path:
             result['cafetran_source_path'] = self.cafetran_source_path
         if self.sdlppx_source_path:
@@ -2156,6 +2159,8 @@ class Project:
         # Store memoQ XLIFF source path if it exists
         if 'mqxliff_source_path' in data:
             project.mqxliff_source_path = data['mqxliff_source_path']
+        if 'mxliff_source_path' in data:
+            project.mxliff_source_path = data['mxliff_source_path']
         # Store CafeTran source path if it exists
         if 'cafetran_source_path' in data:
             project.cafetran_source_path = data['cafetran_source_path']
@@ -11650,6 +11655,11 @@ class SupervertalerQt(QMainWindow):
         import_phrase_bilingual_action = QAction(self.tr("&Bilingual (DOCX)..."), self)
         import_phrase_bilingual_action.triggered.connect(self.import_phrase_bilingual)
         phrase_submenu.addAction(import_phrase_bilingual_action)
+        import_phrase_mxliff_action = QAction(self.tr("&MXLIFF (.mxliff)..."), self)
+        import_phrase_mxliff_action.setToolTip(self.tr(
+            "Import a Phrase MXLIFF file, with its translations, confirmed and locked segments"))
+        import_phrase_mxliff_action.triggered.connect(self.import_phrase_mxliff)
+        phrase_submenu.addAction(import_phrase_mxliff_action)
 
         # Déjà Vu X3 submenu
         dejavu_submenu = import_menu.addMenu(self.tr("&Déjà Vu X3"))
@@ -11770,6 +11780,11 @@ class SupervertalerQt(QMainWindow):
         export_phrase_bilingual_action = QAction(self.tr("&Bilingual - Translated (DOCX)..."), self)
         export_phrase_bilingual_action.triggered.connect(self.export_phrase_bilingual)
         phrase_export_submenu.addAction(export_phrase_bilingual_action)
+        export_phrase_mxliff_action = QAction(self.tr("&MXLIFF - Translated (.mxliff)..."), self)
+        export_phrase_mxliff_action.setToolTip(self.tr(
+            "Write the translations back into the Phrase MXLIFF, ready to upload to Phrase"))
+        export_phrase_mxliff_action.triggered.connect(self.export_phrase_mxliff)
+        phrase_export_submenu.addAction(export_phrase_mxliff_action)
 
         # GNU gettext .po / .pot export (Linux/Django/WordPress l10n)
         export_po_action = QAction(self.tr("&GNU gettext - Translated (.po)..."), self)
@@ -33949,7 +33964,7 @@ class SupervertalerQt(QMainWindow):
     # and the handler that writes the translation back into it, per format.
     _ROUND_TRIP_STATE = ('trados_source_file', 'trados_handler', 'memoq_source_file',
                          'memoq_rtf_source_file', 'memoq_rtf_handler', 'mqxliff_source_file',
-                         'mqxliff_handler', 'cafetran_source_file', 'cafetran_handler',
+                         'mqxliff_handler', 'mxliff_source_file', 'cafetran_source_file', 'cafetran_handler',
                          'phrase_source_file', 'phrase_handler', 'po_source_file', 'po_handler',
                          'dejavu_source_file', 'dejavu_handler', 'sdlppx_source_file',
                          'sdlppx_handler', 'sdlxliff_source_files', 'sdlxliff_handler')
@@ -42639,6 +42654,197 @@ class SupervertalerQt(QMainWindow):
             self.log(f"✗ SDLXLIFF export failed: {str(e)}")
             import traceback
             traceback.print_exc()
+
+    # ========================================================================
+    # PHRASE (MEMSOURCE) MXLIFF IMPORT/EXPORT
+    # ========================================================================
+
+    def import_phrase_mxliff(self):
+        """Import a Phrase (Memsource) MXLIFF file."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            self.tr("Select Phrase MXLIFF File"),
+            "",
+            self.tr("Phrase MXLIFF (*.mxliff);;All Files (*.*)")
+        )
+        if not file_path:
+            return
+
+        reimport_mode, preserved_id, preserved_tm, preserved_tb = self._check_reimport_same_file(
+            file_path, ['current_project.mxliff_source_path']
+        )
+        if reimport_mode is None:  # User cancelled
+            return
+
+        from modules.mxliff_handler import MxliffDocument, MxliffError
+        # About 1.5 s for 20,000 segments: show that something is happening.
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            doc, error = MxliffDocument.load(file_path), None
+        except MxliffError as e:
+            doc, error = None, e
+        finally:
+            QApplication.restoreOverrideCursor()
+        if error is not None:
+            e = error
+            self.log(f"✗ Phrase MXLIFF import failed: {e}")
+            QMessageBox.critical(self, self.tr("Import Error"),
+                                 self.tr("Could not import the Phrase MXLIFF file:\n\n{err}").format(err=str(e)))
+            return
+
+        try:
+            # The id is the unit's position: the export pairs the n-th segment
+            # with the n-th unit, and checks the source text before writing.
+            segments = [
+                Segment(
+                    id=i + 1,
+                    source=unit.source,
+                    target=unit.target,
+                    status=unit.status if unit.status in STATUSES else DEFAULT_STATUS.key,
+                    match_percent=unit.match_percent,
+                    locked=unit.locked,
+                    notes="",
+                )
+                for i, unit in enumerate(doc.units)
+            ]
+
+            source_lang = self._normalize_language_code(doc.source_lang)
+            target_lang = self._normalize_language_code(doc.target_lang)
+            if not self._is_known_language(source_lang) or not self._is_known_language(target_lang):
+                chosen = self._confirm_language_pair(
+                    source_lang if self._is_known_language(source_lang) else None,
+                    target_lang if self._is_known_language(target_lang) else None,
+                    context=f"File declares: {doc.source_lang} → {doc.target_lang}",
+                )
+                if not chosen:
+                    self.log("✗ User cancelled Phrase MXLIFF import at the language prompt")
+                    return
+                source_lang, target_lang = chosen
+
+            self.current_project = Project(
+                name=Path(file_path).stem,
+                segments=segments,
+                source_lang=source_lang,
+                target_lang=target_lang
+            )
+            self._apply_reimport_settings(self.current_project, reimport_mode, preserved_id, preserved_tm, preserved_tb)
+            self.current_project.mxliff_source_path = file_path
+            self.mxliff_source_file = file_path
+
+            self.source_language = source_lang
+            self.target_language = target_lang
+            self.project_file_path = None
+            self.project_modified = True
+            self._original_segment_order = self.current_project.segments.copy()
+            self.update_window_title()
+
+            _n_segs = len(segments)
+            with _ImportProgressDialog(
+                self, title="Importing Phrase MXLIFF",
+                initial_label=f"Loading {_n_segs:,} segments into grid…",
+                initial_total=max(_n_segs, 1),
+            ) as _prog:
+                self.load_segments_to_grid(progress_callback=_prog.grid_callback)
+            self.initialize_tm_database()
+            self._clear_caches_after_import()
+            if not reimport_mode:
+                self._deactivate_all_resources_for_new_project()
+            self.auto_resize_rows()
+            self._initialize_spellcheck_for_target_language(target_lang)
+
+            translated = sum(1 for u in doc.units if u.target.strip())
+            confirmed = sum(1 for u in doc.units if u.confirmed)
+            locked = sum(1 for u in doc.units if u.locked)
+            self.log(f"✓ Imported {_n_segs} segments from Phrase MXLIFF: {Path(file_path).name}")
+            self.log(f"  Source: {source_lang}, Target: {target_lang}; "
+                     f"{translated} with a translation, {confirmed} confirmed, {locked} locked")
+            for w in doc.warnings:
+                self.log(f"  ⚠️ {w}")
+
+            msg = self.tr(
+                "Imported {n} segment(s) from Phrase MXLIFF.\n\n"
+                "Languages: {src} → {tgt}\n"
+                "With a translation: {tr}\nConfirmed: {conf}\nLocked: {lock}\n\n"
+                "Export with File > Export > Phrase (Memsource) > MXLIFF to upload "
+                "the translation back to Phrase."
+            ).format(n=_n_segs, src=source_lang, tgt=target_lang, tr=translated,
+                     conf=confirmed, lock=locked)
+            if doc.warnings:
+                msg += "\n\n" + "\n\n".join(doc.warnings)
+
+            self._finalise_import_with_indexes()
+            QMessageBox.information(self, self.tr("Import Successful"), msg)
+        except Exception as e:
+            self.log(f"❌ Error importing Phrase MXLIFF: {e}")
+            QMessageBox.critical(self, self.tr("Import Error"),
+                                 self.tr("Error importing Phrase MXLIFF file:\n\n{err}").format(err=str(e)))
+
+    def export_phrase_mxliff(self):
+        """Write the translations back into the original Phrase MXLIFF."""
+        if not self.current_project or not self.current_project.segments:
+            QMessageBox.warning(self, self.tr("No Data"), self.tr("No segments to export"))
+            return
+
+        source = getattr(self, 'mxliff_source_file', None)
+        if not source or not Path(source).exists():
+            source = getattr(self.current_project, 'mxliff_source_path', None)
+        if not source or not Path(source).exists():
+            reply = QMessageBox.question(
+                self, self.tr("Select Phrase MXLIFF Source File"),
+                self.tr("To export to Phrase MXLIFF, please select the original .mxliff file "
+                        "this project was imported from.\n\nWould you like to select it now?"),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                self.log("Export cancelled")
+                return
+            source, _ = QFileDialog.getOpenFileName(
+                self, self.tr("Select Original Phrase MXLIFF File"), "",
+                self.tr("Phrase MXLIFF (*.mxliff);;All Files (*.*)"))
+            if not source:
+                self.log("Export cancelled - no source file selected")
+                return
+        self.mxliff_source_file = source
+
+        output_path, _ = QFileDialog.getSaveFileName(
+            self,
+            self.tr("Save Translated Phrase MXLIFF"),
+            self._project_export_path(Path(source).stem + "_translated.mxliff"),
+            self.tr("Phrase MXLIFF (*.mxliff);;All Files (*.*)")
+        )
+        if not output_path:
+            return
+
+        from modules.mxliff_handler import MxliffDocument, MxliffError
+        segments = self._segments_in_document_order()
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            # Read afresh every time: the file may have been replaced since the import.
+            doc = MxliffDocument.load(source)
+            changed = doc.save(output_path,
+                               [seg.target for seg in segments],
+                               [seg.status for seg in segments],
+                               sources=[seg.source for seg in segments])
+            error = None
+        except (MxliffError, OSError) as e:
+            error = e
+        finally:
+            QApplication.restoreOverrideCursor()
+        if error is not None:
+            e = error
+            self.log(f"✗ Phrase MXLIFF export failed: {e}")
+            QMessageBox.critical(self, self.tr("Export Error"),
+                                 self.tr("Could not export the Phrase MXLIFF file:\n\n{err}\n\n"
+                                         "Nothing was written.").format(err=str(e)))
+            return
+        self.log(f"✓ Exported Phrase MXLIFF: {changed} segment(s) with a new translation "
+                 f"or confirmed flag → {Path(output_path).name}")
+        QMessageBox.information(
+            self, self.tr("Export Successful"),
+            self.tr("Exported to Phrase MXLIFF: {n} segment(s) with a new translation or "
+                    "confirmed flag.\n\nFile: {path}\n\nUpload this file to the job in "
+                    "Phrase to bring the translation in.").format(n=changed, path=output_path)
+        )
 
     def import_phrase_bilingual(self):
         """Import Phrase (Memsource) bilingual DOCX file"""

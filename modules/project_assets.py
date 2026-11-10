@@ -138,6 +138,7 @@ ROUND_TRIP_SOURCE_FIELDS = (
     "trados_source_path",
     "memoq_source_path",
     "mqxliff_source_path",
+    "mxliff_source_path",
     "cafetran_source_path",
     "sdlppx_source_path",
     "sdlxliff_source_paths",  # a list
