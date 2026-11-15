@@ -79,6 +79,7 @@ _ISO_TO_ENGLISH: dict[str, str] = {
     "ur": "Urdu",
     "vi": "Vietnamese",
     "zh": "Chinese (Simplified)",  # see note below re: Hans/Hant
+    "zu": "Zulu",
 }
 
 # Subtags that mean "Traditional Chinese" – when present we prefer the
@@ -115,6 +116,8 @@ def iso_to_english_name(code: Optional[str]) -> Optional[str]:
             return "Chinese (Traditional)"
     else:
         primary = s
+    # TMX headers occasionally use ISO 639-2 three-letter codes (e.g. 'zul').
+    primary = _ISO3_TO_ISO1.get(primary, primary)
     return _ISO_TO_ENGLISH.get(primary)
 
 
@@ -153,6 +156,7 @@ _REGION_NAME_TO_CODE: dict[str, str] = {
     "canada": "CA", "australia": "AU", "new zealand": "NZ", "ireland": "IE",
     "austria": "AT", "germany": "DE", "switzerland": "CH", "france": "FR",
     "spain": "ES", "mexico": "MX", "brazil": "BR", "portugal": "PT", "italy": "IT",
+    "south africa": "ZA",
 }
 
 # ISO 639-2 (three-letter) → 639-1, occasionally seen in TMX headers.
@@ -161,6 +165,7 @@ _ISO3_TO_ISO1: dict[str, str] = {
     "fre": "fr", "fra": "fr", "spa": "es", "ita": "it", "por": "pt",
     "rus": "ru", "chi": "zh", "zho": "zh", "jpn": "ja", "kor": "ko",
     "ara": "ar", "pol": "pl", "swe": "sv", "dan": "da", "nor": "no", "fin": "fi",
+    "zul": "zu",
 }
 
 

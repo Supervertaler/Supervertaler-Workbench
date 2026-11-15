@@ -32802,7 +32802,7 @@ class SupervertalerQt(QMainWindow):
             ("Portuguese", "pt"), ("Romanian", "ro"), ("Russian", "ru"), ("Serbian", "sr"),
             ("Slovak", "sk"), ("Slovenian", "sl"), ("Spanish", "es"), ("Swahili", "sw"),
             ("Swedish", "sv"), ("Thai", "th"), ("Turkish", "tr"), ("Ukrainian", "uk"),
-            ("Urdu", "ur"), ("Vietnamese", "vi"), ("Welsh", "cy"),
+            ("Urdu", "ur"), ("Vietnamese", "vi"), ("Welsh", "cy"), ("Zulu", "zu-ZA"),
         ]
         for lang_name, lang_code in available_langs:
             source_lang_combo.addItem(lang_name, lang_code)
@@ -41240,7 +41240,8 @@ class SupervertalerQt(QMainWindow):
                 "Italian", "Japanese", "Korean", "Latvian", "Lithuanian", "Macedonian",
                 "Malay", "Norwegian", "Persian", "Polish", "Portuguese", "Romanian",
                 "Russian", "Serbian", "Slovak", "Slovenian", "Spanish", "Swahili",
-                "Swedish", "Thai", "Turkish", "Ukrainian", "Urdu", "Vietnamese", "Welsh"
+                "Swedish", "Thai", "Turkish", "Ukrainian", "Urdu", "Vietnamese", "Welsh",
+                "Zulu"
             ]
             source_combo.addItems(available_languages)
             # Prefer the detected language, else the current UI selection
@@ -43087,7 +43088,8 @@ class SupervertalerQt(QMainWindow):
                 "Italian", "Japanese", "Korean", "Latvian", "Lithuanian", "Macedonian",
                 "Malay", "Norwegian", "Persian", "Polish", "Portuguese", "Romanian",
                 "Russian", "Serbian", "Slovak", "Slovenian", "Spanish", "Swahili",
-                "Swedish", "Thai", "Turkish", "Ukrainian", "Urdu", "Vietnamese", "Welsh"
+                "Swedish", "Thai", "Turkish", "Ukrainian", "Urdu", "Vietnamese", "Welsh",
+                "Zulu"
             ]
             source_combo.addItems(available_languages)
             # Prefer the auto-detected source; fall back to the main UI

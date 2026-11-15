@@ -324,6 +324,7 @@ _LANG_CODE_TO_NAME = {
     "sr": "Serbian", "sk": "Slovak", "sl": "Slovenian", "es": "Spanish",
     "sw": "Swahili", "sv": "Swedish", "th": "Thai", "tr": "Turkish",
     "uk": "Ukrainian", "ur": "Urdu", "vi": "Vietnamese", "cy": "Welsh",
+    "zu": "Zulu",
 }
 
 
