@@ -711,6 +711,7 @@ def get_docx_language_code(lang_name_or_code: str) -> str:
         "urdu": "ur-PK",
         "vietnamese": "vi-VN",
         "welsh": "cy-GB",
+        "zulu": "zu-ZA",
     }
 
     # Check if it's a full language name
@@ -735,7 +736,7 @@ def get_docx_language_code(lang_name_or_code: str) -> str:
         "lt": "LT", "sr": "RS", "mk": "MK", "sq": "AL", "is": "IS",
         "ga": "IE", "cy": "GB", "eu": "ES", "ca": "ES", "gl": "ES",
         "af": "ZA", "sw": "KE", "hi": "IN", "bn": "BD", "ur": "PK",
-        "fa": "IR", "hy": "AM", "ka": "GE",
+        "fa": "IR", "hy": "AM", "ka": "GE", "zu": "ZA",
     }
 
     if len(lang_input) == 2 and lang_lower in code_to_region:
@@ -32802,7 +32803,7 @@ class SupervertalerQt(QMainWindow):
             ("Portuguese", "pt"), ("Romanian", "ro"), ("Russian", "ru"), ("Serbian", "sr"),
             ("Slovak", "sk"), ("Slovenian", "sl"), ("Spanish", "es"), ("Swahili", "sw"),
             ("Swedish", "sv"), ("Thai", "th"), ("Turkish", "tr"), ("Ukrainian", "uk"),
-            ("Urdu", "ur"), ("Vietnamese", "vi"), ("Welsh", "cy"), ("Zulu", "zu-ZA"),
+            ("Urdu", "ur"), ("Vietnamese", "vi"), ("Welsh", "cy"), ("Zulu", "zu"),
         ]
         for lang_name, lang_code in available_langs:
             source_lang_combo.addItem(lang_name, lang_code)
