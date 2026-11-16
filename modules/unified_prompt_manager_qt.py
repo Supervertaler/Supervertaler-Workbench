@@ -308,31 +308,15 @@ class _AutoPromptContextDialog(QDialog):
         return self.hint_edit.toPlainText().strip()
 
 
-# Language code → full name mapping (matches Supervertaler.py available_langs)
-_LANG_CODE_TO_NAME = {
-    "af": "Afrikaans", "sq": "Albanian", "ar": "Arabic", "hy": "Armenian",
-    "eu": "Basque", "bn": "Bengali", "bg": "Bulgarian", "ca": "Catalan",
-    "zh-cn": "Chinese (Simplified)", "zh-tw": "Chinese (Traditional)",
-    "hr": "Croatian", "cs": "Czech", "da": "Danish", "nl": "Dutch",
-    "en": "English", "et": "Estonian", "fi": "Finnish", "fr": "French",
-    "gl": "Galician", "ka": "Georgian", "de": "German", "el": "Greek",
-    "he": "Hebrew", "hi": "Hindi", "hu": "Hungarian", "is": "Icelandic",
-    "id": "Indonesian", "ga": "Irish", "it": "Italian", "ja": "Japanese",
-    "ko": "Korean", "lv": "Latvian", "lt": "Lithuanian", "mk": "Macedonian",
-    "ms": "Malay", "no": "Norwegian", "nb": "Norwegian", "fa": "Persian",
-    "pl": "Polish", "pt": "Portuguese", "ro": "Romanian", "ru": "Russian",
-    "sr": "Serbian", "sk": "Slovak", "sl": "Slovenian", "es": "Spanish",
-    "sw": "Swahili", "sv": "Swedish", "th": "Thai", "tr": "Turkish",
-    "uk": "Ukrainian", "ur": "Urdu", "vi": "Vietnamese", "cy": "Welsh",
-    "zu": "Zulu",
-}
 
 
 def _resolve_lang_name(code_or_name):
-    """Convert a language code to its full name; pass through if already a name."""
+    """Convert a language code to its full name; pass through if already a
+    name, or if modules/language_codes.py doesn't know it."""
     if not code_or_name:
         return code_or_name
-    return _LANG_CODE_TO_NAME.get(code_or_name.lower().strip(), code_or_name)
+    from modules import language_codes as _lc
+    return _lc.english_name(code_or_name) or code_or_name
 
 
 from modules.styled_widgets import CheckmarkCheckBox, HelpButton  # noqa: E402

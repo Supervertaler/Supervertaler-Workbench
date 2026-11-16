@@ -68,22 +68,12 @@ def _is_ai_code(code: str) -> bool:
     return code in _AI_PROVIDER_CODES
 
 
-# Canonical list of translation languages, shared by the QuickTrans popup's
-# language-pair selector and Settings → Language Pair (Supervertaler.py imports
-# this so the two stay in sync). Full display names – the same strings the
+# The translation languages for the QuickTrans popup's language-pair selector
+# and Settings → Language Pair (Supervertaler.py imports this), taken from the
+# one list in modules/language_codes.py. Full display names – the same strings the
 # project stores and the MT/LLM call functions expect.
-AVAILABLE_LANGUAGES = [
-    "Afrikaans", "Albanian", "Arabic", "Armenian", "Basque", "Bengali",
-    "Bulgarian", "Catalan", "Chinese (Simplified)", "Chinese (Traditional)",
-    "Croatian", "Czech", "Danish", "Dutch", "English", "Estonian",
-    "Finnish", "French", "Galician", "Georgian", "German", "Greek",
-    "Hebrew", "Hindi", "Hungarian", "Icelandic", "Indonesian", "Irish",
-    "Italian", "Japanese", "Korean", "Latvian", "Lithuanian", "Macedonian",
-    "Malay", "Norwegian", "Persian", "Polish", "Portuguese", "Romanian",
-    "Russian", "Serbian", "Slovak", "Slovenian", "Spanish", "Swahili",
-    "Swedish", "Thai", "Turkish", "Ukrainian", "Urdu", "Vietnamese", "Welsh",
-    "Zulu",
-]
+from modules import language_codes as _language_codes  # noqa: E402
+AVAILABLE_LANGUAGES = _language_codes.picker_names()
 
 
 def _canonical_lang_name(value):

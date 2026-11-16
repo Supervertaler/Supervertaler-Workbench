@@ -115,6 +115,12 @@ def _select_lang_in_combo(combo, value):
     want = _lc.base_code(value)
     if not want:
         return
+    # An exact locale first, so a zh-TW project picks Chinese (Traditional),
+    # not the Simplified entry that shares its base code.
+    for i in range(combo.count()):
+        if _lc.same_language(combo.itemData(i), value, region=True):
+            combo.setCurrentIndex(i)
+            return
     for i in range(combo.count()):
         if _lc.base_code(combo.itemData(i)) == want:
             combo.setCurrentIndex(i)
@@ -607,146 +613,8 @@ def get_docx_language_code(lang_name_or_code: str) -> str:
     Returns:
         DOCX-compatible language code with region (e.g., 'nl-NL', 'en-US')
     """
-    if not lang_name_or_code:
-        return "en-US"  # Default fallback
-
-    lang_input = lang_name_or_code.strip()
-    lang_lower = lang_input.lower()
-
-    # Map language names to full locale codes (with region)
-    # Priority: Netherlands for Dutch, US for English, etc.
-    lang_map = {
-        # Major languages with regional defaults
-        "dutch": "nl-NL",
-        "english": "en-US",
-        "german": "de-DE",
-        "french": "fr-FR",
-        "spanish": "es-ES",
-        "italian": "it-IT",
-        "portuguese": "pt-PT",
-        "russian": "ru-RU",
-        "chinese": "zh-CN",
-        "japanese": "ja-JP",
-        "korean": "ko-KR",
-        "arabic": "ar-SA",
-
-        # Dutch variants
-        "dutch (netherlands)": "nl-NL",
-        "dutch (belgium)": "nl-BE",
-        "flemish": "nl-BE",
-
-        # English variants
-        "english (us)": "en-US",
-        "english (uk)": "en-GB",
-        "english (australia)": "en-AU",
-        "english (canada)": "en-CA",
-        "american english": "en-US",
-        "british english": "en-GB",
-
-        # French variants
-        "french (france)": "fr-FR",
-        "french (canada)": "fr-CA",
-        "french (belgium)": "fr-BE",
-        "french (switzerland)": "fr-CH",
-
-        # German variants
-        "german (germany)": "de-DE",
-        "german (austria)": "de-AT",
-        "german (switzerland)": "de-CH",
-
-        # Spanish variants
-        "spanish (spain)": "es-ES",
-        "spanish (mexico)": "es-MX",
-        "spanish (latin america)": "es-419",
-
-        # Portuguese variants
-        "portuguese (portugal)": "pt-PT",
-        "portuguese (brazil)": "pt-BR",
-        "brazilian portuguese": "pt-BR",
-
-        # Chinese variants
-        "chinese (simplified)": "zh-CN",
-        "chinese (traditional)": "zh-TW",
-        "simplified chinese": "zh-CN",
-        "traditional chinese": "zh-TW",
-
-        # Other European languages
-        "afrikaans": "af-ZA",
-        "albanian": "sq-AL",
-        "armenian": "hy-AM",
-        "basque": "eu-ES",
-        "bengali": "bn-BD",
-        "bulgarian": "bg-BG",
-        "catalan": "ca-ES",
-        "croatian": "hr-HR",
-        "czech": "cs-CZ",
-        "danish": "da-DK",
-        "estonian": "et-EE",
-        "finnish": "fi-FI",
-        "galician": "gl-ES",
-        "georgian": "ka-GE",
-        "greek": "el-GR",
-        "hebrew": "he-IL",
-        "hindi": "hi-IN",
-        "hungarian": "hu-HU",
-        "icelandic": "is-IS",
-        "indonesian": "id-ID",
-        "irish": "ga-IE",
-        "latvian": "lv-LV",
-        "lithuanian": "lt-LT",
-        "macedonian": "mk-MK",
-        "malay": "ms-MY",
-        "norwegian": "nb-NO",
-        "persian": "fa-IR",
-        "polish": "pl-PL",
-        "romanian": "ro-RO",
-        "serbian": "sr-RS",
-        "slovak": "sk-SK",
-        "slovenian": "sl-SI",
-        "swahili": "sw-KE",
-        "swedish": "sv-SE",
-        "thai": "th-TH",
-        "turkish": "tr-TR",
-        "ukrainian": "uk-UA",
-        "urdu": "ur-PK",
-        "vietnamese": "vi-VN",
-        "welsh": "cy-GB",
-        "zulu": "zu-ZA",
-    }
-
-    # Check if it's a full language name
-    if lang_lower in lang_map:
-        return lang_map[lang_lower]
-
-    # Check if already in locale format (e.g., "nl-NL", "en-US")
-    if '-' in lang_input or '_' in lang_input:
-        parts = lang_input.replace('_', '-').split('-')
-        if len(parts) >= 2 and len(parts[0]) == 2:
-            return f"{parts[0].lower()}-{parts[1].upper()}"
-
-    # If it's a 2-letter code, try to add a default region
-    code_to_region = {
-        "nl": "NL", "en": "US", "de": "DE", "fr": "FR", "es": "ES",
-        "it": "IT", "pt": "PT", "ru": "RU", "zh": "CN", "ja": "JP",
-        "ko": "KR", "ar": "SA", "pl": "PL", "cs": "CZ", "da": "DK",
-        "fi": "FI", "el": "GR", "hu": "HU", "no": "NO", "nb": "NO",
-        "sv": "SE", "tr": "TR", "uk": "UA", "he": "IL", "th": "TH",
-        "vi": "VN", "id": "ID", "ms": "MY", "ro": "RO", "bg": "BG",
-        "hr": "HR", "sk": "SK", "sl": "SI", "et": "EE", "lv": "LV",
-        "lt": "LT", "sr": "RS", "mk": "MK", "sq": "AL", "is": "IS",
-        "ga": "IE", "cy": "GB", "eu": "ES", "ca": "ES", "gl": "ES",
-        "af": "ZA", "sw": "KE", "hi": "IN", "bn": "BD", "ur": "PK",
-        "fa": "IR", "hy": "AM", "ka": "GE", "zu": "ZA",
-    }
-
-    if len(lang_input) == 2 and lang_lower in code_to_region:
-        return f"{lang_lower}-{code_to_region[lang_lower]}"
-
-    # Fallback: return as-is or with generic region
-    if len(lang_input) == 2:
-        return f"{lang_lower}-{lang_input.upper()}"
-
-    return "en-US"  # Ultimate fallback
+    from modules import language_codes as _lc
+    return _lc.docx_locale(lang_name_or_code)
 
 
 def set_docx_language(doc, lang_code: str):
@@ -32788,23 +32656,8 @@ class SupervertalerQt(QMainWindow):
         
         # Source language
         source_lang_combo = QComboBox()
-        # Full language list matching Settings → Language Pair (with ISO 639-1 codes)
-        available_langs = [
-            ("Afrikaans", "af"), ("Albanian", "sq"), ("Arabic", "ar"), ("Armenian", "hy"),
-            ("Basque", "eu"), ("Bengali", "bn"), ("Bulgarian", "bg"), ("Catalan", "ca"),
-            ("Chinese (Simplified)", "zh-CN"), ("Chinese (Traditional)", "zh-TW"),
-            ("Croatian", "hr"), ("Czech", "cs"), ("Danish", "da"), ("Dutch", "nl"),
-            ("English", "en"), ("Estonian", "et"), ("Finnish", "fi"), ("French", "fr"),
-            ("Galician", "gl"), ("Georgian", "ka"), ("German", "de"), ("Greek", "el"),
-            ("Hebrew", "he"), ("Hindi", "hi"), ("Hungarian", "hu"), ("Icelandic", "is"),
-            ("Indonesian", "id"), ("Irish", "ga"), ("Italian", "it"), ("Japanese", "ja"),
-            ("Korean", "ko"), ("Latvian", "lv"), ("Lithuanian", "lt"), ("Macedonian", "mk"),
-            ("Malay", "ms"), ("Norwegian", "no"), ("Persian", "fa"), ("Polish", "pl"),
-            ("Portuguese", "pt"), ("Romanian", "ro"), ("Russian", "ru"), ("Serbian", "sr"),
-            ("Slovak", "sk"), ("Slovenian", "sl"), ("Spanish", "es"), ("Swahili", "sw"),
-            ("Swedish", "sv"), ("Thai", "th"), ("Turkish", "tr"), ("Ukrainian", "uk"),
-            ("Urdu", "ur"), ("Vietnamese", "vi"), ("Welsh", "cy"), ("Zulu", "zu"),
-        ]
+        # The one language list (modules/language_codes.py), as every picker.
+        available_langs = _import_language_pairs()
         for lang_name, lang_code in available_langs:
             source_lang_combo.addItem(lang_name, lang_code)
         settings_layout.addRow("Source Language:", source_lang_combo)
@@ -41231,19 +41084,9 @@ class SupervertalerQt(QMainWindow):
             source_row = QHBoxLayout()
             source_row.addWidget(QLabel(self.tr("Source Language:")))
             source_combo = QComboBox()
-            # Full language list (same as New Project dialog)
-            available_languages = [
-                "Afrikaans", "Albanian", "Arabic", "Armenian", "Basque", "Bengali",
-                "Bulgarian", "Catalan", "Chinese (Simplified)", "Chinese (Traditional)",
-                "Croatian", "Czech", "Danish", "Dutch", "English", "Estonian",
-                "Finnish", "French", "Galician", "Georgian", "German", "Greek",
-                "Hebrew", "Hindi", "Hungarian", "Icelandic", "Indonesian", "Irish",
-                "Italian", "Japanese", "Korean", "Latvian", "Lithuanian", "Macedonian",
-                "Malay", "Norwegian", "Persian", "Polish", "Portuguese", "Romanian",
-                "Russian", "Serbian", "Slovak", "Slovenian", "Spanish", "Swahili",
-                "Swedish", "Thai", "Turkish", "Ukrainian", "Urdu", "Vietnamese", "Welsh",
-                "Zulu"
-            ]
+            # The one language list (modules/language_codes.py), as every picker.
+            from modules import language_codes as _lc
+            available_languages = _lc.picker_names()
             source_combo.addItems(available_languages)
             # Prefer the detected language, else the current UI selection
             current_source = detected_src_name or (
@@ -43079,19 +42922,9 @@ class SupervertalerQt(QMainWindow):
             source_row = QHBoxLayout()
             source_row.addWidget(QLabel(self.tr("Source Language:")))
             source_combo = QComboBox()
-            # Full language list (same as New Project dialog)
-            available_languages = [
-                "Afrikaans", "Albanian", "Arabic", "Armenian", "Basque", "Bengali",
-                "Bulgarian", "Catalan", "Chinese (Simplified)", "Chinese (Traditional)",
-                "Croatian", "Czech", "Danish", "Dutch", "English", "Estonian",
-                "Finnish", "French", "Galician", "Georgian", "German", "Greek",
-                "Hebrew", "Hindi", "Hungarian", "Icelandic", "Indonesian", "Irish",
-                "Italian", "Japanese", "Korean", "Latvian", "Lithuanian", "Macedonian",
-                "Malay", "Norwegian", "Persian", "Polish", "Portuguese", "Romanian",
-                "Russian", "Serbian", "Slovak", "Slovenian", "Spanish", "Swahili",
-                "Swedish", "Thai", "Turkish", "Ukrainian", "Urdu", "Vietnamese", "Welsh",
-                "Zulu"
-            ]
+            # The one language list (modules/language_codes.py), as every picker.
+            from modules import language_codes as _lc
+            available_languages = _lc.picker_names()
             source_combo.addItems(available_languages)
             # Prefer the auto-detected source; fall back to the main UI
             # current selection so the dialog still works on a file
