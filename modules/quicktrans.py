@@ -82,6 +82,7 @@ AVAILABLE_LANGUAGES = [
     "Malay", "Norwegian", "Persian", "Polish", "Portuguese", "Romanian",
     "Russian", "Serbian", "Slovak", "Slovenian", "Spanish", "Swahili",
     "Swedish", "Thai", "Turkish", "Ukrainian", "Urdu", "Vietnamese", "Welsh",
+    "Zulu",
 ]
 
 

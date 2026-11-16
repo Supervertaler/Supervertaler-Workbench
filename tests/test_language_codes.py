@@ -143,3 +143,24 @@ def test_available_pairs_covers_picker_languages():
     assert ("Slovak", "sk") in pairs
     assert [n for n, _ in pairs] == sorted((n for n, _ in pairs), key=str.lower)
     assert base_code("sk") == base_code("Slovak") == base_code("sk-SK") == "sk"
+
+
+def test_zulu_resolves_from_every_form():
+    """Zulu (PR 257): the two-letter code, the region form, the ISO 639-2
+    code a TMX header may carry, and the picker names all mean one language."""
+    for form in ("zu", "zu-ZA", "zul", "Zulu", "Zulu (South Africa)"):
+        assert lc.base_code(form) == "zu", form
+        assert lc.english_name(form) == "Zulu", form
+    assert lc.canonical("Zulu (South Africa)") == "zu-ZA"
+    assert lc.iso_to_english_name("zul") == "Zulu"
+    assert lc.same_language("zul", "zu-ZA")
+    assert ("Zulu", "zu") in lc.available_pairs()
+
+
+def test_iso3_fallback_keeps_unknown_codes_unknown():
+    """The three-letter fallback in iso_to_english_name only maps codes it
+    knows; anything else still returns None rather than a guess."""
+    assert lc.iso_to_english_name("fra") == "French"
+    assert lc.iso_to_english_name("xyz") is None
+    assert lc.iso_to_english_name("") is None
+    assert lc.iso_to_english_name(None) is None

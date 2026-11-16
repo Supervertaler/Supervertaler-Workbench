@@ -64,7 +64,7 @@ class TermbaseImporter:
         'ukrainian', 'croatian', 'serbian', 'slovenian', 'bosnian', 'macedonian',
         'catalan', 'basque', 'galician', 'welsh', 'irish', 'scottish',
         'indonesian', 'malay', 'thai', 'vietnamese', 'hindi', 'bengali', 'tamil',
-        'afrikaans', 'swahili', 'persian', 'farsi', 'urdu', 'punjabi',
+        'afrikaans', 'swahili', 'zulu', 'persian', 'farsi', 'urdu', 'punjabi',
         'nederlands', 'deutsch', 'français', 'español', 'italiano', 'português',
         'русский', '中文', '日本語', '한국어', 'العربية', 'עברית', 'türkçe'
     ]
