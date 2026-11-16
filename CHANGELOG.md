@@ -11,6 +11,10 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 Zulu is now in every language list: New Project, the import dialogs, Settings > Language Pair, QuickTrans and the prompt manager. `zu`, `zu-ZA`, `zul` and "Zulu" all count as the same language, so translation memories and glossaries find each other's entries. A Zulu DOCX export is tagged Zulu for spellchecking in Word, and a termbase column headed "Zulu" is recognised on import. TMX headers that use three-letter codes such as `fra` or `zul` are now recognised too. Contributed by @The-Good-People.
 
+### Changed (one list of languages)
+
+Every language list now comes from one place: New Project, the import dialogs, Settings > Language Pair, QuickTrans, the prompt manager and the spellcheck language a DOCX export is tagged with. The lists show the same languages as before; what changes is that a new language is added once, and a test fails if any part is missed. Along the way: a project in Chinese (Traditional) now selects Traditional, not Simplified, in the import dialogs; the prompt manager names regional codes such as `nl-BE` and `nb-NO` instead of showing the code; `nb` and `nn` count as Norwegian when matching translation memories and glossaries; and a Norwegian DOCX export is always tagged `nb-NO`, the tag Word proofs.
+
 ### Added (Phrase · MXLIFF import and export)
 
 File > Import > Phrase (Memsource) now has **MXLIFF (.mxliff)…** next to the bilingual DOCX, and File > Export > Phrase (Memsource) has **MXLIFF - Translated (.mxliff)…**, which writes the translation back into the file so you can upload it to the job in Phrase. Existing translations come in with the file: confirmed segments are Confirmed, machine translations MT and TM matches Pre-translated, with their match percentage. Locked segments are locked in Workbench too and never written to. Phrase's inline tags, such as `{b>…<b}` and `{1}`, stay in the text as they are, as with the bilingual DOCX.

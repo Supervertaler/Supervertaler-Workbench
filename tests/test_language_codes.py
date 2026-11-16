@@ -164,3 +164,66 @@ def test_iso3_fallback_keeps_unknown_codes_unknown():
     assert lc.iso_to_english_name("xyz") is None
     assert lc.iso_to_english_name("") is None
     assert lc.iso_to_english_name(None) is None
+
+
+# --- One list of languages ---------------------------------------------------
+# Every picker and the DOCX export read modules/language_codes.py. These tests
+# fail if a language is added to one table and not the other, or if a private
+# list creeps back into the files that used to keep their own.
+
+def test_every_language_has_a_word_locale():
+    missing = sorted(set(lc._ISO_TO_ENGLISH) - set(lc._DEFAULT_LOCALE))
+    extra = sorted(set(lc._DEFAULT_LOCALE) - set(lc._ISO_TO_ENGLISH))
+    assert not missing, f"no Word locale for: {missing} (add to _DEFAULT_LOCALE)"
+    assert not extra, f"Word locale for a language not in the list: {extra}"
+    for code, loc in lc._DEFAULT_LOCALE.items():
+        assert lc.docx_locale(code) == lc.docx_locale(lc._ISO_TO_ENGLISH[code]) \
+            == ("nb-NO" if code == "no" else loc), code
+
+
+def test_picker_names_cover_every_language_once():
+    names = lc.picker_names()
+    assert len(names) == len(set(names))
+    assert set(names) == set(lc._ISO_TO_ENGLISH.values()) | {"Chinese (Traditional)"}
+    assert names == sorted(names, key=str.lower)
+    for name, code in lc.available_pairs():
+        assert lc.english_name(code) == name, (name, code)
+
+
+def test_docx_locale_keeps_regions_and_falls_back_to_english():
+    assert lc.docx_locale("Dutch (Belgium)") == "nl-BE"
+    assert lc.docx_locale("Flemish") == "nl-BE"
+    assert lc.docx_locale("English (UK)") == "en-GB"
+    assert lc.docx_locale("British English") == "en-GB"
+    assert lc.docx_locale("Spanish (Latin America)") == "es-419"
+    assert lc.docx_locale("pt-BR") == "pt-BR"
+    assert lc.docx_locale("nl_be") == "nl-BE"
+    assert lc.docx_locale("Chinese (Traditional)") == "zh-TW"
+    assert lc.docx_locale("Norwegian") == lc.docx_locale("no") == "nb-NO"
+    assert lc.docx_locale("kk-KZ") == "kk-KZ"      # unlisted, but a locale
+    for unknown in ("", None, "Klingon", "xx"):
+        assert lc.docx_locale(unknown) == "en-US", unknown
+
+
+def test_chinese_traditional_name_resolves():
+    assert lc.english_name("Chinese (Traditional)") == "Chinese (Traditional)"
+    assert lc.english_name("Traditional Chinese") == "Chinese (Traditional)"
+    assert lc.english_name("Chinese (Simplified)") == "Chinese (Simplified)"
+
+
+def test_norwegian_written_standards_are_norwegian():
+    assert lc.same_language("nb-NO", "Norwegian")
+    assert lc.same_language("nn", "no")
+    assert lc.english_name("nb") == "Norwegian"
+
+
+def test_no_private_language_lists_return():
+    """The files that used to keep their own list must not grow one again."""
+    import re
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    for rel in ("Supervertaler.py", "modules/quicktrans.py",
+                "modules/unified_prompt_manager_qt.py"):
+        with open(os.path.join(root, rel), encoding="utf-8") as f:
+            text = f.read()
+        hits = re.findall(r'"Swahili",\s*"Swedish"|"swahili":\s*"sw|"sw":\s*"Swahili"', text)
+        assert not hits, f"{rel} has its own language list again: use modules/language_codes.py"

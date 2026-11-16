@@ -6,16 +6,18 @@ they extract from file metadata (e.g. Phrase's ``Source (cs) | Target
 (de-de)`` header) into the English names Workbench's language pickers
 display (``Czech``, ``German``).
 
-Covers the languages in the New-Project dialog's
-``available_languages`` list (full Workbench picker set). Codes are
-matched case-insensitively against the 2-letter ISO 639-1 prefix, so
-inputs like ``cs``, ``cs-CZ``, ``cs-cz``, ``CS-CZ`` all resolve to
-``Czech``.
+This module is the ONE list of languages Workbench knows. Every language
+picker (New Project, the import dialogs, Settings > Language Pair, QuickTrans)
+is built from ``picker_names()`` / ``available_pairs()``, and DOCX export takes
+its Word locale from ``docx_locale()``. Codes are matched case-insensitively
+against the 2-letter ISO 639-1 prefix, so inputs like ``cs``, ``cs-CZ``,
+``cs-cz``, ``CS-CZ`` all resolve to ``Czech``.
 
-If you add a language to the New-Project picker, also add it here so
-the auto-detection round-trips cleanly. Unknown codes return ``None``
-and the caller falls back to whatever it does for "couldn't
-auto-detect".
+To add a language, add one line to ``_ISO_TO_ENGLISH`` and one to
+``_DEFAULT_LOCALE`` (plus its ISO 639-2 code in ``_ISO3_TO_ISO1`` if TMX files
+may use one). tests/test_language_codes.py fails if a language is missing from
+either table. Unknown codes return ``None`` and the caller falls back to
+whatever it does for "couldn't auto-detect".
 """
 
 from __future__ import annotations
@@ -23,9 +25,8 @@ from __future__ import annotations
 from typing import Optional
 
 
-# ISO 639-1 → English language name. Keep this in sync with the
-# ``available_languages`` list in Supervertaler.py's new-project and
-# Phrase / Trados import dialogs.
+# ISO 639-1 → English language name: the languages every picker offers.
+# Chinese is listed once here; picker_names() adds "Chinese (Traditional)".
 _ISO_TO_ENGLISH: dict[str, str] = {
     "af": "Afrikaans",
     "ar": "Arabic",
@@ -80,6 +81,23 @@ _ISO_TO_ENGLISH: dict[str, str] = {
     "vi": "Vietnamese",
     "zh": "Chinese (Simplified)",  # see note below re: Hans/Hant
     "zu": "Zulu",
+}
+
+# The Word locale (language-REGION) a DOCX export is tagged with when the
+# project names only the language. One entry per language above; a test
+# checks that. Norwegian is tagged Bokmål (nb-NO), the tag Word proofs.
+_DEFAULT_LOCALE: dict[str, str] = {
+    "af": "af-ZA", "ar": "ar-SA", "bg": "bg-BG", "bn": "bn-BD", "ca": "ca-ES",
+    "cs": "cs-CZ", "cy": "cy-GB", "da": "da-DK", "de": "de-DE", "el": "el-GR",
+    "en": "en-US", "es": "es-ES", "et": "et-EE", "eu": "eu-ES", "fa": "fa-IR",
+    "fi": "fi-FI", "fr": "fr-FR", "ga": "ga-IE", "gl": "gl-ES", "he": "he-IL",
+    "hi": "hi-IN", "hr": "hr-HR", "hu": "hu-HU", "hy": "hy-AM", "id": "id-ID",
+    "is": "is-IS", "it": "it-IT", "ja": "ja-JP", "ka": "ka-GE", "ko": "ko-KR",
+    "lt": "lt-LT", "lv": "lv-LV", "mk": "mk-MK", "ms": "ms-MY", "nl": "nl-NL",
+    "no": "nb-NO", "pl": "pl-PL", "pt": "pt-PT", "ro": "ro-RO", "ru": "ru-RU",
+    "sk": "sk-SK", "sl": "sl-SI", "sq": "sq-AL", "sr": "sr-RS", "sv": "sv-SE",
+    "sw": "sw-KE", "th": "th-TH", "tr": "tr-TR", "uk": "uk-UA", "ur": "ur-PK",
+    "vi": "vi-VN", "zh": "zh-CN", "zu": "zu-ZA",
 }
 
 # Subtags that mean "Traditional Chinese" – when present we prefer the
@@ -142,9 +160,14 @@ _NAME_TO_ISO.update({
     "chinese (simplified)": "zh-CN",
     "chinese (traditional)": "zh-TW",
     "mandarin": "zh",
-    "flemish": "nl",          # Belgian Dutch
     "castilian": "es",
     "norwegian bokmål": "no", "norwegian bokmal": "no",
+    # Spelled-out variants that name a region without "(Region)".
+    "flemish": "nl-BE",
+    "american english": "en-US", "british english": "en-GB",
+    "brazilian portuguese": "pt-BR",
+    "simplified chinese": "zh-CN", "traditional chinese": "zh-TW",
+    "spanish (latin america)": "es-419",
 })
 
 # Country/region display names → BCP-47 region subtag, for inputs that spell
@@ -166,6 +189,8 @@ _ISO3_TO_ISO1: dict[str, str] = {
     "rus": "ru", "chi": "zh", "zho": "zh", "jpn": "ja", "kor": "ko",
     "ara": "ar", "pol": "pl", "swe": "sv", "dan": "da", "nor": "no", "fin": "fi",
     "zul": "zu",
+    # Norwegian's written standards (Bokmål, Nynorsk) count as Norwegian.
+    "nb": "no", "nob": "no", "nn": "no", "nno": "no",
 }
 
 
@@ -242,7 +267,8 @@ def english_name(value):
     if not b:
         return None
     if b == "zh":
-        _p, region = _split_region(str(value).lower())
+        # canonical() also reads "Chinese (Traditional)" / "Traditional Chinese".
+        _p, region = _split_region(canonical(value).lower())
         if region in _ZH_TRADITIONAL_REGIONS:
             return "Chinese (Traditional)"
     return _ISO_TO_ENGLISH.get(b)
@@ -291,8 +317,39 @@ def match_variants(value) -> list:
 
 
 def available_pairs() -> list:
-    """(English-name, ISO code) pairs for language pickers — the full canonical
-    set, sorted by English name. Single source for the import / new-project
-    dialogs so no language is silently missing from a dropdown."""
-    return sorted(((name, code) for code, name in _ISO_TO_ENGLISH.items()),
-                  key=lambda t: t[0].lower())
+    """(English-name, code) pairs for language pickers — the full canonical
+    set, sorted by English name. The single source for every language dropdown,
+    so no language is silently missing from one. Chinese comes as two entries,
+    Simplified (zh-CN) and Traditional (zh-TW)."""
+    pairs = [(name, "zh-CN" if code == "zh" else code)
+             for code, name in _ISO_TO_ENGLISH.items()]
+    pairs.append(("Chinese (Traditional)", "zh-TW"))
+    return sorted(pairs, key=lambda t: t[0].lower())
+
+
+def picker_names() -> list:
+    """The English names of available_pairs(), in the same order, for the
+    dropdowns that hold names only."""
+    return [name for name, _code in available_pairs()]
+
+
+def docx_locale(value) -> str:
+    """The Word locale (e.g. 'nl-NL', 'en-GB', 'zu-ZA') to tag a DOCX with, for
+    spellchecking. A region the value names is kept ('Dutch (Belgium)' →
+    'nl-BE', 'pt-BR' → 'pt-BR'); otherwise the language's default locale. A
+    locale Workbench doesn't list ('kk-KZ', from an imported file) is passed
+    through; an empty or unrecognised name gives 'en-US', as before."""
+    can = canonical(value)
+    base, _sep, region = can.partition("-")
+    if not can or base not in _ISO_TO_ENGLISH:
+        # base_code() guesses a code from any word ('Klingon' → 'kl'), so
+        # only trust an unlisted language when it came as a locale.
+        primary, raw_region = _split_region(str(value or "").strip())
+        if raw_region and 2 <= len(primary) <= 3 and primary.isalpha():
+            return f"{primary.lower()}-{raw_region.upper()}"
+        return "en-US"
+    if base == "no":
+        base = "nb"  # Word proofs Norwegian as Bokmål
+    if region:
+        return f"{base}-{region}"
+    return _DEFAULT_LOCALE.get(can, f"{can}-{can.upper()}")
