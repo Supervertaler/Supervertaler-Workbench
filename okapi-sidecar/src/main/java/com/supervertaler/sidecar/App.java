@@ -28,6 +28,13 @@ import java.util.*;
  *   POST /tmx/validate     → upload TMX, get validation report
  *   POST /segment          → send text + SRX rules, get segmented result
  *   POST /shutdown         → request graceful shutdown of the sidecar
+ *
+ * Security (0.2.0): listens on 127.0.0.1 only, never on the network. When
+ * started with the environment variable SUPERVERTALER_SIDECAR_TOKEN, every
+ * request except GET /health must carry "Authorization: Bearer <token>";
+ * Workbench sets a fresh token at each launch. An uploaded file is always
+ * saved inside its own temp folder under a cleaned-up name, whatever name
+ * the request gives it.
  */
 public class App {
 
@@ -36,6 +43,9 @@ public class App {
             .enable(SerializationFeature.INDENT_OUTPUT);
 
     private static FilterService filterService;
+
+    /** The per-launch token, or null when none was given (a developer run). */
+    private static String token;
 
     public static void main(String[] args) {
         int port = 8090;
@@ -48,6 +58,9 @@ public class App {
         }
 
         filterService = new FilterService();
+
+        String envToken = System.getenv("SUPERVERTALER_SIDECAR_TOKEN");
+        token = (envToken == null || envToken.isBlank()) ? null : envToken;
 
         Javalin app = Javalin.create(config -> {
             // Allow large file uploads (100 MB)
@@ -82,12 +95,27 @@ public class App {
             });
         });
 
+        // ── Token check: everything but the health check ─────────
+        app.before(ctx -> {
+            if (token == null || "/health".equals(ctx.path())) {
+                return;
+            }
+            String auth = ctx.header("Authorization");
+            byte[] given = (auth == null ? "" : auth).getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            byte[] wanted = ("Bearer " + token).getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            if (!java.security.MessageDigest.isEqual(given, wanted)) {
+                ctx.status(401).json(Map.of("error", true, "message", "Unauthorized"));
+                ctx.skipRemainingHandlers();
+            }
+        });
+
         // ── Health check ─────────────────────────────────────────
         app.get("/health", ctx -> {
             Map<String, Object> health = new LinkedHashMap<>();
             health.put("status", "ok");
             health.put("service", "supervertaler-okapi-sidecar");
-            health.put("version", "0.1.9");
+            health.put("version", "0.2.0");
+            health.put("token_required", token != null);
             health.put("okapi_version", filterService.getOkapiVersion());
             ctx.json(health);
         });
@@ -139,8 +167,9 @@ public class App {
             ctx.status(500).json(error);
         });
 
-        app.start(port);
-        log.info("Supervertaler Okapi Sidecar started on port {}", port);
+        // Loopback only: other computers on the network can't reach it.
+        app.start("127.0.0.1", port);
+        log.info("Supervertaler Okapi Sidecar started on 127.0.0.1:{}", port);
     }
 
     /**
@@ -187,7 +216,7 @@ public class App {
 
         // Save uploaded file to temp directory
         Path tempDir = Files.createTempDirectory("okapi-extract-");
-        Path tempFile = tempDir.resolve(file.filename());
+        Path tempFile = safeTempFile(tempDir, file.filename());
         try (InputStream is = file.content()) {
             Files.copy(is, tempFile, StandardCopyOption.REPLACE_EXISTING);
         }
@@ -234,7 +263,7 @@ public class App {
 
         // Save original to temp
         Path tempDir = Files.createTempDirectory("okapi-merge-");
-        Path tempFile = tempDir.resolve(originalFile.filename());
+        Path tempFile = safeTempFile(tempDir, originalFile.filename());
         try (InputStream is = originalFile.content()) {
             Files.copy(is, tempFile, StandardCopyOption.REPLACE_EXISTING);
         }
@@ -271,7 +300,7 @@ public class App {
         }
 
         Path tempDir = Files.createTempDirectory("okapi-tmx-");
-        Path tempFile = tempDir.resolve(file.filename());
+        Path tempFile = safeTempFile(tempDir, file.filename());
         try (InputStream is = file.content()) {
             Files.copy(is, tempFile, StandardCopyOption.REPLACE_EXISTING);
         }
@@ -296,7 +325,7 @@ public class App {
         }
 
         Path tempDir = Files.createTempDirectory("okapi-tmx-val-");
-        Path tempFile = tempDir.resolve(file.filename());
+        Path tempFile = safeTempFile(tempDir, file.filename());
         try (InputStream is = file.content()) {
             Files.copy(is, tempFile, StandardCopyOption.REPLACE_EXISTING);
         }
@@ -331,6 +360,27 @@ public class App {
     }
 
     // ── Utility ──────────────────────────────────────────────────
+
+    /**
+     * Where to save an upload inside {@code tempDir}. Only the last part of
+     * the name the request gives is kept, so "..\..\x.bat" or an absolute
+     * path can never put the file anywhere else. The extension is kept because
+     * the filters are chosen by it.
+     */
+    static Path safeTempFile(Path tempDir, String requested) throws IOException {
+        String name = requested == null ? "" : requested;
+        int cut = Math.max(name.lastIndexOf('/'), name.lastIndexOf('\\'));
+        name = name.substring(cut + 1).replaceAll("[\\x00-\\x1f:*?\"<>|]", "_").trim();
+        if (name.isEmpty() || name.equals(".") || name.equals("..")) {
+            name = "upload";
+        }
+        Path base = tempDir.toAbsolutePath().normalize();
+        Path target = base.resolve(name).normalize();
+        if (!base.equals(target.getParent())) {
+            throw new IOException("Refused upload name: " + requested);
+        }
+        return target;
+    }
 
     private static void deleteRecursive(Path path) {
         try {

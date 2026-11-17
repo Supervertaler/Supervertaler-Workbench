@@ -5,6 +5,24 @@ All notable changes to Supervertaler Workbench are documented in this file.
 **Current Version:** v1.10.377 (November 16, 2026)
 
 
+## Unreleased
+
+### Security (Okapi sidecar · only this Workbench can use it)
+
+The Okapi sidecar, the helper that imports and exports IDML, HTML, PO, XLSX, PPTX and other formats, listened on every network connection on port 8090 with no password. Anyone on the same network (an office, a café's Wi-Fi) whom the firewall let through could send it files to convert, stop it, or, with a crafted file name, make it save a file anywhere in your user folder, for example in Windows' Startup folder. Sidecar 0.2.0 listens on this computer only, on a free port picked at each start, and refuses every request without the password Workbench gives it at that start. The password is passed to it privately, not on its command line. An uploaded file is always saved inside the sidecar's own temp folder, whatever name the request gives it. Workbench installed with pip downloads sidecar 0.2.0 by itself the next time it needs it.
+
+### Fixed (TM Manager · Import TMX imported nothing)
+
+TM Manager > Import/Export > Select and Import TMX… wrote to the database from a background thread in a way SQLite refuses. Every entry failed, the errors went only to the log, and it still said "Successfully imported N entries". It now uses the import on the TMs tab, which asks whether to make a new TM or add to one, checks the TMX's languages and handles large files. Imports from the TMs tab were never affected.
+
+### Fixed (Phrase MXLIFF · no "0%" on segments you translated)
+
+A Phrase MXLIFF showed "0%" next to every confirmed segment, because Phrase gives a score of 0 to a translation that didn't come from a translation memory. Only a translation memory match now shows its match percentage. The message after importing an MXLIFF now names the right menu, Project > Export.
+
+### Fixed (Editor · WYSIWYG, Compact and Tags buttons readable in a narrow window)
+
+In a narrower window, the WYSIWYG / Compact / Tags buttons under the grid were squeezed until their labels were cut off ("YSIWY", "ompac"). They now keep the width their labels need.
+
 ## v1.10.377 - November 16, 2026
 
 ### Added (Zulu)

@@ -26,7 +26,9 @@ import json
 import logging
 import os
 import platform
+import secrets
 import shutil
+import socket
 import subprocess
 import sys
 import threading
@@ -54,9 +56,15 @@ class OkapiSidecar:
     The sidecar runs as a local subprocess on 127.0.0.1 (never exposed
     to the network).  All document processing happens on the user's
     machine – nothing is sent over the internet.
+
+    Each client picks a free port and a fresh token, and starts the
+    sidecar with that token in its environment; from sidecar 0.2.0 every
+    request but the health check must carry it. So another program or
+    user on this computer can't use the sidecar, or stand in for it on a
+    known port and receive the documents.
     """
 
-    DEFAULT_PORT = 8090
+    DEFAULT_PORT = 8090  # used only when a caller asks for it
     STARTUP_TIMEOUT = 20  # seconds
     SHUTDOWN_TIMEOUT = 5  # seconds
 
@@ -65,7 +73,7 @@ class OkapiSidecar:
     # version, start() will ask it to shut down and spawn a fresh one.
     # Bump this whenever the sidecar JAR is rebuilt with meaningful
     # changes (keep it in sync with pom.xml / App.java).
-    EXPECTED_VERSION = "0.1.9"
+    EXPECTED_VERSION = "0.2.0"
 
     # URLs for lazy-downloading the sidecar when running from a pip
     # install (no JAR + JRE bundled next to the application). Pinned to
@@ -82,7 +90,7 @@ class OkapiSidecar:
     # per-platform JRE bundles for them — see INSTALLER_URL_JAR_ONLY below.
     INSTALLER_URL_WINDOWS = (
         "https://github.com/Supervertaler/Supervertaler-Workbench/"
-        "releases/download/v1.10.373/okapi-sidecar-windows-v0.1.9.zip"
+        "releases/download/v1.10.377/okapi-sidecar-windows-v0.2.0.zip"
     )
     # All non-Windows platforms (macOS — Intel and Apple Silicon — and
     # Linux) use the cross-platform JAR-only asset with the user's system
@@ -93,20 +101,23 @@ class OkapiSidecar:
     # JRE at build time — that's separate from this lazy-download path.)
     INSTALLER_URL_JAR_ONLY = (
         "https://github.com/Supervertaler/Supervertaler-Workbench/"
-        "releases/download/v1.10.373/okapi-sidecar-v0.1.9.jar"
+        "releases/download/v1.10.377/okapi-sidecar-v0.2.0.jar"
     )
 
-    def __init__(self, port: int = DEFAULT_PORT,
+    def __init__(self, port: Optional[int] = None,
                  sidecar_dir: Optional[str] = None):
         """
         Args:
-            port:        TCP port for the sidecar (default 8090).
+            port:        TCP port for the sidecar. None (the default) picks
+                         a free port on 127.0.0.1.
             sidecar_dir: Path to the directory containing the sidecar JAR
                          and bundled JRE.  If None, auto-detected relative
                          to the Supervertaler installation.
         """
-        self.port = port
-        self.base_url = f"http://127.0.0.1:{port}"
+        self.port = port if port is not None else self._free_port()
+        self.base_url = f"http://127.0.0.1:{self.port}"
+        self._token = secrets.token_urlsafe(32)
+        self._auth = {"Authorization": f"Bearer {self._token}"}
         self._process: Optional[subprocess.Popen] = None
         self._started_by_us = False
         # Set by start(): True when the JAR that came up reports a version other
@@ -136,7 +147,7 @@ class OkapiSidecar:
         # Check if already running (e.g. started by a previous session)
         if self.is_running():
             running_version = self.get_version()
-            if running_version == self.EXPECTED_VERSION:
+            if running_version == self.EXPECTED_VERSION and self._accepts_our_token():
                 logger.info(
                     "Okapi sidecar v%s already running on port %d – reusing",
                     running_version, self.port,
@@ -186,6 +197,9 @@ class OkapiSidecar:
             f"--port={self.port}"
         ]
         logger.info("Starting Okapi sidecar: %s", " ".join(cmd))
+        # The token goes in the environment, not the command line, which
+        # other programs on the computer can read.
+        env = dict(os.environ, SUPERVERTALER_SIDECAR_TOKEN=self._token)
 
         try:
             self._process = subprocess.Popen(
@@ -193,6 +207,7 @@ class OkapiSidecar:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 cwd=str(self.sidecar_dir),
+                env=env,
                 # Don't let the child inherit our console on Windows
                 creationflags=(subprocess.CREATE_NO_WINDOW
                                if platform.system() == "Windows" else 0),
@@ -287,6 +302,21 @@ class OkapiSidecar:
         except (requests.ConnectionError, requests.Timeout):
             return False
 
+    def _accepts_our_token(self) -> bool:
+        """True when the sidecar on our port takes this client's token."""
+        try:
+            resp = requests.get(f"{self.base_url}/filters", headers=self._auth, timeout=2)
+            return resp.status_code == 200
+        except Exception:
+            return False
+
+    @staticmethod
+    def _free_port() -> int:
+        """A port on 127.0.0.1 that nothing is listening on right now."""
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.bind(("127.0.0.1", 0))
+            return sock.getsockname()[1]
+
     def get_version(self) -> Optional[str]:
         """Return the sidecar version string, or None if not running."""
         try:
@@ -312,7 +342,7 @@ class OkapiSidecar:
         """
         # 1) Try polite shutdown (only present on sidecars >= 0.1.1).
         try:
-            requests.post(f"{self.base_url}/shutdown", timeout=2)
+            requests.post(f"{self.base_url}/shutdown", headers=self._auth, timeout=2)
         except Exception:
             pass
 
@@ -441,6 +471,7 @@ class OkapiSidecar:
         with open(file_path, 'rb') as f:
             resp = requests.post(
                 f"{self.base_url}/extract",
+                headers=self._auth,
                 files={'file': (file_path.name, f)},
                 data=data,
                 timeout=120,
@@ -504,6 +535,7 @@ class OkapiSidecar:
         with open(original, 'rb') as f:
             resp = requests.post(
                 f"{self.base_url}/merge",
+                headers=self._auth,
                 files={'original': (original.name, f)},
                 data=data,
                 timeout=120,
@@ -538,6 +570,7 @@ class OkapiSidecar:
         with open(tmx_path, 'rb') as f:
             resp = requests.post(
                 f"{self.base_url}/tmx/read",
+                headers=self._auth,
                 files={'file': (tmx_path.name, f)},
                 timeout=120,
             )
@@ -560,6 +593,7 @@ class OkapiSidecar:
         with open(tmx_path, 'rb') as f:
             resp = requests.post(
                 f"{self.base_url}/tmx/validate",
+                headers=self._auth,
                 files={'file': (tmx_path.name, f)},
                 timeout=60,
             )
@@ -583,6 +617,7 @@ class OkapiSidecar:
         """
         resp = requests.post(
             f"{self.base_url}/segment",
+            headers=self._auth,
             json={'text': text, 'language': language},
             timeout=30,
         )
@@ -595,7 +630,7 @@ class OkapiSidecar:
 
     def get_supported_filters(self) -> List[Dict[str, str]]:
         """Return list of supported file format dicts."""
-        resp = requests.get(f"{self.base_url}/filters", timeout=5)
+        resp = requests.get(f"{self.base_url}/filters", headers=self._auth, timeout=5)
         return self._handle_response(resp)
 
     # ═══════════════════════════════════════════════════════════════

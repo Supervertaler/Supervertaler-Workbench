@@ -30890,6 +30890,16 @@ class SupervertalerQt(QMainWindow):
         view_mode_group.addButton(tags_btn, 1)
         view_mode_layout.addWidget(tags_btn)
 
+        # Never narrower than their text. The style sheet's bold 8 pt is not in
+        # the buttons' own size hint, so on a narrow window the toolbar
+        # squeezed them until "WYSIWYG" read "YSIWY".
+        _btn_font = QFont(wysiwyg_btn.font())
+        _btn_font.setPointSize(8)
+        _btn_font.setBold(True)
+        _fm = QFontMetrics(_btn_font)
+        for _btn in (wysiwyg_btn, compact_btn, tags_btn):
+            _btn.setMinimumWidth(_fm.horizontalAdvance(_btn.text()) + 16)  # + padding 6+6 and a margin
+
         toolbar_layout.addWidget(view_mode_container)
 
         # Store references for keyboard shortcut and programmatic access
@@ -36263,7 +36273,6 @@ class SupervertalerQt(QMainWindow):
                 "to start.\n\n"
                 "What to try:\n"
                 "• Restart Supervertaler.\n"
-                "• Check that port 8090 isn't taken by another app.\n"
                 "• Check the diagnostic log for errors mentioning "
                 "\"okapi sidecar\"."
             )
@@ -42690,7 +42699,7 @@ class SupervertalerQt(QMainWindow):
                 "Imported {n} segment(s) from Phrase MXLIFF.\n\n"
                 "Languages: {src} → {tgt}\n"
                 "With a translation: {tr}\nConfirmed: {conf}\nLocked: {lock}\n\n"
-                "Export with File > Export > Phrase (Memsource) > MXLIFF to upload "
+                "Export with Project > Export > Phrase (Memsource) > MXLIFF to upload "
                 "the translation back to Phrase."
             ).format(n=_n_segs, src=source_lang, tgt=target_lang, tr=translated,
                      conf=confirmed, lock=locked)

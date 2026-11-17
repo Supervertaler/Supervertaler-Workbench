@@ -165,11 +165,15 @@ class MxliffDocument:
             locked = (tu.get(m('locked'), 'false').lower() == 'true'
                       or tu.get('translate') == 'no' or not editable)
             origin = tu.get(m('trans-origin'), '') or ''
+            # Phrase writes a score on every unit, 0.0 on one you translated
+            # yourself, so only a translation memory match keeps it as its
+            # match percentage. (Every confirmed segment showed "0%".)
             percent = None
-            try:
-                percent = int(round(float(tu.get(m('score'), '')) * 100))
-            except ValueError:
-                pass
+            if origin == 'tm':
+                try:
+                    percent = int(round(float(tu.get(m('score'), '')) * 100))
+                except ValueError:
+                    pass
             units.append(MxliffUnit(
                 id=tu.get('id', ''), source=source, target=target,
                 confirmed=confirmed, locked=locked,

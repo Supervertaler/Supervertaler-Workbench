@@ -23,81 +23,6 @@ from pathlib import Path
 from typing import List, Dict, Optional, Callable
 
 
-class TMXImportThread(QThread):
-    """Background thread for importing TMX files"""
-    progress = pyqtSignal(int, str)  # progress percentage, status message
-    finished = pyqtSignal(bool, str, int)  # success, message, entries_imported
-    
-    def __init__(self, tmx_path: str, db_manager, source_lang: str, target_lang: str, tm_id: str = 'imported'):
-        super().__init__()
-        self.tmx_path = tmx_path
-        self.db_manager = db_manager
-        self.source_lang = source_lang
-        self.target_lang = target_lang
-        self.tm_id = tm_id
-    
-    def run(self):
-        """Import TMX file in background"""
-        try:
-            tree = ET.parse(self.tmx_path)
-            root = tree.getroot()
-            
-            # Find body element
-            body = root.find('.//body')
-            if body is None:
-                self.finished.emit(False, "Invalid TMX file: no body element found", 0)
-                return
-            
-            # Get all translation units
-            tus = body.findall('tu')
-            total = len(tus)
-            imported = 0
-            
-            for idx, tu in enumerate(tus):
-                # Extract source and target
-                tuvs = tu.findall('tuv')
-                if len(tuvs) < 2:
-                    continue
-                
-                source_text = None
-                target_text = None
-                
-                for tuv in tuvs:
-                    lang = tuv.get('{http://www.w3.org/XML/1998/namespace}lang', 
-                                  tuv.get('lang', ''))
-                    seg = tuv.find('seg')
-                    if seg is None or seg.text is None:
-                        continue
-                    
-                    # Simple language matching (could be improved)
-                    if not source_text:
-                        source_text = seg.text
-                    else:
-                        target_text = seg.text
-                
-                # Add to TM if both source and target found
-                if source_text and target_text:
-                    self.db_manager.add_translation_unit(
-                        source=source_text,
-                        target=target_text,
-                        source_lang=self.source_lang,
-                        target_lang=self.target_lang,
-                        tm_id=self.tm_id,
-                        save_mode='all'  # Always use 'all' mode for imports
-                    )
-                    imported += 1
-                
-                # Update progress every 10 entries
-                if idx % 10 == 0:
-                    progress_pct = int((idx / total) * 100)
-                    self.progress.emit(progress_pct, f"Importing... {idx}/{total}")
-            
-            self.finished.emit(True, f"Successfully imported {imported} entries", imported)
-
-        except Exception as e:
-            self.finished.emit(False, f"Import failed: {str(e)}", 0)
-
-
 class TMCleanupThread(QThread):
     """Background worker for TM Maintenance cleanup operations.
 
@@ -698,22 +623,10 @@ class TMManagerDialog(QDialog):
         import_layout.addWidget(import_info)
         
         import_controls = QHBoxLayout()
-        import_controls.addWidget(QLabel("TM ID:"))
-        self.import_tm_id = QLineEdit("imported")
-        self.import_tm_id.setPlaceholderText("Enter TM identifier")
-        import_controls.addWidget(self.import_tm_id)
-        
         import_btn = QPushButton("📂 Select and Import TMX...")
         import_btn.clicked.connect(self.import_tmx)
         import_controls.addWidget(import_btn)
         import_layout.addLayout(import_controls)
-        
-        self.import_progress = QProgressBar()
-        self.import_progress.setVisible(False)
-        import_layout.addWidget(self.import_progress)
-        
-        self.import_status = QLabel("")
-        import_layout.addWidget(self.import_status)
         
         import_group.setLayout(import_layout)
         layout.addWidget(import_group)
@@ -891,53 +804,27 @@ class TMManagerDialog(QDialog):
             self.log(f"Error in concordance search: {e}")
     
     def import_tmx(self):
-        """Import a TMX file"""
-        file_path, _ = QFileDialog.getOpenFileName(
-            self, "Select TMX File", "",
-            "TMX Files (*.tmx);;All Files (*.*)"
-        )
-        
-        if not file_path:
+        """Import a TMX file, through the same import as the TMs tab.
+
+        This tab had an import of its own that wrote to the database from a
+        background thread through the main thread's SQLite connection. SQLite
+        refused every write, the errors only reached the log, and it still
+        reported "Successfully imported N entries". The TMs tab's import asks
+        whether to make a new TM or add to one, matches the TMX languages and
+        streams large files.
+        """
+        app = self.parent_app
+        if not (hasattr(app, '_import_tmx_as_tm') and getattr(app, 'tm_metadata_mgr', None)):
+            QMessageBox.warning(self, "Import TMX",
+                                "Import TMX files from the TMs tab (Import TMX…).")
             return
-        
-        tm_id = self.import_tm_id.text().strip() or "imported"
-        
-        # Get source and target languages from parent app
-        if hasattr(self.parent_app, 'current_project'):
-            source_lang = self.parent_app.current_project.source_lang
-            target_lang = self.parent_app.current_project.target_lang
-        else:
-            source_lang = "en"
-            target_lang = "de"
-        
-        # Show progress bar
-        self.import_progress.setValue(0)
-        self.import_progress.setVisible(True)
-        self.import_status.setText("Importing...")
-        
-        # Start import thread
-        self.import_thread = TMXImportThread(file_path, self.db_manager, source_lang, target_lang, tm_id)
-        self.import_thread.progress.connect(self.on_import_progress)
-        self.import_thread.finished.connect(self.on_import_finished)
-        self.import_thread.start()
-    
-    def on_import_progress(self, percent, message):
-        """Update import progress"""
-        self.import_progress.setValue(percent)
-        self.import_status.setText(message)
-    
-    def on_import_finished(self, success, message, count):
-        """Import finished"""
-        self.import_progress.setVisible(False)
-        self.import_status.setText(message)
-        
-        if success:
-            QMessageBox.information(self, "Import Complete", f"{message}\n\nTotal entries: {count}")
+
+        def _refresh():
             self.refresh_browser()
             self.refresh_stats()
-        else:
-            QMessageBox.critical(self, "Import Failed", message)
-    
+
+        app._import_tmx_as_tm(app.tm_metadata_mgr, None, _refresh)
+
     def export_tmx(self):
         """Export TM to TMX file"""
         file_path, _ = QFileDialog.getSaveFileName(

@@ -96,7 +96,9 @@ def test_import_reads_segments_translations_status_and_tags(sample):
     assert _all(doc, "status") == ["confirmed", "machine_translated", "not_started",
                                    "pretranslated", "not_started"]
     assert _all(doc, "locked") == [False, False, False, True, False]
-    assert _all(doc, "match_percent") == [100, 93, 0, 101, 0]
+    # Only a TM match keeps its score as a match percentage: Phrase writes
+    # 0.0 on a unit you translated yourself, and an MT score is not one.
+    assert _all(doc, "match_percent") == [100, None, None, 101, None]
     # the decoy <trans-unit> inside the CDATA skeleton is not a segment
     assert len(doc.units) == 5
     assert looks_like_mxliff(str(sample))
@@ -307,3 +309,14 @@ def test_twenty_thousand_segments_load_and_export_quickly(tmp_path):
     assert load_s < 10 and save_s < 10, (load_s, save_s)
     again = MxliffDocument.load(str(out))
     assert again.units[-1].target == f"Vertaald {n - 1}" and again.units[-1].confirmed
+
+
+def test_a_confirmed_human_translation_shows_no_match_percent(tmp_path):
+    """Phrase writes m:score="0.0" on a unit translated by hand; Workbench
+    showed that as "0%" on every confirmed segment."""
+    path = tmp_path / "human.mxliff"
+    path.write_bytes(make([unit(0, "Een zin.", "A sentence.", confirmed="1",
+                                origin="null", score="0.0")]))
+    doc = MxliffDocument.load(str(path))
+    assert doc.units[0].status == "confirmed"
+    assert doc.units[0].match_percent is None

@@ -19,7 +19,7 @@ $ErrorActionPreference = "Stop"
 Push-Location $PSScriptRoot
 
 $JAR_NAME = "okapi-sidecar"
-$VERSION  = "0.1.9"
+$VERSION  = "0.2.0"
 $PORT     = if ($env:PORT) { $env:PORT } else { "8090" }
 
 function Build-Jar {
