@@ -65,6 +65,8 @@ DEFAULT_SOURCES: list[Path] = [
     REPO_ROOT / "modules" / "translation_workers.py",
     REPO_ROOT / "modules" / "superlookup_tab.py",
     REPO_ROOT / "modules" / "colour_checkboxes.py",
+    # The main window, one file per job (each a mixin of SupervertalerQt).
+    *sorted((REPO_ROOT / "modules" / "main_window").glob("*.py")),
 ]
 DEFAULT_TEMPLATE_PATH = REPO_ROOT / "translations" / "supervertaler_template.xlf"
 
@@ -113,7 +115,13 @@ class _TrCallVisitor(ast.NodeVisitor):
     # Class context tracking ----------------------------------------------
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
-        self._class_stack.append(node.name)
+        # The main window's mixins (modules/main_window/) run as
+        # SupervertalerQt, and PyQt's tr() uses the class of the object at
+        # run time, so their strings belong to that context.
+        if self._source_path.parent.name == "main_window" and node.name.endswith("Mixin"):
+            self._class_stack.append("SupervertalerQt")
+        else:
+            self._class_stack.append(node.name)
         try:
             self.generic_visit(node)
         finally:
