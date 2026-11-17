@@ -7,6 +7,10 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ## Unreleased
 
+### Internal (Supervertaler.py split, step 2: projects · no change in behaviour)
+
+The main window's 26 project methods (new, open, load, save, save as and close, the sample project, recent projects, automatic and versioned backups, reopening the last project at start, the project info dialog), about 2,200 lines, moved unchanged into `modules/main_window/projects.py`. Two helpers for the import dialogs' language lists moved to `modules/language_combos.py`. Loading and saving a project now reach the Match Panel's font size through `type(self)` instead of naming the main window's class, which is the same class when Workbench runs.
+
 ### Internal (Supervertaler.py split, step 2: AI and machine translation · no change in behaviour)
 
 The main window's 54 AI and MT methods (translating a segment, a selection or a batch, the LLM and MT engine calls, API keys and LLM settings, the MT and LLM matches beside the grid, the prompt manager tab, QuickLauncher prompts and proofreading), about 4,300 lines, moved unchanged into `modules/main_window/ai_translation.py`. The settings tabs for AI and MT stay for the settings job. `TRANSLATABLE_STATUSES` moved to `modules/statuses.py`, next to the other status definitions.
