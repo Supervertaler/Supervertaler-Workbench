@@ -168,6 +168,9 @@ STATUSES: Dict[str, StatusDefinition] = {
 
 DEFAULT_STATUS = STATUSES["not_started"]
 
+# Statuses a batch translation fills in by default (moved here from Supervertaler.py).
+TRANSLATABLE_STATUSES = {"not_started", "pretranslated", "draft", "tm_100", "tm_fuzzy"}
+
 # Backward-compatibility aliases for renamed / removed statuses.
 # Saved projects may still contain these old keys.
 _STATUS_ALIASES = {

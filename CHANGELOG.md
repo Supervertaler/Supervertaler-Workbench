@@ -5,6 +5,12 @@ All notable changes to Supervertaler Workbench are documented in this file.
 **Current Version:** v1.10.379 (November 17, 2026)
 
 
+## Unreleased
+
+### Internal (Supervertaler.py split, step 2: AI and machine translation · no change in behaviour)
+
+The main window's 54 AI and MT methods (translating a segment, a selection or a batch, the LLM and MT engine calls, API keys and LLM settings, the MT and LLM matches beside the grid, the prompt manager tab, QuickLauncher prompts and proofreading), about 4,300 lines, moved unchanged into `modules/main_window/ai_translation.py`. The settings tabs for AI and MT stay for the settings job. `TRANSLATABLE_STATUSES` moved to `modules/statuses.py`, next to the other status definitions.
+
 ## v1.10.379 - November 17, 2026
 
 ### Internal (Supervertaler.py split, step 2: translation memories · no change in behaviour)
