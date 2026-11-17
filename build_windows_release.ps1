@@ -19,9 +19,11 @@ function Ensure-Venv($path, $basePython) {
   }
 }
 
+# Every package is held to the version in build-constraints.txt, so a build
+# ships what was tested rather than whatever was published that morning.
 function Install-Build-Tooling($py) {
-  & $py -m pip install -q -U pip setuptools wheel
-  & $py -m pip install -q -U pyinstaller
+  & $py -m pip install -q -U pip
+  & $py -m pip install -q -c build-constraints.txt setuptools wheel pyinstaller pyinstaller-hooks-contrib
 }
 
 $version = Get-Version
@@ -48,9 +50,10 @@ $py = Resolve-Path (Join-Path $venvDir 'Scripts\python.exe')
 Install-Build-Tooling $py
 
 # Install Supervertaler (core only - no local-whisper to avoid PyTorch/PyInstaller conflicts)
-# Voice commands still work via OpenAI Whisper API
+# Voice commands run offline with Vosk
 Write-Host "Installing Supervertaler with all dependencies..." -ForegroundColor Cyan
-& $py -m pip install -q -e "."
+& $py -m pip install -q -c build-constraints.txt -e "."
+if ($LASTEXITCODE -ne 0) { throw "pip could not install the pinned packages (build-constraints.txt)" }
 
 # Clean build outputs
 if ($Clean) {

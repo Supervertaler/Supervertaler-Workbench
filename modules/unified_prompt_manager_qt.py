@@ -1083,7 +1083,8 @@ class UnifiedPromptManagerQt:
         self.ai_action_system = AIActionSystem(
             prompt_library=self.library,
             parent_app=self.parent_app,
-            log_callback=self.log_message
+            log_callback=self.log_message,
+            confirm_callback=self._confirm_ai_changes
         )
 
         # Context inclusion toggles for AI Assistant
@@ -6576,6 +6577,25 @@ IMPORTANT:
 
         worker.start()
     
+    def _confirm_ai_changes(self, descriptions) -> bool:
+        """Ask before the AI's reply changes the prompt library.
+
+        The reply comes from a model, and a document or page it was shown
+        can steer what it asks for, so nothing changes without a yes.
+        """
+        shown = list(descriptions)[:15]
+        more = len(descriptions) - len(shown)
+        lines = "\n".join(f"• {d}" for d in shown)
+        if more > 0:
+            lines += f"\n…and {more} more"
+        reply = QMessageBox.question(
+            self.main_widget, "Allow the AI's changes?",
+            f"The AI Assistant wants to make these changes:\n\n{lines}\n\nGo ahead?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        return reply == QMessageBox.StandardButton.Yes
+
     def _handle_analysis_response(self, response: str):
         """Handle delimiter-based response from analysis prompt generation.
 

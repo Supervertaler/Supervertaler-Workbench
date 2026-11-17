@@ -1542,6 +1542,21 @@ class TradosPackageHandler:
     
     def load_package(self, package_path: str, extract_dir: str = None,
                      progress_callback=None) -> Optional[TradosPackage]:
+        """Load and extract a Trados package; see _load_package.
+
+        When loading fails or is cancelled, the temporary folder it was
+        unpacked into is removed again (one is made for every attempt).
+        """
+        before = self.extract_dir
+        package = self._load_package(package_path, extract_dir, progress_callback)
+        if (package is None and extract_dir is None and self.extract_dir
+                and self.extract_dir != before):
+            self.cleanup()
+            self.extract_dir = None
+        return package
+
+    def _load_package(self, package_path: str, extract_dir: str = None,
+                      progress_callback=None) -> Optional[TradosPackage]:
         """
         Load and extract a Trados package.
 
