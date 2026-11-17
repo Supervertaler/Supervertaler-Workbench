@@ -71,8 +71,9 @@ def test_settings_and_quicktrans_offer_the_same_list():
 
 
 def test_the_withdrawn_free_model_is_offered_nowhere():
-    for path in ("Supervertaler.py", os.path.join("modules", "llm_clients.py"),
-                 os.path.join("modules", "chat_view_widget.py")):
+    from app_sources import app_files   # Supervertaler.py and the files split out of it
+    for path in app_files() + [os.path.join("modules", "llm_clients.py"),
+                               os.path.join("modules", "chat_view_widget.py")]:
         assert f'"{WITHDRAWN}' not in read(path), path
 
 

@@ -5,7 +5,7 @@ Usage: python tools/split_main_window.py <repo> <file> <MixinClass> "<docstring>
 Writes modules/main_window/<file>.py with `class <MixinClass>:` holding the
 selected methods (text unchanged), adds the mixin to SupervertalerQt's bases
 and imports it just above the class. Refuses (changes nothing) when a method:
-uses super() or names SupervertalerQt, overrides a Qt event handler, is
+uses super() (outside a class of its own) or names SupervertalerQt, overrides a Qt event handler, is
 defined twice, uses __file__, or uses a name defined only in Supervertaler.py.
 """
 import ast
@@ -53,7 +53,12 @@ for n in tree.body:
 problems = []
 for f in sel:
     text = ast.unparse(f)
-    if "super(" in text or "SupervertalerQt" in text:
+    # super() is only a problem in the method itself: a class defined inside
+    # the method has its own super(), which works wherever the method lives.
+    nested = {id(x) for c in ast.walk(f) if isinstance(c, ast.ClassDef) for x in ast.walk(c)}
+    own_super = any(isinstance(x, ast.Call) and isinstance(x.func, ast.Name) and x.func.id == "super"
+                    and id(x) not in nested for x in ast.walk(f))
+    if own_super or "SupervertalerQt" in text:
         problems.append(f"{f.name}: super()/SupervertalerQt")
     if f.name.endswith("Event") or f.name in ("eventFilter", "event", "__init__"):
         problems.append(f"{f.name}: Qt override / __init__")

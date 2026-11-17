@@ -221,8 +221,9 @@ def test_no_private_language_lists_return():
     """The files that used to keep their own list must not grow one again."""
     import re
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    for rel in ("Supervertaler.py", "modules/quicktrans.py",
-                "modules/unified_prompt_manager_qt.py"):
+    from app_sources import app_files   # Supervertaler.py and the files split out of it
+    for rel in app_files() + ["modules/quicktrans.py",
+                              "modules/unified_prompt_manager_qt.py"]:
         with open(os.path.join(root, rel), encoding="utf-8") as f:
             text = f.read()
         hits = re.findall(r'"Swahili",\s*"Swedish"|"swahili":\s*"sw|"sw":\s*"Swahili"', text)
