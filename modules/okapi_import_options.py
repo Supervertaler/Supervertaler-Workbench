@@ -73,3 +73,29 @@ def okapi_sidecar_options(opts):
     if mode is not None:
         out["word_comments"] = (mode == "segments")
     return out
+
+
+# UI metadata for the import-options checkboxes, grouped by format.
+# (key, label, tooltip). Used by both the Settings → File Types panel and
+# the per-import override in the import dialogs.
+IMPORT_OPTION_GROUPS = [
+    ("word", "Word (DOCX)", [
+        ("word_comments_mode",   "Comments",                   "How to handle Word review comments: skip, import as actual (author-tagged) comments, or import as translatable text"),
+        ("word_hidden",          "Import hidden text",         "Text formatted as hidden"),
+        ("word_headers_footers", "Import headers && footers",  "Page headers and footers"),
+        ("word_doc_properties",  "Import document properties", "Title, author, keywords, etc."),
+        ("word_exclude_shapes",  "Skip drawing/shape names",   "Exclude auto-generated object names like 'Shape 16', 'Group 574248'"),
+        ("word_accept_revisions","Accept tracked changes",     "Use the final (accepted) text of any tracked changes"),
+    ]),
+    ("excel", "Excel (XLSX)", [
+        ("excel_hidden",      "Import hidden rows/columns/sheets", ""),
+        ("excel_sheet_names", "Import sheet (tab) names",          ""),
+        ("excel_drawings",    "Import text in shapes/text boxes",  ""),
+    ]),
+    ("ppt", "PowerPoint (PPTX)", [
+        ("ppt_notes",    "Import speaker notes",          ""),
+        ("ppt_comments", "Import comments",               ""),
+        ("ppt_hidden",   "Import hidden slides",           ""),
+        ("ppt_masters",  "Import slide masters / layouts", ""),
+    ]),
+]

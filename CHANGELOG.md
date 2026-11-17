@@ -7,6 +7,10 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ## Unreleased
 
+### Internal (Supervertaler.py split, step 2: import and export · no change in behaviour)
+
+The main window's 101 import and export methods, about 9,800 lines, moved unchanged into one file per format under `modules/main_window/`: `docx_export.py` (the Word export, comments, word count check), `okapi.py` (the Okapi converter), `document_import.py`, `plain_text.py`, `review_table.py`, `multifile.py`, `memoq.py`, `trados.py`, `phrase.py`, `cafetran.py`, `dejavu.py`, `po.py` and `bilingual_text.py`, with the helpers they share in `import_export_common.py`. The table of import options moved to `modules/okapi_import_options.py`, next to the options themselves. The bilingual Markdown export stays, as it uses the version number. Two tests now replace a dialog where the moved method looks for it.
+
 ### Internal (Supervertaler.py split, step 2: settings · no change in behaviour)
 
 The main window's 62 settings methods (the Settings dialog and each of its tabs, what Save does on each, and loading, saving and migrating the settings files, proxy and spellcheck settings), about 5,900 lines, moved unchanged into `modules/main_window/settings.py`. The data-folder helpers (the config pointer file, first-run check) moved to `modules/user_data_location.py`, and `_select_saved_model` to `modules/model_combo.py`. The Match Panel font settings are reached through `type(self)`, as in the projects step. The tests that check the Settings model lists now read them from the new file.
