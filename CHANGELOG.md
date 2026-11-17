@@ -7,6 +7,10 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ## Unreleased
 
+### Internal (Supervertaler.py split, step 2: translation memories · no change in behaviour)
+
+The main window's 38 translation-memory methods (the TMs tab and TM Manager, creating, importing (TMX, SDLTM) and exporting TMs, saving segments to TMs, TM search and concordance, inserting TM matches), about 3,500 lines, moved unchanged into `modules/main_window/translation_memories.py`. The match panel's TM view stays with the grid for now.
+
 ### Internal (Supervertaler.py split, step 2 begins: Termbases · no change in behaviour)
 
 The main window now gets its own folder, `modules/main_window/`, one file per job. The first is `termbases.py`: the main window's 48 termbase methods (the Termbases tab, adding and editing terms, termbase search and matching, TermLens, term extraction, import and export), about 5,600 lines, moved unchanged. They are a mixin the main window inherits, so they still run as its own methods. The translation extractor files their strings under the main window's context, as before: the same 1,289 strings.
