@@ -7,6 +7,10 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ## Unreleased
 
+### Internal (Supervertaler.py split, step 2 begins: Termbases · no change in behaviour)
+
+The main window now gets its own folder, `modules/main_window/`, one file per job. The first is `termbases.py`: the main window's 48 termbase methods (the Termbases tab, adding and editing terms, termbase search and matching, TermLens, term extraction, import and export), about 5,600 lines, moved unchanged. They are a mixin the main window inherits, so they still run as its own methods. The translation extractor files their strings under the main window's context, as before: the same 1,289 strings.
+
 ### Internal (Supervertaler.py split, step 1 · no change in behaviour)
 
 About 14,000 lines moved out of Supervertaler.py, unchanged, into seven files in `modules/`: `tag_text.py` (inline tag helpers), `segment_model.py` (Comment, Segment, Project), `grid_editors.py` (the grid's editors, highlighters, delegates and key filters), `main_dialogs.py`, `translation_workers.py`, `superlookup_tab.py` and `colour_checkboxes.py`. Supervertaler.py imports them back, so every name still works where it did. The interface-translation extractor reads the new files too; it finds the same 1,289 strings under the same contexts.
