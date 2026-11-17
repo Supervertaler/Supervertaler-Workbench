@@ -2,10 +2,12 @@
 
 All notable changes to Supervertaler Workbench are documented in this file.
 
-**Current Version:** v1.10.379 (November 17, 2026)
+**Current Version:** v1.10.380 (November 17, 2026)
 
 
-## Unreleased
+## v1.10.380 - November 17, 2026
+
+The main program file has been split into smaller files, one per job. Nothing should look or work differently: please report anything that used to work and doesn't.
 
 ### Internal (Supervertaler.py split, step 2: the rest · no change in behaviour)
 
