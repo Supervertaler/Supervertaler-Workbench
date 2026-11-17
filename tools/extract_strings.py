@@ -56,6 +56,15 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_SOURCES: list[Path] = [
     REPO_ROOT / "Supervertaler.py",
     REPO_ROOT / "modules" / "i18n.py",
+    # Moved out of Supervertaler.py (Nov 2026); their classes keep their
+    # names, so the Qt contexts of their strings are unchanged.
+    REPO_ROOT / "modules" / "tag_text.py",
+    REPO_ROOT / "modules" / "segment_model.py",
+    REPO_ROOT / "modules" / "grid_editors.py",
+    REPO_ROOT / "modules" / "main_dialogs.py",
+    REPO_ROOT / "modules" / "translation_workers.py",
+    REPO_ROOT / "modules" / "superlookup_tab.py",
+    REPO_ROOT / "modules" / "colour_checkboxes.py",
 ]
 DEFAULT_TEMPLATE_PATH = REPO_ROOT / "translations" / "supervertaler_template.xlf"
 
