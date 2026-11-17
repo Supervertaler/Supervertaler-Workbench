@@ -220,12 +220,12 @@ def test_each_download_url_has_a_checksum():
 # ── Superlookup escaping ──────────────────────────────────────────────────
 
 def _highlighter():
-    with open(os.path.join(ROOT, "Supervertaler.py"), encoding="utf-8") as f:
+    with open(os.path.join(ROOT, "modules", "superlookup_tab.py"), encoding="utf-8") as f:
         tree = ast.parse(f.read())
     [cls] = [n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "SuperlookupTab"]
     [fn] = [n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == "_highlight_search_term"]
     ns = {}
-    exec(compile(ast.Module(body=[fn], type_ignores=[]), "Supervertaler.py", "exec"), ns)
+    exec(compile(ast.Module(body=[fn], type_ignores=[]), "superlookup_tab.py", "exec"), ns)
     return lambda text, term: ns["_highlight_search_term"](SimpleNamespace(theme_manager=None), text, term)
 
 

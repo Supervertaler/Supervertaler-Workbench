@@ -7,6 +7,10 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ## Unreleased
 
+### Internal (Supervertaler.py split, step 1 · no change in behaviour)
+
+About 14,000 lines moved out of Supervertaler.py, unchanged, into seven files in `modules/`: `tag_text.py` (inline tag helpers), `segment_model.py` (Comment, Segment, Project), `grid_editors.py` (the grid's editors, highlighters, delegates and key filters), `main_dialogs.py`, `translation_workers.py`, `superlookup_tab.py` and `colour_checkboxes.py`. Supervertaler.py imports them back, so every name still works where it did. The interface-translation extractor reads the new files too; it finds the same 1,289 strings under the same contexts.
+
 ### Security (AI Assistant · asks before it changes your prompts)
 
 The AI Assistant could create, change and delete prompts and folders, and change the active prompt, straight from the AI's reply. A document or web page the AI was shown could therefore steer it into doing so. It now lists the changes the reply asks for and does them only after you click Yes; reading the library still happens without asking. A folder name can no longer lead out of the prompt library (with `..` or a full path such as Windows' Startup folder): the library refuses any such path, whoever asks.
