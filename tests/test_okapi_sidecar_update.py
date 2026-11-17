@@ -90,7 +90,8 @@ def make_window(S, tmp_path, monkeypatch, children, *, stamp, download_ok=True):
     monkeypatch.setattr(sc, "is_running", is_running)
     monkeypatch.setattr(sc, "download_install", download_install)
     monkeypatch.setattr(sc, "start", start)
-    monkeypatch.setattr(S, "QProgressDialog", MagicMock())
+    # _ensure_okapi_sidecar lives in modules/main_window/okapi.py since the split.
+    monkeypatch.setitem(S.SupervertalerQt._ensure_okapi_sidecar.__globals__, "QProgressDialog", MagicMock())
     return w
 
 

@@ -66,7 +66,8 @@ def _window(S, monkeypatch):
     @contextlib.contextmanager
     def no_progress(*a, **k):
         yield type("P", (), {"grid_callback": None})()
-    monkeypatch.setattr(S, "_ImportProgressDialog", no_progress)
+    # import_phrase_mxliff lives in modules/main_window/phrase.py since the split.
+    monkeypatch.setitem(S.SupervertalerQt.import_phrase_mxliff.__globals__, "_ImportProgressDialog", no_progress)
     return win
 
 
