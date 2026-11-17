@@ -2,10 +2,10 @@
 
 All notable changes to Supervertaler Workbench are documented in this file.
 
-**Current Version:** v1.10.377 (November 16, 2026)
+**Current Version:** v1.10.378 (November 17, 2026)
 
 
-## Unreleased
+## v1.10.378 - November 17, 2026
 
 ### Security (Okapi sidecar · only this Workbench can use it)
 
