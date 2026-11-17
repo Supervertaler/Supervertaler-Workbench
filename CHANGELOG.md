@@ -7,6 +7,10 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ## Unreleased
 
+### Internal (Supervertaler.py split, step 2: the rest · no change in behaviour)
+
+The main window's remaining 156 methods with a clear job, about 7,300 lines, moved unchanged into twelve files under `modules/main_window/`: `window_shell.py` (layout, menus, ribbon, shortcuts, progress bar, warning banner, bottom dock, themes, the log), `main_tabs.py`, `voice.py`, `window_focus.py` (global hotkeys, bringing Workbench to the front), `tray.py`, `spellcheck.py`, `segment_tools.py` (QuickLauncher, Assistant, QuickTrans, FuzzyFixer, AutoTagger, QA checks, LanguageTool), `match_prefetch.py`, `reference_images.py`, `statistics.py`, `first_run.py` and `mt_engines.py` (ModernMT, MyMemory). What stays in Supervertaler.py is start-up, the Qt event handlers, what uses the version number or the program's own folder (About, update checks, the window title, backups), and a few small jobs. Two tests now look for the moved code in its new place.
+
 ### Internal (Supervertaler.py split, step 2: the grid · no change in behaviour)
 
 The main window's 284 grid methods, about 13,700 lines, moved unchanged into eight files under `modules/main_window/`: `grid_view.py` (building and drawing the grid, pages, rows, status cells, fonts and colours, invisible characters, the tag view), `grid_navigation.py` (selecting, moving through and confirming segments), `segment_editing.py` (undo and redo, split, merge and delete, bulk actions), `match_panel.py` (the Match and Compare panels), `preview.py`, `find_replace.py`, `filters.py` and `comments.py`. The Match Panel's font settings are reached through `type(self)`, as in the earlier steps. The tool that does the moving now accepts a method containing a small class of its own that calls `super()`. Two tests that check something is *not* used anywhere (a private language list, a withdrawn model) now search the split-out files too.
