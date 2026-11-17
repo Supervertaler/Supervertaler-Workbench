@@ -105,7 +105,8 @@ def test_a_failed_save_keeps_the_file_and_the_grid_order(S, messages, monkeypatc
 
     def disk_full(*a, **k):
         raise OSError("No space left on device")
-    monkeypatch.setattr(S, "write_project_file", disk_full)
+    # The module save_project_to_file looks names up in (it may live in a mixin).
+    monkeypatch.setitem(S.SupervertalerQt.save_project_to_file.__globals__, "write_project_file", disk_full)
     win.current_project.segments[0].target = "lost edit"
     win.project_modified = True
     win.save_project_to_file(path)
@@ -221,9 +222,9 @@ def test_a_package_that_cannot_be_cleaned_up_is_still_forgotten(S):
 
 def test_load_project_forgets_the_previous_state_before_anything_else():
     import ast
-    tree = ast.parse(open(os.path.join(ROOT, "Supervertaler.py"), encoding="utf-8").read())
-    [cls] = [n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "SupervertalerQt"]
-    [load] = [n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == "load_project"]
+    from app_sources import app_source
+    tree = ast.parse(app_source())     # load_project may live in a main-window mixin
+    [load] = [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "load_project"]
     def name(call):
         return getattr(call.func, "attr", None) or getattr(call.func, "id", "")
     calls = [n for n in ast.walk(load) if isinstance(n, ast.Call)
@@ -262,7 +263,7 @@ def test_a_round_trip_source_that_cannot_be_copied_does_not_stop_the_save(S, mes
 
     def no_room(*a, **k):
         raise OSError("No space left on device")
-    monkeypatch.setattr(S, "bundle_round_trip_sources", no_room)
+    monkeypatch.setitem(S.SupervertalerQt.save_project_to_file.__globals__, "bundle_round_trip_sources", no_room)
     path = tmp_path / "Job.svproj"
     win.save_project_to_file(str(path))
     assert messages == []
