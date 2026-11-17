@@ -7,6 +7,10 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ## Unreleased
 
+### Internal (Supervertaler.py split, step 2: settings · no change in behaviour)
+
+The main window's 62 settings methods (the Settings dialog and each of its tabs, what Save does on each, and loading, saving and migrating the settings files, proxy and spellcheck settings), about 5,900 lines, moved unchanged into `modules/main_window/settings.py`. The data-folder helpers (the config pointer file, first-run check) moved to `modules/user_data_location.py`, and `_select_saved_model` to `modules/model_combo.py`. The Match Panel font settings are reached through `type(self)`, as in the projects step. The tests that check the Settings model lists now read them from the new file.
+
 ### Internal (Supervertaler.py split, step 2: projects · no change in behaviour)
 
 The main window's 26 project methods (new, open, load, save, save as and close, the sample project, recent projects, automatic and versioned backups, reopening the last project at start, the project info dialog), about 2,200 lines, moved unchanged into `modules/main_window/projects.py`. Two helpers for the import dialogs' language lists moved to `modules/language_combos.py`. Loading and saving a project now reach the Match Panel's font size through `type(self)` instead of naming the main window's class, which is the same class when Workbench runs.

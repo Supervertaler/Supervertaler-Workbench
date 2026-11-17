@@ -45,13 +45,13 @@ def read(path):
 
 
 def settings_list():
-    block = re.search(r"openrouter_combo\.addItems\(\[(.*?)\]\)", read("Supervertaler.py"), re.S)
+    block = re.search(r"openrouter_combo\.addItems\(\[(.*?)\]\)", read(os.path.join("modules", "main_window", "settings.py")), re.S)
     return [text.split()[0] for text in re.findall(r'"([^"]+)"', block.group(1))]
 
 
 def quicktrans_list():
     block = re.search(r'\("openrouter", "OpenRouter \(200\+ models\)", "openrouter", \[(.*?)\]\),',
-                      read("Supervertaler.py"), re.S)
+                      read(os.path.join("modules", "main_window", "settings.py")), re.S)
     return re.findall(r'\("([^"]+)", "[^"]+"\)', block.group(1))
 
 
@@ -138,7 +138,7 @@ def test_no_saved_model_leaves_the_first_entry(S):
 
 
 def test_settings_uses_the_exact_match_for_openrouter_and_gemini():
-    src = read("Supervertaler.py")
+    src = read(os.path.join("modules", "main_window", "settings.py"))
     assert re.search(r"_select_saved_model\(openrouter_combo,", src)
     assert re.search(r"_select_saved_model\(gemini_combo,", src)
     assert not re.search(r"in (openrouter|gemini)_combo\.itemText\(", src)
