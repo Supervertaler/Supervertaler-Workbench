@@ -102,10 +102,16 @@ def make_window(S, children, *, ui_prefs=None, project_modified=False):
         lookup_tab=SimpleNamespace(_hotkey_manager=hotkeys, ahk_process=ahk),
         hidden=False,
         saves=0,
+        log=lambda *a: None,
+        _ROUND_TRIP_STATE=S.SupervertalerQt._ROUND_TRIP_STATE,
+        package_cleaned=False,
     )
+    # An open Trados package, whose temporary folder must go on quit.
+    w.sdlppx_handler = SimpleNamespace(cleanup=lambda: setattr(w, "package_cleaned", True))
     w.hide = lambda: setattr(w, "hidden", True)
     w.save_project = lambda: setattr(w, "saves", w.saves + 1)   # e.g. Save As cancelled
-    for name in ("_stop_okapi_sidecar", "_cleanup_web_views", "_close_detached_log_windows"):
+    for name in ("_stop_okapi_sidecar", "_forget_round_trip_state", "_cleanup_web_views",
+                 "_close_detached_log_windows"):
         setattr(w, name, types.MethodType(getattr(S.SupervertalerQt, name), w))
     w.sidecar_proc, w.ahk, w.hotkeys = sidecar._process, ahk, hotkeys
     return w
@@ -124,6 +130,7 @@ def test_the_x_button_stops_children_and_quits(S, quits, children):
     assert quits == ["quit"]
     assert w.sidecar_proc.poll() is not None and w.ahk.poll() is not None
     assert w.hotkeys.stopped
+    assert w.package_cleaned
 
 
 def test_close_to_tray_hides_and_keeps_everything_running(S, quits, children):

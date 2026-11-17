@@ -58,7 +58,22 @@ class UnifiedPromptLibrary:
         """Set the library directory after initialization"""
         self.library_dir = Path(library_dir)
         self.library_dir.mkdir(parents=True, exist_ok=True)
-    
+
+    def inside_library(self, relative_path) -> Path:
+        """The full path for a path inside the library.
+
+        Raises ValueError for an absolute path, a drive, or ".." that would
+        lead out of the library folder: folder names can come from an AI
+        reply, and a file must never be written elsewhere on the computer.
+        """
+        if not self.library_dir:
+            raise ValueError("Library directory not set")
+        text = str(relative_path or '').replace('\\', '/')
+        parts = [p for p in text.split('/') if p not in ('', '.')]
+        if text.startswith('/') or ':' in text or '..' in parts:
+            raise ValueError(f"Not a folder inside the prompt library: {relative_path}")
+        return self.library_dir.joinpath(*parts)
+
     def _migrate_svprompt_to_md(self):
         """One-time migration: rename all .svprompt files to .md in the prompt library."""
         if not self.library_dir or not self.library_dir.exists():
@@ -396,7 +411,7 @@ class UnifiedPromptLibrary:
                 return False
             
             # Construct full path
-            filepath = self.library_dir / relative_path
+            filepath = self.inside_library(relative_path)
             filepath.parent.mkdir(parents=True, exist_ok=True)
             
             # Build frontmatter
@@ -708,7 +723,7 @@ class UnifiedPromptLibrary:
             if not self.library_dir:
                 return False
             
-            full_path = self.library_dir / folder_path
+            full_path = self.inside_library(folder_path)
             full_path.mkdir(parents=True, exist_ok=True)
             
             self.log(f"✓ Created folder: {folder_path}")
@@ -725,8 +740,8 @@ class UnifiedPromptLibrary:
                 return False
             
             old_file = Path(self.prompts[old_path]['_filepath'])
-            new_file = self.library_dir / new_path
-            
+            new_file = self.inside_library(new_path)
+
             # Create destination folder
             new_file.parent.mkdir(parents=True, exist_ok=True)
             

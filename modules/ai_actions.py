@@ -32,7 +32,16 @@ class AIActionSystem:
     Handles parsing and execution of AI actions on Supervertaler resources.
     """
 
-    def __init__(self, prompt_library, parent_app=None, log_callback=None):
+    # Actions that change the prompt library or the active prompt. They run
+    # only after the user says yes: the reply comes from a model, and a
+    # document or web page it was shown can steer what it asks for.
+    CHANGING_ACTIONS = frozenset({
+        'create_prompt', 'update_prompt', 'delete_prompt', 'create_folder',
+        'toggle_quick_run', 'activate_prompt',
+    })
+
+    def __init__(self, prompt_library, parent_app=None, log_callback=None,
+                 confirm_callback=None):
         """
         Initialize AI Action System.
 
@@ -40,10 +49,14 @@ class AIActionSystem:
             prompt_library: UnifiedPromptLibrary instance
             parent_app: Reference to main application (for segment access)
             log_callback: Function to call for logging messages
+            confirm_callback: Called with a list of plain descriptions of the
+                changes a reply asks for; returns True to go ahead. Without
+                one, changes are refused.
         """
         self.prompt_library = prompt_library
         self.parent_app = parent_app
         self.log = log_callback if log_callback else print
+        self.confirm_callback = confirm_callback
 
         # Map action names to handler methods
         self.action_handlers = {
@@ -101,7 +114,9 @@ class AIActionSystem:
 
         self.log(f"[DEBUG] Found {len(matches)} ACTION blocks")
 
-        # Process each ACTION block
+        # Read every block first, so the user is asked once, before
+        # anything changes, with the whole list in front of them.
+        parsed = []  # (action_name, params or None, params_str, json error, full_block)
         for i, match in enumerate(matches):
             action_name = match.group(1)
             start_pos = match.end()
@@ -145,44 +160,89 @@ class AIActionSystem:
             if json_end > 0:
                 params_str = params_str[:json_end]
 
+            # The full ACTION block: from start of match to end of JSON
+            full_block = ai_response[match.start():start_pos + json_end]
             try:
-                # Parse parameters
                 params = json.loads(params_str)
-
-                # Execute action
-                result = self.execute_action(action_name, params)
-                action_results.append(result)
-
-                # Reload prompt library immediately if prompt was created/updated/deleted
-                # This ensures subsequent actions (like activate_prompt) see the new prompt
-                if result['success'] and action_name in ['create_prompt', 'update_prompt', 'delete_prompt']:
-                    self.prompt_library.load_all_prompts()
-                    self.log(f"✓ Reloaded prompt library after {action_name}")
-
-                # Remove ACTION block from response
-                # Include the full ACTION block: from start of match to end of JSON
-                full_block = ai_response[match.start():start_pos + json_end]
-                cleaned_response = cleaned_response.replace(full_block, '')
-
+                if not isinstance(params, dict):
+                    raise json.JSONDecodeError("PARAMS must be a JSON object", params_str, 0)
+                parsed.append((action_name, params, params_str, None, full_block))
             except json.JSONDecodeError as e:
-                self.log(f"✗ Failed to parse action parameters: {e}")
-                self.log(f"[DEBUG] Raw params_str: {params_str[:500]}...")  # Log what we tried to parse
+                parsed.append((action_name, None, params_str, e, full_block))
+
+        changes = [(name, params) for name, params, _, err, _ in parsed
+                   if err is None and name in self.CHANGING_ACTIONS]
+        approved = bool(changes) and self._confirm_changes(changes)
+
+        for action_name, params, params_str, err, full_block in parsed:
+            if err is not None:
+                self.log(f"✗ Failed to parse action parameters: {err}")
+                self.log(f"[DEBUG] Raw params_str: {params_str[:500]}...")
                 action_results.append({
                     'action': action_name,
                     'params': params_str[:200],  # Truncate for display
                     'success': False,
-                    'error': f"Invalid JSON parameters: {e}"
+                    'error': f"Invalid JSON parameters: {err}"
                 })
-            except Exception as e:
-                self.log(f"✗ Action execution error: {e}")
+                continue
+
+            # The block comes out of the reply whether it runs or not.
+            cleaned_response = cleaned_response.replace(full_block, '')
+
+            if action_name in self.CHANGING_ACTIONS and not approved:
                 action_results.append({
                     'action': action_name,
-                    'params': params_str,
+                    'params': params,
                     'success': False,
-                    'error': str(e)
+                    'error': "Not done: the change was not allowed"
                 })
+                continue
+
+            result = self.execute_action(action_name, params)
+            action_results.append(result)
+
+            # Reload prompt library immediately if prompt was created/updated/deleted
+            # This ensures subsequent actions (like activate_prompt) see the new prompt
+            if result['success'] and action_name in ['create_prompt', 'update_prompt', 'delete_prompt']:
+                self.prompt_library.load_all_prompts()
+                self.log(f"✓ Reloaded prompt library after {action_name}")
 
         return cleaned_response.strip(), action_results
+
+    @staticmethod
+    def describe_change(action_name: str, params: Dict) -> str:
+        """One plain line saying what a changing action would do."""
+        def q(key):
+            value = str(params.get(key) or '').strip()
+            return value[:80] + ('…' if len(value) > 80 else '')
+        if action_name == 'create_prompt':
+            where = f" in the folder “{q('folder')}”" if params.get('folder') else ""
+            return f"Create the prompt “{q('name')}”{where}"
+        if action_name == 'update_prompt':
+            return f"Change the prompt {q('path')}"
+        if action_name == 'delete_prompt':
+            return f"Delete the prompt {q('path')}"
+        if action_name == 'create_folder':
+            return f"Create the folder “{q('path')}”"
+        if action_name == 'toggle_quick_run':
+            return f"Add {q('path')} to, or remove it from, the QuickLauncher"
+        if action_name == 'activate_prompt':
+            if params.get('mode') == 'attach':
+                return f"Attach the prompt {q('path')}"
+            return f"Make {q('path')} the active prompt"
+        return action_name
+
+    def _confirm_changes(self, changes: List[Tuple[str, Dict]]) -> bool:
+        """Ask the user once about all the changes in a reply."""
+        if self.confirm_callback is None:
+            self.log("✗ The AI asked to change the prompt library; nothing was changed (no way to ask you)")
+            return False
+        try:
+            return bool(self.confirm_callback(
+                [self.describe_change(name, params) for name, params in changes]))
+        except Exception as e:
+            self.log(f"✗ Could not ask about the AI's changes, so none were made: {e}")
+            return False
 
     def execute_action(self, action_name: str, params: Dict) -> Dict:
         """
@@ -329,7 +389,8 @@ class AIActionSystem:
             raise ValueError(f"Missing required parameters: {', '.join(missing)}. Received keys: {list(params.keys())}")
 
         # Build relative path
-        folder = params.get('folder', '')
+        folder = params.get('folder', '') or ''
+        self.prompt_library.inside_library(folder)  # raises if it leads out of the library
         # Sanitize filename - remove/replace invalid Windows filename characters
         # Invalid chars: < > : " / \ | ? * and also → (arrow) which AI likes to use
         filename = name
@@ -506,6 +567,7 @@ class AIActionSystem:
         path = params.get('path')
         if not path:
             raise ValueError("Missing required parameter: path")
+        self.prompt_library.inside_library(path)  # raises if it leads out of the library
 
         success = self.prompt_library.create_folder(path)
 

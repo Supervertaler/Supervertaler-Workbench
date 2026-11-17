@@ -22,6 +22,7 @@ Usage:
 """
 
 import atexit
+import hashlib
 import json
 import logging
 import os
@@ -92,6 +93,12 @@ class OkapiSidecar:
         "https://github.com/Supervertaler/Supervertaler-Workbench/"
         "releases/download/v1.10.377/okapi-sidecar-windows-v0.2.0.zip"
     )
+    # The SHA-256 of each asset above (GitHub shows it as the asset's
+    # digest). Change it together with the URL: a download that doesn't
+    # match is thrown away, never run.
+    INSTALLER_SHA256_WINDOWS = (
+        "cd10e24c868ced6adf484f51ed5dacff942df21a73bd378d25d93571ec8c0048"
+    )
     # All non-Windows platforms (macOS — Intel and Apple Silicon — and
     # Linux) use the cross-platform JAR-only asset with the user's system
     # Java. We deliberately do NOT ship per-platform JRE bundles for them:
@@ -102,6 +109,9 @@ class OkapiSidecar:
     INSTALLER_URL_JAR_ONLY = (
         "https://github.com/Supervertaler/Supervertaler-Workbench/"
         "releases/download/v1.10.377/okapi-sidecar-v0.2.0.jar"
+    )
+    INSTALLER_SHA256_JAR_ONLY = (
+        "e760ae51f2a397aeea4c215ef9dc13251ae020d7161d7b5f01a57f5094d4aae3"
     )
 
     def __init__(self, port: Optional[int] = None,
@@ -844,7 +854,8 @@ class OkapiSidecar:
         tmp_zip = target_dir.parent / "okapi-sidecar-download.zip"
         try:
             logger.info("Downloading Okapi sidecar bundle from %s", url)
-            self._stream_to_file(url, tmp_zip, progress_callback)
+            self._stream_to_file(url, tmp_zip, progress_callback,
+                                self.INSTALLER_SHA256_WINDOWS)
 
             # Wipe any previous (possibly partial) install before extracting.
             if target_dir.exists():
@@ -885,7 +896,8 @@ class OkapiSidecar:
         tmp_path = target_dir / "okapi-sidecar.jar.download"
         try:
             logger.info("Downloading Okapi sidecar JAR from %s", url)
-            self._stream_to_file(url, tmp_path, progress_callback)
+            self._stream_to_file(url, tmp_path, progress_callback,
+                                self.INSTALLER_SHA256_JAR_ONLY)
 
             # Atomic-ish replace once download completes.
             if jar_path.exists():
@@ -906,11 +918,16 @@ class OkapiSidecar:
             return False
 
     @staticmethod
-    def _stream_to_file(url: str, dest: Path, progress_callback) -> None:
+    def _stream_to_file(url: str, dest: Path, progress_callback,
+                        expected_sha256: str) -> None:
         """Stream a URL to disk, calling progress_callback if provided.
 
-        Raises on HTTP errors or network failures. dest is overwritten.
+        Raises on HTTP errors, network failures, or a file whose SHA-256
+        is not the one this version expects: the sidecar is a program we
+        run, so a swapped or damaged download must never be used. dest is
+        overwritten; the caller removes it on failure.
         """
+        digest = hashlib.sha256()
         with requests.get(url, stream=True, timeout=60) as resp:
             resp.raise_for_status()
             total = int(resp.headers.get("Content-Length", 0))
@@ -920,12 +937,17 @@ class OkapiSidecar:
                     if not chunk:
                         continue
                     f.write(chunk)
+                    digest.update(chunk)
                     downloaded += len(chunk)
                     if progress_callback:
                         try:
                             progress_callback(downloaded, total)
                         except Exception:
                             pass
+        if digest.hexdigest() != expected_sha256.lower():
+            raise ValueError(
+                f"Downloaded file does not match its expected SHA-256 "
+                f"(got {digest.hexdigest()}, expected {expected_sha256})")
 
     def _find_java(self) -> Optional[Path]:
         """Locate a Java runtime.  Prefers the bundled JRE."""

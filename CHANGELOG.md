@@ -5,6 +5,29 @@ All notable changes to Supervertaler Workbench are documented in this file.
 **Current Version:** v1.10.378 (November 17, 2026)
 
 
+## Unreleased
+
+### Security (AI Assistant · asks before it changes your prompts)
+
+The AI Assistant could create, change and delete prompts and folders, and change the active prompt, straight from the AI's reply. A document or web page the AI was shown could therefore steer it into doing so. It now lists the changes the reply asks for and does them only after you click Yes; reading the library still happens without asking. A folder name can no longer lead out of the prompt library (with `..` or a full path such as Windows' Startup folder): the library refuses any such path, whoever asks.
+
+### Security (Okapi sidecar download · checked before it is used)
+
+When Workbench installed with pip downloads the Okapi sidecar, the file must now match the SHA-256 recorded for that version. A damaged or swapped download is thrown away and the sidecar already installed is kept.
+
+### Security (Windows build · fixed package versions)
+
+The Windows build now installs the exact package versions the last release was built and tested with (`build-constraints.txt`), instead of whatever was newest on the day, so a bad new release of a package can't slip into a Workbench build unnoticed.
+
+### Fixed (Trados packages · temporary folders removed)
+
+Importing a Trados package (SDLPPX) unpacks it into a temporary folder. When the import failed or was cancelled, or Workbench was closed with a package open, that folder stayed behind in Windows' temp folder. It is now removed in all three cases.
+
+### Fixed (Superlookup · text shown as typed)
+
+A search term or TM entry containing `<` or `&` could be read as formatting in Superlookup's results, so parts of it went missing. Everything is now shown exactly as typed, and a term with `&` or `<` is highlighted too.
+
+
 ## v1.10.378 - November 17, 2026
 
 ### Security (Okapi sidecar · only this Workbench can use it)

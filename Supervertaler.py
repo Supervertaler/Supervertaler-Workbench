@@ -33307,6 +33307,7 @@ class SupervertalerQt(QMainWindow):
 
         # Each step guards itself, so one failing can't skip the quit below.
         self._stop_okapi_sidecar()
+        self._forget_round_trip_state()  # removes an open Trados package's temporary folder
         self._cleanup_web_views()
         self._close_detached_log_windows()
 
@@ -41376,7 +41377,8 @@ class SupervertalerQt(QMainWindow):
         
         if not file_path:
             return
-        
+
+        handler = None
         try:
             from modules.sdlppx_handler import TradosPackageHandler
 
@@ -41664,7 +41666,16 @@ class SupervertalerQt(QMainWindow):
             self.log(f"✗ SDLPPX import failed: {str(e)}")
             import traceback
             traceback.print_exc()
-    
+        finally:
+            # A package that was unpacked but did not become the open
+            # project (cancelled, or the import failed) leaves its
+            # temporary folder behind unless it is removed here.
+            if handler is not None and getattr(self, 'sdlppx_handler', None) is not handler:
+                try:
+                    handler.cleanup()
+                except Exception:
+                    pass
+
     def get_translator_name(self) -> str:
         """Return the user-configured translator name, falling back to system username."""
         settings = self.load_general_settings()
@@ -68485,14 +68496,17 @@ class SuperlookupTab(QWidget):
             if url:
                 self.last_web_search_url = url
                 
-                # Show the URL that will be opened
+                # Show the URL that will be opened. Escaped: the search
+                # term is whatever was typed or captured, and a "<" in it
+                # would otherwise be read as markup.
+                import html as _html
                 self.web_results_view.setHtml(f"""
                     <div style="padding: 20px;">
-                        <h3>{resource['icon']} {resource['name']}</h3>
-                        <p><b>Search term:</b> {query}</p>
+                        <h3>{_html.escape(resource['icon'])} {_html.escape(resource['name'])}</h3>
+                        <p><b>Search term:</b> {_html.escape(query)}</p>
                         <p><b>Opening URL:</b></p>
                         <p style="word-wrap: break-word; color: #1976D2;">
-                            <a href="{url}">{url}</a>
+                            <a href="{_html.escape(url)}">{_html.escape(url)}</a>
                         </p>
                         <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;">
                         <p style="color: #666; font-size: 10pt;">
@@ -69803,12 +69817,13 @@ class SuperlookupTab(QWidget):
             source_label_color = "#0066CC"
             target_label_color = "#006600"
 
-        html = f"<h3 style='color: {text_color}; margin-bottom: 15px;'>Found {len(results)} TM matches for '<span style='color: {source_label_color};'>{search_text}</span>'</h3>"
+        import html as _html
+        html = f"<h3 style='color: {text_color}; margin-bottom: 15px;'>Found {len(results)} TM matches for '<span style='color: {source_label_color};'>{_html.escape(search_text)}</span>'</h3>"
 
         for idx, result in enumerate(results, 1):
             source = result.source
             target = result.target
-            tm_name = result.metadata.get('tm_name', 'Unknown')
+            tm_name = _html.escape(str(result.metadata.get('tm_name', 'Unknown')))
 
             # Highlight search term
             highlighted_source = self._highlight_search_term(source, search_text)
@@ -69912,11 +69927,13 @@ class SuperlookupTab(QWidget):
         Case-insensitive highlighting that preserves original case.
         """
         import re
-        if not search_term or not text:
-            return text
-
-        # Escape HTML special characters first
-        html_text = text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        import html as _html
+        # The result is HTML, so the text is always escaped, also when
+        # there is nothing to highlight.
+        if not text:
+            return ''
+        if not search_term:
+            return _html.escape(text)
 
         # Use theme colors for highlight (with fallback for missing theme_manager)
         if self.theme_manager:
@@ -69928,15 +69945,20 @@ class SuperlookupTab(QWidget):
             highlight_bg = "#FFFF00"
             highlight_text = "#000000"
 
-        # Case-insensitive replacement with theme-aware highlight
-        # Use regex to preserve original case
+        # Case-insensitive, preserving the original case. Matched in the
+        # plain text and escaped piece by piece, so a term with "&" or "<"
+        # is still found.
         pattern = re.compile(re.escape(search_term), re.IGNORECASE)
-        highlighted = pattern.sub(
-            lambda m: f'<span style="background-color: {highlight_bg}; color: {highlight_text}; padding: 1px 2px;">{m.group(0)}</span>',
-            html_text
-        )
-        
-        return highlighted
+        pieces = []
+        last = 0
+        for m in pattern.finditer(text):
+            pieces.append(_html.escape(text[last:m.start()]))
+            pieces.append(
+                f'<span style="background-color: {highlight_bg}; color: {highlight_text}; '
+                f'padding: 1px 2px;">{_html.escape(m.group(0))}</span>')
+            last = m.end()
+        pieces.append(_html.escape(text[last:]))
+        return ''.join(pieces)
     
     def _resize_html_cell_rows(self, table, cols_with_html=(), min_height=24, max_height=120):
         """Resize table rows based on the actual rendered height of the
