@@ -61,8 +61,8 @@ def read(path):
 
 # Each place Workbench lists Gemini models, found by the code that builds it.
 GEMINI_LISTS = [
-    ("Settings → AI", "Supervertaler.py", r"gemini_combo\.addItems\(\[(.*?)\]\)"),
-    ("Settings → QuickTrans", "Supervertaler.py",
+    ("Settings → AI", os.path.join("modules", "main_window", "settings.py"), r"gemini_combo\.addItems\(\[(.*?)\]\)"),
+    ("Settings → QuickTrans", os.path.join("modules", "main_window", "settings.py"),
      r'\("gemini", "Gemini \(Google AI\)", "gemini", \[(.*?)\]\),'),
     ("AI Assistant model menu", os.path.join("modules", "chat_view_widget.py"),
      r'\("gemini", "Google", \{(.*?)\}\),'),
@@ -79,6 +79,6 @@ def test_every_gemini_list_offers_argon(where, path, pattern):
 
 
 def test_settings_still_recommends_flash_lite_first():
-    block = re.search(r"gemini_combo\.addItems\(\[(.*?)\]\)", read("Supervertaler.py"), re.S).group(1)
+    block = re.search(r"gemini_combo\.addItems\(\[(.*?)\]\)", read(os.path.join("modules", "main_window", "settings.py")), re.S).group(1)
     first = re.search(r'"([^"]+)"', block).group(1)
     assert first.startswith("gemini-3.1-flash-lite (Recommended")
