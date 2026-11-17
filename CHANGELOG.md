@@ -7,6 +7,10 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ## Unreleased
 
+### Internal (Supervertaler.py split, step 2: the grid · no change in behaviour)
+
+The main window's 284 grid methods, about 13,700 lines, moved unchanged into eight files under `modules/main_window/`: `grid_view.py` (building and drawing the grid, pages, rows, status cells, fonts and colours, invisible characters, the tag view), `grid_navigation.py` (selecting, moving through and confirming segments), `segment_editing.py` (undo and redo, split, merge and delete, bulk actions), `match_panel.py` (the Match and Compare panels), `preview.py`, `find_replace.py`, `filters.py` and `comments.py`. The Match Panel's font settings are reached through `type(self)`, as in the earlier steps. The tool that does the moving now accepts a method containing a small class of its own that calls `super()`. Two tests that check something is *not* used anywhere (a private language list, a withdrawn model) now search the split-out files too.
+
 ### Internal (Supervertaler.py split, step 2: import and export · no change in behaviour)
 
 The main window's 101 import and export methods, about 9,800 lines, moved unchanged into one file per format under `modules/main_window/`: `docx_export.py` (the Word export, comments, word count check), `okapi.py` (the Okapi converter), `document_import.py`, `plain_text.py`, `review_table.py`, `multifile.py`, `memoq.py`, `trados.py`, `phrase.py`, `cafetran.py`, `dejavu.py`, `po.py` and `bilingual_text.py`, with the helpers they share in `import_export_common.py`. The table of import options moved to `modules/okapi_import_options.py`, next to the options themselves. The bilingual Markdown export stays, as it uses the version number. Two tests now replace a dialog where the moved method looks for it.
