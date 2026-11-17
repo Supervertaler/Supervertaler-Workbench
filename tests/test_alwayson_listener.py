@@ -320,9 +320,8 @@ def test_listener_death_is_only_logged(S):
 
 
 def test_main_window_listens_for_the_listener_dying():
-    with open(os.path.join(ROOT, "Supervertaler.py"), encoding="utf-8") as f:
-        source = f.read()
-    assert "stopped_unexpectedly.connect(self._on_alwayson_listener_died)" in source
+    from app_sources import app_source   # Supervertaler.py and the files split out of it
+    assert "stopped_unexpectedly.connect(self._on_alwayson_listener_died)" in app_source()
 
 
 # ── 3. the build specs ship vosk's DLLs ──────────────────────────────────

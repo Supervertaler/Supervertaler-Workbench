@@ -61,7 +61,10 @@ def S():
 def quits(S, monkeypatch):
     calls = []
     fake_app = SimpleNamespace(quit=lambda: calls.append("quit"))
-    monkeypatch.setattr(S, "QApplication", SimpleNamespace(instance=lambda: fake_app))
+    fake = SimpleNamespace(instance=lambda: fake_app)
+    monkeypatch.setattr(S, "QApplication", fake)
+    # _tray_quit lives in modules/main_window/tray.py since the split.
+    monkeypatch.setitem(S.SupervertalerQt._tray_quit.__globals__, "QApplication", fake)
     return calls
 
 
