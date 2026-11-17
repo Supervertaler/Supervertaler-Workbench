@@ -68,7 +68,8 @@ def test_autotagger_and_extract_all_tags_agree(S):
 
 
 def test_ctrl_o_belongs_to_open_project_only():
-    source = open(os.path.join(ROOT, "Supervertaler.py"), encoding="utf-8").read()
+    from app_sources import app_source
+    source = app_source()
     explicit = re.findall(r'setShortcut\(\s*["\']Ctrl\+O["\']\s*\)', source)
     assert explicit == []                                     # Open Project has it (StandardKey.Open)
     assert 'import_document_action.setShortcut("Ctrl+Shift+O")' in source

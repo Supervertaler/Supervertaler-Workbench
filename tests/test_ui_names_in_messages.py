@@ -8,6 +8,8 @@ several messages still sent users to the old places.
 import os
 import re
 
+from app_sources import app_files, app_source
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
@@ -21,12 +23,12 @@ def _code_lines(path):
 def test_no_message_points_to_a_menu_or_tab_that_is_gone():
     stale = re.compile(r"Resources\s*(→|->)|File\s*(→|->)\s*Import")
     found = [f"{path}:{n}: {line.strip()}"
-             for path in ("Supervertaler.py", os.path.join("scripts", "sv_tm_diagnose.py"))
+             for path in app_files() + [os.path.join("scripts", "sv_tm_diagnose.py")]
              for n, line in _code_lines(path) if stale.search(line)]
     assert found == []
 
 
 def test_the_tabs_the_messages_name_exist():
-    source = open(os.path.join(ROOT, "Supervertaler.py"), encoding="utf-8").read()
+    source = app_source()
     assert 'self.main_tabs.addTab(tm_tab_top, "💾 TMs")' in source
     assert 'self.main_tabs.addTab(termbase_tab_top, "🏷️ Termbases")' in source

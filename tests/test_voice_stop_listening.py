@@ -100,8 +100,8 @@ def test_every_main_window_name_the_commands_use_exists():
     # The original bug was a name that didn't exist. Catch the next one.
     with open(os.path.join(ROOT, "modules", "voice_commands.py"), encoding="utf-8") as f:
         commands_src = f.read()
-    with open(os.path.join(ROOT, "Supervertaler.py"), encoding="utf-8") as f:
-        app_src = f.read()
+    from app_sources import app_source
+    app_src = app_source()
     names = set(re.findall(r"(?:hasattr|getattr)\((?:self\.)?main_window, '(\w+)'", commands_src))
     names |= set(re.findall(r"self\.main_window\.(\w+)\(", commands_src))
     assert {"voice_listener", "_toggle_alwayson_listening", "go_to_next_segment"} <= names
