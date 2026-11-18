@@ -138,8 +138,14 @@ def test_no_saved_model_leaves_the_first_entry(S):
     assert combo.currentIndex() == 0 and combo.count() == 3
 
 
-def test_settings_uses_the_exact_match_for_openrouter_and_gemini():
+@pytest.mark.parametrize("provider", ["openrouter", "gemini", "mistral", "deepseek"])
+def test_settings_uses_the_exact_match_for_every_model_list(provider):
+    # Mistral and DeepSeek still matched by substring until Nov 2026: a saved
+    # model not in the list silently became the first entry on the next save.
     src = read(os.path.join("modules", "main_window", "settings.py"))
-    assert re.search(r"_select_saved_model\(openrouter_combo,", src)
-    assert re.search(r"_select_saved_model\(gemini_combo,", src)
-    assert not re.search(r"in (openrouter|gemini)_combo\.itemText\(", src)
+    assert re.search(rf"_select_saved_model\({provider}_combo,", src)
+
+
+def test_no_model_list_in_settings_matches_by_substring():
+    src = read(os.path.join("modules", "main_window", "settings.py"))
+    assert not re.search(r" in \w+_combo\.itemText\(", src)

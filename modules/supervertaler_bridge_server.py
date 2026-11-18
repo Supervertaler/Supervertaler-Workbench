@@ -121,7 +121,7 @@ def _resolve_user_data_root() -> Path:
 
     if pointer.exists():
         try:
-            data = json.loads(pointer.read_text(encoding="utf-8"))
+            data = json.loads(pointer.read_text(encoding="utf-8-sig"))   # a BOM is allowed
             configured = data.get("user_data_path")
             if configured:
                 return Path(configured)

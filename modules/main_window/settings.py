@@ -512,11 +512,7 @@ class SettingsMixin:
             "Mistral Large: Flagship model, top-tier reasoning and multilingual quality.\n"
             "Mistral Small: Fast and cost-effective, great for high-volume translation."
         )
-        current_mistral_model = settings.get('mistral_model', 'mistral-large-latest')
-        for i in range(mistral_combo.count()):
-            if current_mistral_model in mistral_combo.itemText(i):
-                mistral_combo.setCurrentIndex(i)
-                break
+        _select_saved_model(mistral_combo, settings.get('mistral_model', 'mistral-large-latest'))
         mistral_combo.setEnabled(mistral_radio.isChecked())
         model_layout.addWidget(mistral_combo)
 
@@ -536,11 +532,7 @@ class SettingsMixin:
             "DeepSeek V4 Flash: Fast and cost-effective, great for high-volume translation.\n\n"
             "Get an API key at platform.deepseek.com."
         )
-        current_deepseek_model = settings.get('deepseek_model', 'deepseek-v4-pro')
-        for i in range(deepseek_combo.count()):
-            if current_deepseek_model in deepseek_combo.itemText(i):
-                deepseek_combo.setCurrentIndex(i)
-                break
+        _select_saved_model(deepseek_combo, settings.get('deepseek_model', 'deepseek-v4-pro'))
         deepseek_combo.setEnabled(deepseek_radio.isChecked())
         model_layout.addWidget(deepseek_combo)
 
