@@ -5,6 +5,12 @@ All notable changes to Supervertaler Workbench are documented in this file.
 **Current Version:** v1.10.380 (November 17, 2026)
 
 
+## Unreleased
+
+### Internal (no change in behaviour)
+
+Removed an unused first copy of `show_about`: a half-finished TM import and browse dialog that a later `show_about` (the real Help → About) always replaced, so it could never run. It referred to two names that don't exist, which is why the undefined-name check kept reporting `import_tab`. Its nine interface strings go with it.
+
 ## v1.10.380 - November 17, 2026
 
 The main program file has been split into smaller files, one per job. Nothing should look or work differently: please report anything that used to work and doesn't.
