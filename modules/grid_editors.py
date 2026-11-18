@@ -1029,259 +1029,6 @@ class ReadOnlyGridTextEditor(QTextEdit):
         # Store raw text (with tags) for mode switching
         self._raw_text = text
     
-    def keyPressEvent(self, event):
-        """Override to fix clipboard and word navigation when invisible characters shown"""
-        from PyQt6.QtCore import Qt
-        from PyQt6.QtWidgets import QApplication
-        from PyQt6.QtGui import QTextCursor
-
-        # v1.10.229: F2 enters/leaves a per-cell ephemeral source-edit mode.
-        # This is the memoQ / Trados convention — focus the source cell,
-        # press F2, edit, then click or Tab away to auto-exit. It coexists
-        # with the global "Allow Replace in Source Text" setting: if that
-        # setting is already on, the cell is permanently editable and F2
-        # is a no-op. Locked segments never become editable.
-        #
-        # Modifier check: we explicitly screen out Ctrl/Shift/Alt/Meta but
-        # don't require modifiers() == NoModifier — on Windows, function
-        # keys frequently arrive with KeypadModifier (and on macOS with
-        # KeypadModifier as well for the touchbar/Fn-row), which would
-        # fail an equality check and silently swallow the F2 press.
-        if event.key() == Qt.Key.Key_F2:
-            _mods = event.modifiers()
-            _disqualifying = (
-                Qt.KeyboardModifier.ControlModifier
-                | Qt.KeyboardModifier.ShiftModifier
-                | Qt.KeyboardModifier.AltModifier
-                | Qt.KeyboardModifier.MetaModifier
-            )
-            if not (_mods & _disqualifying):
-                if getattr(self, '_segment_locked', False):
-                    event.accept()
-                    return
-                mw = self._get_main_window()
-                globally_on = bool(getattr(mw, 'allow_replace_in_source', False)) if mw else False
-                if globally_on:
-                    # Already editable via the global setting; F2 is a no-op.
-                    event.accept()
-                    return
-                if getattr(self, '_ephemeral_source_edit', False):
-                    # Second press → exit ephemeral edit. Changes were
-                    # saved live by the textChanged handler as the user typed.
-                    self._disable_ephemeral_source_edit()
-                else:
-                    self._enable_ephemeral_source_edit()
-                event.accept()
-                return
-
-        # Check for Ctrl+C (copy)
-        if event.modifiers() == Qt.KeyboardModifier.ControlModifier and event.key() == Qt.Key.Key_C:
-            # Get selected text
-            cursor = self.textCursor()
-            if cursor.hasSelection():
-                selected_text = cursor.selectedText()
-                # Reverse invisible character replacements before copying
-                main_window = self._get_main_window()
-                if main_window and hasattr(main_window, 'reverse_invisible_replacements'):
-                    clean_text = main_window.reverse_invisible_replacements(selected_text)
-                    # Also replace paragraph separator with newline (Qt uses U+2029)
-                    clean_text = clean_text.replace('\u2029', '\n')
-                    # Set clipboard with clean text
-                    clipboard = QApplication.clipboard()
-                    clipboard.setText(clean_text)
-                    return  # Don't call parent - we handled it
-        
-        # Handle Ctrl+Arrow word navigation when invisibles are shown
-        main_window = self._get_main_window()
-        if main_window and hasattr(main_window, 'invisible_display_settings'):
-            if main_window.invisible_display_settings.get('spaces', False):
-                ctrl_only = event.modifiers() == Qt.KeyboardModifier.ControlModifier
-                ctrl_shift = event.modifiers() == (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier)
-                
-                if (ctrl_only or ctrl_shift) and event.key() in (Qt.Key.Key_Left, Qt.Key.Key_Right):
-                    cursor = self.textCursor()
-                    text = self.toPlainText()
-                    pos = cursor.position()
-                    word_chars = ('·', '\u200B', '\n', '\t', '→', '↵', ' ')
-                    
-                    if event.key() == Qt.Key.Key_Right:
-                        # Move to end of current word, then skip delimiters to start of next word
-                        # First skip any delimiters we're on
-                        while pos < len(text) and text[pos] in word_chars:
-                            pos += 1
-                        # Then skip to end of word (next delimiter)
-                        while pos < len(text) and text[pos] not in word_chars:
-                            pos += 1
-                    else:  # Key_Left
-                        # Move backwards: skip delimiters, then find start of word
-                        if pos > 0:
-                            pos -= 1
-                        # Skip any delimiters
-                        while pos > 0 and text[pos] in word_chars:
-                            pos -= 1
-                        # Find start of word
-                        while pos > 0 and text[pos - 1] not in word_chars:
-                            pos -= 1
-                    
-                    # Apply cursor movement
-                    if ctrl_shift:
-                        cursor.setPosition(pos, QTextCursor.MoveMode.KeepAnchor)
-                    else:
-                        cursor.setPosition(pos)
-                    self.setTextCursor(cursor)
-                    return
-        
-        # Arrow Up/Down: memoQ-style segment navigation at cell boundaries
-        # When cursor is at top line and Up is pressed, go to previous segment
-        # When cursor is at bottom line and Down is pressed, go to next segment
-        if event.key() in (Qt.Key.Key_Up, Qt.Key.Key_Down) and _cleaned_modifiers(event) == Qt.KeyboardModifier.NoModifier:
-            cursor = self.textCursor()
-            
-            # Get current cursor position info
-            current_block = cursor.block()
-            doc = self.document()
-            first_block = doc.firstBlock()
-            last_block = doc.lastBlock()
-            
-            # Get table reference
-            table = self.table_ref if hasattr(self, 'table_ref') else self.parent()
-            
-            if event.key() == Qt.Key.Key_Up:
-                # Check if we're on the first line
-                if current_block == first_block:
-                    # Navigate to previous segment
-                    main_window = self._get_main_window()
-                    if main_window and hasattr(main_window, 'go_to_previous_segment'):
-                        # Get cursor column position for smart positioning
-                        col_in_line = cursor.positionInBlock()
-                        # Navigate and let go_to_previous_segment position cursor in target cell
-                        main_window.go_to_previous_segment(target_column=col_in_line, to_last_line=True)
-                        
-                        # Now move focus from target to source cell, preserving column position
-                        if table:
-                            current_row = table.currentRow()
-                            source_widget = table.cellWidget(current_row, 2)  # Column 2 is Source
-                            if source_widget and hasattr(source_widget, 'textCursor'):
-                                new_cursor = source_widget.textCursor()
-                                src_doc = source_widget.document()
-                                src_last_block = src_doc.lastBlock()
-                                new_cursor.setPosition(src_last_block.position())
-                                line_length = src_last_block.length() - 1
-                                target_pos = min(col_in_line, max(0, line_length))
-                                new_cursor.movePosition(QTextCursor.MoveOperation.Right, QTextCursor.MoveMode.MoveAnchor, target_pos)
-                                source_widget.setTextCursor(new_cursor)
-                                source_widget.setFocus()
-                        return
-            
-            elif event.key() == Qt.Key.Key_Down:
-                # Check if we're on the last line
-                if current_block == last_block:
-                    # Navigate to next segment
-                    main_window = self._get_main_window()
-                    if main_window and hasattr(main_window, 'go_to_next_segment'):
-                        # Get cursor column position for smart positioning
-                        col_in_line = cursor.positionInBlock()
-                        # Navigate and let go_to_next_segment position cursor in target cell
-                        main_window.go_to_next_segment(target_column=col_in_line, to_first_line=True)
-                        
-                        # Now move focus from target to source cell, preserving column position
-                        if table:
-                            current_row = table.currentRow()
-                            source_widget = table.cellWidget(current_row, 2)  # Column 2 is Source
-                            if source_widget and hasattr(source_widget, 'textCursor'):
-                                new_cursor = source_widget.textCursor()
-                                src_doc = source_widget.document()
-                                src_first_block = src_doc.firstBlock()
-                                new_cursor.setPosition(src_first_block.position())
-                                line_length = src_first_block.length() - 1
-                                target_pos = min(col_in_line, max(0, line_length))
-                                new_cursor.movePosition(QTextCursor.MoveOperation.Right, QTextCursor.MoveMode.MoveAnchor, target_pos)
-                                source_widget.setTextCursor(new_cursor)
-                                source_widget.setFocus()
-                        return
-        
-        # Ctrl+Enter: Confirm & Next (same behavior as in target cell)
-        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
-            mods = event.modifiers()
-            if (mods & Qt.KeyboardModifier.ControlModifier) and not (mods & (Qt.KeyboardModifier.ShiftModifier | Qt.KeyboardModifier.AltModifier)):
-                main_window = self._get_main_window()
-                if main_window and hasattr(main_window, 'confirm_selected_or_next'):
-                    main_window.confirm_selected_or_next()
-                    event.accept()
-                    return
-        
-        # Tab key: Cycle to target cell (column 3) in same row
-        if event.key() == Qt.Key.Key_Tab and event.modifiers() == Qt.KeyboardModifier.NoModifier:
-            table = self.table_ref if hasattr(self, 'table_ref') else self.parent()
-            if table and self.row >= 0:
-                target_widget = table.cellWidget(self.row, 3)  # Column 3 is Target
-                if target_widget:
-                    target_widget.setFocus()
-                    table.setCurrentCell(self.row, 3)
-                    return
-
-        # Ctrl+Up: Navigate to previous segment
-        if event.key() == Qt.Key.Key_Up and _cleaned_modifiers(event) == Qt.KeyboardModifier.ControlModifier:
-            main_window = self._get_main_window()
-            if main_window and hasattr(main_window, 'go_to_previous_segment'):
-                main_window.go_to_previous_segment()
-            event.accept()
-            return
-
-        # Ctrl+Down: Navigate to next segment
-        if event.key() == Qt.Key.Key_Down and _cleaned_modifiers(event) == Qt.KeyboardModifier.ControlModifier:
-            main_window = self._get_main_window()
-            if main_window and hasattr(main_window, 'go_to_next_segment'):
-                main_window.go_to_next_segment()
-            event.accept()
-            return
-
-        # Alt+Up: Quick add selected terms to Project glossary (no dialog)
-        if event.key() == Qt.Key.Key_Up and _cleaned_modifiers(event) == Qt.KeyboardModifier.AltModifier:
-            self._handle_quick_add_to_glossary_priority(1)
-            event.accept()
-            return
-
-        # Alt+Down: Quick add selected terms to Background glossary (no dialog)
-        if event.key() == Qt.Key.Key_Down and _cleaned_modifiers(event) == Qt.KeyboardModifier.AltModifier:
-            self._handle_quick_add_to_glossary_priority(2)
-            event.accept()
-            return
-
-        super().keyPressEvent(event)
-    
-    def _handle_quick_add_to_glossary_priority(self, priority: int):
-        """Handle Alt+Up/Down: Quick add selected terms to the Project/Background glossary (no dialog)"""
-        main_window = self._get_main_window()
-        if main_window and hasattr(main_window, '_quick_add_term_with_priority'):
-            main_window._quick_add_term_with_priority(priority)
-
-    def _get_main_window(self):
-        """Get the main application window by traversing the parent hierarchy"""
-        from PyQt6.QtWidgets import QTableWidget
-        
-        # Try multiple ways to get table reference (different creation paths set different attributes)
-        # Check table_widget FIRST - delegate explicitly sets this to the correct table
-        # table_ref may be set to viewport (wrong) when delegate creates the editor
-        table = None
-        if hasattr(self, 'table_widget') and self.table_widget and isinstance(self.table_widget, QTableWidget):
-            table = self.table_widget
-        elif hasattr(self, 'table_ref') and self.table_ref and isinstance(self.table_ref, QTableWidget):
-            table = self.table_ref
-        else:
-            # Walk up parent hierarchy to find QTableWidget
-            widget = self.parent()
-            while widget and not isinstance(widget, QTableWidget):
-                widget = widget.parent() if hasattr(widget, 'parent') else None
-            table = widget
-        
-        if not table:
-            return None
-        main_window = table.parent()
-        while main_window and not hasattr(main_window, 'go_to_first_segment'):
-            main_window = main_window.parent()
-        return main_window
-    
     def update_display_mode(self, text: str, show_tags: bool):
         """
         Update the display based on tag view mode.
@@ -1641,8 +1388,75 @@ class ReadOnlyGridTextEditor(QTextEdit):
         return super().event(event)
     
     def keyPressEvent(self, event):
-        """Override to handle other keys (Tab is handled in event())"""
-        # All keys: Handle normally (Tab already handled in event())
+        """Copy and word jumps when invisible characters are shown.
+
+        Every other key is handled earlier: Tab, Ctrl+Up/Down, Alt+Up/Down,
+        Ctrl+Alt+T/N and Ctrl+Home/End in event(); F2 and Esc, Ctrl+Enter and
+        the arrow keys by the application-wide filters. (Until Nov 2026 a
+        second keyPressEvent further down silently replaced this one, so the
+        two blocks below never ran in the source cell.)
+        """
+        from PyQt6.QtCore import Qt
+        from PyQt6.QtWidgets import QApplication
+        from PyQt6.QtGui import QTextCursor
+
+        # Check for Ctrl+C (copy)
+        if event.modifiers() == Qt.KeyboardModifier.ControlModifier and event.key() == Qt.Key.Key_C:
+            # Get selected text
+            cursor = self.textCursor()
+            if cursor.hasSelection():
+                selected_text = cursor.selectedText()
+                # Reverse invisible character replacements before copying
+                main_window = self._get_main_window()
+                if main_window and hasattr(main_window, 'reverse_invisible_replacements'):
+                    clean_text = main_window.reverse_invisible_replacements(selected_text)
+                    # Also replace paragraph separator with newline (Qt uses U+2029)
+                    clean_text = clean_text.replace('\u2029', '\n')
+                    # Set clipboard with clean text
+                    clipboard = QApplication.clipboard()
+                    clipboard.setText(clean_text)
+                    return  # Don't call parent - we handled it
+        
+        # Handle Ctrl+Arrow word navigation when invisibles are shown
+        main_window = self._get_main_window()
+        if main_window and hasattr(main_window, 'invisible_display_settings'):
+            if main_window.invisible_display_settings.get('spaces', False):
+                ctrl_only = event.modifiers() == Qt.KeyboardModifier.ControlModifier
+                ctrl_shift = event.modifiers() == (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier)
+                
+                if (ctrl_only or ctrl_shift) and event.key() in (Qt.Key.Key_Left, Qt.Key.Key_Right):
+                    cursor = self.textCursor()
+                    text = self.toPlainText()
+                    pos = cursor.position()
+                    word_chars = ('·', '\u200B', '\n', '\t', '→', '↵', ' ')
+                    
+                    if event.key() == Qt.Key.Key_Right:
+                        # Move to end of current word, then skip delimiters to start of next word
+                        # First skip any delimiters we're on
+                        while pos < len(text) and text[pos] in word_chars:
+                            pos += 1
+                        # Then skip to end of word (next delimiter)
+                        while pos < len(text) and text[pos] not in word_chars:
+                            pos += 1
+                    else:  # Key_Left
+                        # Move backwards: skip delimiters, then find start of word
+                        if pos > 0:
+                            pos -= 1
+                        # Skip any delimiters
+                        while pos > 0 and text[pos] in word_chars:
+                            pos -= 1
+                        # Find start of word
+                        while pos > 0 and text[pos - 1] not in word_chars:
+                            pos -= 1
+                    
+                    # Apply cursor movement
+                    if ctrl_shift:
+                        cursor.setPosition(pos, QTextCursor.MoveMode.KeepAnchor)
+                    else:
+                        cursor.setPosition(pos)
+                    self.setTextCursor(cursor)
+                    return
+
         super().keyPressEvent(event)
     
     def sizeHint(self):

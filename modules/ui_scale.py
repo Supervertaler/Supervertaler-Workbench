@@ -76,7 +76,7 @@ def _user_data_path() -> Path:
     pointer = _config_pointer_path()
     if pointer.exists():
         try:
-            with open(pointer, "r", encoding="utf-8") as f:
+            with open(pointer, "r", encoding="utf-8-sig") as f:   # a BOM is allowed
                 cfg = json.load(f)
             chosen = cfg.get("user_data_path")
             if chosen and Path(chosen).exists():

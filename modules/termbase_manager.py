@@ -12,6 +12,7 @@ Activation system: termbases can be activated/deactivated per project.
 """
 
 import sqlite3
+from contextlib import contextmanager
 import json
 from typing import List, Dict, Optional, Tuple
 from datetime import datetime
@@ -31,6 +32,31 @@ def normalize_term_for_save(text: str) -> str:
     if not text:
         return text
     return text.strip().rstrip(_TERM_TRAILING_PUNCT).strip()
+
+
+
+@contextmanager
+def rollback_if_failed(connection, log=None):
+    """Wrap a termbase write: if it fails, end the transaction it started.
+
+    A failed write (e.g. "database is locked" while the Trados plugin writes)
+    leaves the transaction Python opened for it running, and until something
+    commits, this connection reads an old snapshot: other programs' changes
+    stay invisible. A write of several statements could also be left half
+    done. So roll back - but only a transaction this write started, never
+    someone else's pending work. The error is raised again for the caller.
+    """
+    was_in_transaction = connection.in_transaction
+    try:
+        yield
+    except Exception:
+        if not was_in_transaction and connection.in_transaction:
+            try:
+                connection.rollback()
+            except Exception as rollback_error:
+                if log:
+                    log(f"✗ Rollback after a failed termbase write failed too: {rollback_error}")
+        raise
 
 
 class TermbaseManager:
@@ -1001,28 +1027,29 @@ class TermbaseManager:
         """
         try:
             cursor = self.db_manager.cursor
-            if is_nontranslatable:
-                cursor.execute(
-                    """
-                    UPDATE termbase_terms
-                    SET is_nontranslatable = 1,
-                        target_term = source_term,
-                        modified_date = CURRENT_TIMESTAMP
-                    WHERE id = ?
-                    """,
-                    (term_id,),
-                )
-            else:
-                cursor.execute(
-                    """
-                    UPDATE termbase_terms
-                    SET is_nontranslatable = 0,
-                        modified_date = CURRENT_TIMESTAMP
-                    WHERE id = ?
-                    """,
-                    (term_id,),
-                )
-            self.db_manager.connection.commit()
+            with rollback_if_failed(self.db_manager.connection, self.log):
+                if is_nontranslatable:
+                    cursor.execute(
+                        """
+                        UPDATE termbase_terms
+                        SET is_nontranslatable = 1,
+                            target_term = source_term,
+                            modified_date = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                        """,
+                        (term_id,),
+                    )
+                else:
+                    cursor.execute(
+                        """
+                        UPDATE termbase_terms
+                        SET is_nontranslatable = 0,
+                            modified_date = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                        """,
+                        (term_id,),
+                    )
+                self.db_manager.connection.commit()
             return True
         except Exception as e:
             self.log(f"✗ Error toggling NT flag on term {term_id}: {e}")
@@ -1090,47 +1117,48 @@ class TermbaseManager:
         """Update a term"""
         try:
             cursor = self.db_manager.cursor
-            updates = []
-            params = []
+            with rollback_if_failed(self.db_manager.connection, self.log):
+                updates = []
+                params = []
             
-            if source_term is not None:
-                updates.append("source_term = ?")
-                params.append(source_term)
-            if target_term is not None:
-                updates.append("target_term = ?")
-                params.append(target_term)
-            if domain is not None:
-                updates.append("domain = ?")
-                params.append(domain)
-            if notes is not None:
-                updates.append("notes = ?")
-                params.append(notes)
-            if project is not None:
-                updates.append("project = ?")
-                params.append(project)
-            if client is not None:
-                updates.append("client = ?")
-                params.append(client)
-            if forbidden is not None:
-                updates.append("forbidden = ?")
-                params.append(forbidden)
+                if source_term is not None:
+                    updates.append("source_term = ?")
+                    params.append(source_term)
+                if target_term is not None:
+                    updates.append("target_term = ?")
+                    params.append(target_term)
+                if domain is not None:
+                    updates.append("domain = ?")
+                    params.append(domain)
+                if notes is not None:
+                    updates.append("notes = ?")
+                    params.append(notes)
+                if project is not None:
+                    updates.append("project = ?")
+                    params.append(project)
+                if client is not None:
+                    updates.append("client = ?")
+                    params.append(client)
+                if forbidden is not None:
+                    updates.append("forbidden = ?")
+                    params.append(forbidden)
             
-            if not updates:
-                return False
+                if not updates:
+                    return False
 
-            # v1.10.74: always bump modified_date on UPDATE so the
-            # snapshot-gated auto-refresh in
-            # Supervertaler.force_refresh_matches sees the change.
-            # SQLite's DEFAULT CURRENT_TIMESTAMP only fires on
-            # INSERT, not UPDATE, so without this the row's
-            # modified_date would stay frozen at INSERT time and
-            # edit-only changes wouldn't propagate to TermLens.
-            updates.append("modified_date = CURRENT_TIMESTAMP")
+                # v1.10.74: always bump modified_date on UPDATE so the
+                # snapshot-gated auto-refresh in
+                # Supervertaler.force_refresh_matches sees the change.
+                # SQLite's DEFAULT CURRENT_TIMESTAMP only fires on
+                # INSERT, not UPDATE, so without this the row's
+                # modified_date would stay frozen at INSERT time and
+                # edit-only changes wouldn't propagate to TermLens.
+                updates.append("modified_date = CURRENT_TIMESTAMP")
 
-            params.append(term_id)
-            sql = f"UPDATE termbase_terms SET {', '.join(updates)} WHERE id = ?"
-            cursor.execute(sql, params)
-            self.db_manager.connection.commit()
+                params.append(term_id)
+                sql = f"UPDATE termbase_terms SET {', '.join(updates)} WHERE id = ?"
+                cursor.execute(sql, params)
+                self.db_manager.connection.commit()
 
             self.log(f"✓ Updated term {term_id}")
             return True
@@ -1142,8 +1170,9 @@ class TermbaseManager:
         """Delete a term"""
         try:
             cursor = self.db_manager.cursor
-            cursor.execute("DELETE FROM termbase_terms WHERE id = ?", (term_id,))
-            self.db_manager.connection.commit()
+            with rollback_if_failed(self.db_manager.connection, self.log):
+                cursor.execute("DELETE FROM termbase_terms WHERE id = ?", (term_id,))
+                self.db_manager.connection.commit()
             self.log(f"✓ Deleted term {term_id}")
             return True
         except Exception as e:
@@ -1297,21 +1326,22 @@ class TermbaseManager:
             synonym_text = normalize_term_for_save(synonym_text)
 
             # Check if synonym already exists
-            cursor.execute("""
-                SELECT id FROM termbase_synonyms
-                WHERE term_id = ? AND synonym_text = ? AND language = ?
-            """, (term_id, synonym_text, language))
+            with rollback_if_failed(self.db_manager.connection, self.log):
+                cursor.execute("""
+                    SELECT id FROM termbase_synonyms
+                    WHERE term_id = ? AND synonym_text = ? AND language = ?
+                """, (term_id, synonym_text, language))
             
-            if cursor.fetchone():
-                self.log(f"✗ Synonym already exists: {synonym_text}")
-                return False
+                if cursor.fetchone():
+                    self.log(f"✗ Synonym already exists: {synonym_text}")
+                    return False
             
-            cursor.execute("""
-                INSERT INTO termbase_synonyms (term_id, synonym_text, language, display_order, forbidden, created_date, modified_date)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (term_id, synonym_text, language, display_order, 1 if forbidden else 0, now, now))
+                cursor.execute("""
+                    INSERT INTO termbase_synonyms (term_id, synonym_text, language, display_order, forbidden, created_date, modified_date)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (term_id, synonym_text, language, display_order, 1 if forbidden else 0, now, now))
             
-            self.db_manager.connection.commit()
+                self.db_manager.connection.commit()
             self.log(f"✓ Added synonym: {synonym_text}")
             return True
         except Exception as e:
@@ -1401,12 +1431,13 @@ class TermbaseManager:
         try:
             cursor = self.db_manager.cursor
             now = datetime.now().isoformat()
-            cursor.execute("""
-                UPDATE termbase_synonyms 
-                SET display_order = ?, modified_date = ?
-                WHERE id = ?
-            """, (new_order, now, synonym_id))
-            self.db_manager.connection.commit()
+            with rollback_if_failed(self.db_manager.connection, self.log):
+                cursor.execute("""
+                    UPDATE termbase_synonyms 
+                    SET display_order = ?, modified_date = ?
+                    WHERE id = ?
+                """, (new_order, now, synonym_id))
+                self.db_manager.connection.commit()
             return True
         except Exception as e:
             self.log(f"✗ Error updating synonym order: {e}")
@@ -1426,12 +1457,13 @@ class TermbaseManager:
         try:
             cursor = self.db_manager.cursor
             now = datetime.now().isoformat()
-            cursor.execute("""
-                UPDATE termbase_synonyms 
-                SET forbidden = ?, modified_date = ?
-                WHERE id = ?
-            """, (1 if forbidden else 0, now, synonym_id))
-            self.db_manager.connection.commit()
+            with rollback_if_failed(self.db_manager.connection, self.log):
+                cursor.execute("""
+                    UPDATE termbase_synonyms 
+                    SET forbidden = ?, modified_date = ?
+                    WHERE id = ?
+                """, (1 if forbidden else 0, now, synonym_id))
+                self.db_manager.connection.commit()
             return True
         except Exception as e:
             self.log(f"✗ Error updating synonym forbidden status: {e}")
@@ -1469,8 +1501,9 @@ class TermbaseManager:
         """
         try:
             cursor = self.db_manager.cursor
-            cursor.execute("DELETE FROM termbase_synonyms WHERE id = ?", (synonym_id,))
-            self.db_manager.connection.commit()
+            with rollback_if_failed(self.db_manager.connection, self.log):
+                cursor.execute("DELETE FROM termbase_synonyms WHERE id = ?", (synonym_id,))
+                self.db_manager.connection.commit()
             self.log(f"✓ Deleted synonym {synonym_id}")
             return True
         except Exception as e:

@@ -69,7 +69,9 @@ def load_user_data_path_from_config() -> Optional[Path]:
         return None
     
     try:
-        with open(pointer_path, 'r', encoding='utf-8') as f:
+        # utf-8-sig: Notepad and PowerShell 5 can save the file with a BOM, which
+        # plain utf-8 rejects - and then the data folder seemed to vanish.
+        with open(pointer_path, 'r', encoding='utf-8-sig') as f:
             config = json.load(f)
         
         path_str = config.get('user_data_path')
@@ -104,6 +106,11 @@ def get_user_data_path() -> Path:
     
     # 2. Check if default location has data (auto-recovery if pointer deleted)
     default_path = get_default_user_data_path()
+    if get_config_pointer_path().exists():
+        # The pointer is there but unreadable or points at a missing folder (an
+        # unplugged drive, say). Use the default for now, but never overwrite the
+        # user's choice: it must still work once the folder is back.
+        return default_path
     if default_path.exists():
         # Check if it has actual content
         has_content = False

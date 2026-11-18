@@ -7,6 +7,13 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ## Unreleased
 
+### Fixes
+
+- **Your data folder no longer seems to vanish when `config.json` was saved with a BOM.** Notepad and Windows PowerShell 5 can save the small file that says where your data lives (`%APPDATA%\Supervertaler\config.json`) with a byte-order mark. Workbench then couldn't read it and silently used the default data folder instead, while your API keys still came from your real one. It now reads the file either way. And if that file can't be read, or points at a folder that isn't there (a drive that isn't plugged in, say), Workbench no longer overwrites it with the default folder, so your choice works again once the folder is back.
+- **A termbase change that fails no longer leaves Workbench looking at old data.** Adding a synonym, editing a term in the grid or the Terms window, marking a term forbidden or non-translatable, and deleting a term or a whole termbase could fail while the Trados plugin was writing to the same termbase ("database is locked"). The failed change was then left half open, and until something else saved, Workbench didn't see terms the plugin added. Deleting a termbase could also be left half done. Each of these now cancels its own failed change cleanly, as adding a term already did.
+- **Mistral and DeepSeek keep the model you saved.** Settings → AI picked the saved model by a partial match and fell back to the first model in the list, so saving Settings could switch you to another model without a word. They now work like the OpenRouter and Gemini lists: an exact match, and a model that has left the list is kept as "(your current model)".
+- **Copying from a source cell with invisible characters shown copies real spaces.** It used to copy the "·" markers. Ctrl+Left/Right in a source cell also jumps whole words again when spaces are shown. The code for both was there but never ran: a second, empty copy of the same method replaced it. Two other methods in the source cell were defined twice as well; the copies that never ran are gone.
+
 ### Internal (no change in behaviour)
 
 Removed an unused first copy of `show_about`: a half-finished TM import and browse dialog that a later `show_about` (the real Help → About) always replaced, so it could never run. It referred to two names that don't exist, which is why the undefined-name check kept reporting `import_tab`. Its nine interface strings go with it.

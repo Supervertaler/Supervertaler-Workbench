@@ -45,6 +45,7 @@ from modules.statuses import DEFAULT_STATUS
 from modules.styled_widgets import CheckmarkCheckBox, CheckmarkRadioButton, TealCheckmarkCheckBox
 from modules.superlookup_tab import _NumericTableWidgetItem
 from modules.tag_text import strip_all_tags
+from modules.termbase_manager import rollback_if_failed
 from modules.translation_workers import GlossaryExtractionWorker
 from typing import Dict, Optional
 
@@ -2235,12 +2236,13 @@ class TermbasesMixin:
                 # auto-refresh in force_refresh_matches sees the
                 # change. See modules/termbase_entry_editor.save_term
                 # for the full rationale.
-                self.db_manager.cursor.execute(
-                    "UPDATE termbase_terms SET forbidden = ?, "
-                    "modified_date = CURRENT_TIMESTAMP WHERE id = ?",
-                    (1 if forbidden else 0, term_id)
-                )
-                self.db_manager.connection.commit()
+                with rollback_if_failed(self.db_manager.connection, self.log):
+                    self.db_manager.cursor.execute(
+                        "UPDATE termbase_terms SET forbidden = ?, "
+                        "modified_date = CURRENT_TIMESTAMP WHERE id = ?",
+                        (1 if forbidden else 0, term_id)
+                    )
+                    self.db_manager.connection.commit()
                 # Clear termbase cache
                 with self.termbase_cache_lock:
                     self.termbase_cache.clear()
@@ -2256,8 +2258,9 @@ class TermbasesMixin:
             )
             if reply == QMessageBox.StandardButton.Yes:
                 try:
-                    self.db_manager.cursor.execute("DELETE FROM termbase_terms WHERE id = ?", (term_id,))
-                    self.db_manager.connection.commit()
+                    with rollback_if_failed(self.db_manager.connection, self.log):
+                        self.db_manager.cursor.execute("DELETE FROM termbase_terms WHERE id = ?", (term_id,))
+                        self.db_manager.connection.commit()
                     self.log(f"🗑️ Deleted term {term_id}")
                     # Reload terms
                     if current_terms_tb_id[0]:
@@ -2313,15 +2316,16 @@ class TermbasesMixin:
                 # to the live TermLens display because the snapshot
                 # would still match. See entry_editor.save_term for
                 # the full back-story.
-                self.db_manager.cursor.execute(
-                    """UPDATE termbase_terms
-                       SET source_term = ?, target_term = ?, domain = ?, notes = ?,
-                           project = ?, client = ?,
-                           modified_date = CURRENT_TIMESTAMP
-                       WHERE id = ?""",
-                    (source, target, domain, notes, project, client, term_id)
-                )
-                self.db_manager.connection.commit()
+                with rollback_if_failed(self.db_manager.connection, self.log):
+                    self.db_manager.cursor.execute(
+                        """UPDATE termbase_terms
+                           SET source_term = ?, target_term = ?, domain = ?, notes = ?,
+                               project = ?, client = ?,
+                               modified_date = CURRENT_TIMESTAMP
+                           WHERE id = ?""",
+                        (source, target, domain, notes, project, client, term_id)
+                    )
+                    self.db_manager.connection.commit()
                 # Clear termbase cache
                 with self.termbase_cache_lock:
                     self.termbase_cache.clear()
@@ -3496,10 +3500,11 @@ class TermbasesMixin:
                 try:
                     # Delete from database
                     cursor = self.db_manager.cursor
-                    cursor.execute("DELETE FROM termbase_terms WHERE termbase_id = ?", (termbase_id,))
-                    cursor.execute("DELETE FROM termbase_activation WHERE termbase_id = ?", (termbase_id,))
-                    cursor.execute("DELETE FROM termbases WHERE id = ?", (termbase_id,))
-                    self.db_manager.connection.commit()
+                    with rollback_if_failed(self.db_manager.connection, self.log):
+                        cursor.execute("DELETE FROM termbase_terms WHERE termbase_id = ?", (termbase_id,))
+                        cursor.execute("DELETE FROM termbase_activation WHERE termbase_id = ?", (termbase_id,))
+                        cursor.execute("DELETE FROM termbases WHERE id = ?", (termbase_id,))
+                        self.db_manager.connection.commit()
                     
                     self.log(f"✓ Deleted termbase: {tb_name}")
                     QMessageBox.information(self, "Success", f"Termbase '{tb_name}' has been deleted")
@@ -3865,8 +3870,9 @@ class TermbasesMixin:
         """Update forbidden flag for a term"""
         try:
             cursor = self.db_manager.cursor
-            cursor.execute("UPDATE termbase_terms SET forbidden = ? WHERE id = ?", (1 if forbidden else 0, term_id))
-            self.db_manager.connection.commit()
+            with rollback_if_failed(self.db_manager.connection, self.log):
+                cursor.execute("UPDATE termbase_terms SET forbidden = ? WHERE id = ?", (1 if forbidden else 0, term_id))
+                self.db_manager.connection.commit()
             self.log(f"✓ Updated term {term_id} forbidden status to {forbidden}")
         except Exception as e:
             self.log(f"✗ Error updating term forbidden status: {e}")
@@ -4179,8 +4185,9 @@ class TermbasesMixin:
                 if reply == QMessageBox.StandardButton.Yes:
                     try:
                         cursor = self.db_manager.cursor
-                        cursor.execute("DELETE FROM termbase_terms WHERE id = ?", (term_id,))
-                        self.db_manager.connection.commit()
+                        with rollback_if_failed(self.db_manager.connection, self.log):
+                            cursor.execute("DELETE FROM termbase_terms WHERE id = ?", (term_id,))
+                            self.db_manager.connection.commit()
                         self.log(f"✓ Deleted term: {source_term} → {target_term}")
                         refresh_terms_table()
                         # v1.10.64: full post-delete refresh chain
