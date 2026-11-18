@@ -1385,6 +1385,7 @@ class SettingsMixin:
             custom_radio=custom_radio, custom_endpoint_input=custom_endpoint_input,
             custom_model_input=custom_model_input, custom_enable_cb=custom_enable_cb,
             custom_profile_combo=custom_profile_combo, custom_key_input=custom_key_input,
+            custom_profiles=settings.get('custom_openai_profiles', []),
             mistral_radio=mistral_radio, mistral_combo=mistral_combo,
             mistral_enable_cb=mistral_enable_cb,
             deepseek_radio=deepseek_radio, deepseek_combo=deepseek_combo,
@@ -4595,7 +4596,7 @@ class SettingsMixin:
                                    deepseek_radio=None, deepseek_combo=None,
                                    openrouter_radio=None, openrouter_combo=None,
                                    openrouter_enable_cb=None,
-                                   ollama_timeout_spin=None):
+                                   ollama_timeout_spin=None, custom_profiles=None):
         """Save all AI settings from the unified AI Settings tab"""
         # Determine selected provider
         if openai_radio.isChecked():
@@ -4624,9 +4625,15 @@ class SettingsMixin:
             if selected:
                 ollama_model = selected
 
-        # Build profiles list from UI state
+        # The profiles are the tab's own list, which + and − change and the
+        # fields write into. Reading them from the file again here lost every
+        # profile added since the tab opened, brought removed ones back, and
+        # after a removal wrote the shown profile's fields into the wrong one.
         existing_settings = self.load_llm_settings()
-        profiles = existing_settings.get('custom_openai_profiles', [])
+        if custom_profiles is not None:
+            profiles = custom_profiles
+        else:
+            profiles = existing_settings.get('custom_openai_profiles', [])
         active_profile_name = ''
 
         if custom_profile_combo and custom_profile_combo.count() > 0:
