@@ -13,6 +13,7 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ### Fixes
 
+- **Gemini thinks less, so it costs less.** Gemini 3.5 Flash, 3.1 Pro and 4 Argon think before they answer, and Google bills the thinking as output. Workbench left them at Google's default level ("medium", or "high" for 3.1 Pro), so a short segment could cost many times its translation. They are now held at the lowest level each accepts ("minimal" for 3.5, "low" for the others), as in the Trados plugin. The thinking is now also counted in the token usage Workbench records.
 - **"+ Add Term" in the Terms window now offers to add a similar term as a synonym.** Adding a term whose source (or target) is already in the termbase with another translation asks "Similar term found", as adding from the Editor always did, instead of making a second entry. It works in the termbase's own direction, whatever project is open.
 - **A synonym that can't be saved is reported.** When you chose to add a term as a synonym but the termbase was locked (the Trados plugin writing to it, say), Workbench said nothing and the term went nowhere. It now says it wasn't added.
 

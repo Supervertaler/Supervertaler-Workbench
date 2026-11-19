@@ -350,6 +350,29 @@ def _sanitize_ollama_endpoint(endpoint: str) -> str:
     return endpoint
 
 
+# Gemini 3+ models think before they answer, and the thinking is billed at the
+# output rate. Left to Google's default ("medium", or "high" for 3.1 Pro) a
+# short segment can cost many times its translation. These are the levels the
+# Trados plugin sends (core LlmModels.cs, checked against the live API on 29 Oct
+# 2026): "minimal" where the model accepts it, else "low" - "minimal" is a 400
+# on 3.8 Flash, 3.1 Pro and 4 Argon. Any other model gets no level, because one
+# it does not accept is an error: older models (2.5) use a thinking budget
+# instead, and a new model is not guessed at.
+_GEMINI_LOW_THINKING = ("gemini-3.8-flash", "gemini-3.1-pro-preview", "gemini-4-argon")
+
+
+def gemini_thinking_level(model: str) -> Optional[str]:
+    """The thinkingLevel to send for a Gemini model, or None to send none."""
+    name = (model or "").strip().lower()
+    if name.startswith("models/"):
+        name = name[len("models/"):]
+    if name.startswith("gemini-3.5"):
+        return "minimal"
+    if name in _GEMINI_LOW_THINKING:
+        return "low"
+    return None
+
+
 @dataclass
 class LLMConfig:
     """Configuration for LLM client"""
@@ -1346,6 +1369,15 @@ class LLMClient:
 
     def _call_gemini_with_usage(self, prompt: str, max_tokens: Optional[int] = None, images: Optional[List] = None, system_prompt: Optional[str] = None) -> Tuple[str, Dict]:
         """Call Gemini API and return (text, usage_dict)."""
+        # A model that thinks goes through REST with its level pinned: the
+        # legacy SDK below cannot send thinkingConfig.
+        level = gemini_thinking_level(self.model)
+        if level:
+            return self._call_gemini_rest(
+                prompt, max_tokens=max_tokens, images=images,
+                system_prompt=system_prompt, thinking_level=level,
+            )
+
         try:
             import google.generativeai as genai
         except ImportError:
@@ -1653,18 +1685,20 @@ class LLMClient:
 
     def _call_gemini(self, prompt: str, max_tokens: Optional[int] = None, images: Optional[List] = None, system_prompt: Optional[str] = None) -> str:
         """Call Google Gemini API with vision support."""
-        # gemini-3.5+ forces "thinking" (default level=medium), which bills
-        # hundreds of reasoning tokens at the output rate even for tiny
-        # translation segments (~65x the cost of flash-lite for no quality
-        # gain on short text). The thinking level can only be lowered via
+        # Gemini 3+ thinks at Google's default level unless told otherwise,
+        # which bills hundreds of reasoning tokens at the output rate even for
+        # tiny segments (~65x the cost of flash-lite on 3.5 Flash, for no
+        # quality gain on short text). The level can only be set through
         # thinkingConfig, which the legacy google-generativeai 0.8.5 SDK
-        # cannot pass. Route 3.5+ models through REST with thinking pinned
-        # to "minimal"; all other models stay on the proven SDK path below.
-        if self.model.startswith("gemini-3.5"):
-            return self._call_gemini_rest(
+        # cannot pass, so those models go through REST with their level
+        # pinned (gemini_thinking_level); all others stay on the SDK below.
+        level = gemini_thinking_level(self.model)
+        if level:
+            text, _usage = self._call_gemini_rest(
                 prompt, max_tokens=max_tokens, images=images,
-                system_prompt=system_prompt, thinking_level="minimal",
+                system_prompt=system_prompt, thinking_level=level,
             )
+            return text
 
         # v1.10.34: preserve the original exception text in the
         # ImportError. The old "Google AI library not installed"
@@ -1746,11 +1780,12 @@ class LLMClient:
 
     def _call_gemini_rest(self, prompt: str, max_tokens: Optional[int] = None,
                           images: Optional[List] = None, system_prompt: Optional[str] = None,
-                          thinking_level: str = "minimal") -> str:
+                          thinking_level: str = "minimal") -> Tuple[str, Dict]:
         """Call Gemini via REST so thinkingConfig can be set (legacy SDK can't).
 
-        Used for gemini-3.5+ to pin the thinking level to "minimal" and avoid
-        the large hidden reasoning-token cost on short translation segments.
+        Used for the models gemini_thinking_level() pins, to avoid the large
+        hidden reasoning-token cost on short translation segments. Returns
+        (text, usage) in the shape of _call_gemini_with_usage.
         """
         import base64
         import io
@@ -1787,7 +1822,9 @@ class LLMClient:
             url,
             headers={"Content-Type": "application/json", "x-goog-api-key": self.api_key},
             data=json_module.dumps(body),
-            timeout=120,
+            # As long as the OpenAI path gives a reasoning model: 4 Argon and
+            # 3.1 Pro come here now, and a whole batch can take minutes.
+            timeout=600,
         )
         if resp.status_code != 200:
             raise RuntimeError(f"Gemini REST error {resp.status_code}: {resp.text[:500]}")
@@ -1815,7 +1852,20 @@ class LLMClient:
 
         if not text:
             raise RuntimeError("Gemini returned an empty response")
-        return text
+
+        usage: Dict = {}
+        um = data.get("usageMetadata") or {}
+        if um:
+            usage = {
+                'input_tokens': um.get('promptTokenCount', 0) or 0,
+                # Thinking is billed at the output rate, so it counts as output
+                # here: leaving it out would understate what a call cost.
+                'output_tokens': (um.get('candidatesTokenCount', 0) or 0)
+                                 + (um.get('thoughtsTokenCount', 0) or 0),
+                'cache_read_input_tokens': um.get('cachedContentTokenCount', 0) or 0,
+                'cache_creation_input_tokens': 0,
+            }
+        return text, usage
 
     def _call_ollama(self, prompt: str, max_tokens: Optional[int] = None, system_prompt: Optional[str] = None) -> str:
         """
