@@ -7,6 +7,10 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ## Unreleased
 
+### Improvements
+
+- **Double-click a termbase to open its terms.** In the Termbases tab, double-clicking a termbase's name (or its type, languages or term count) opens its terms window, as **Edit Terms…** in the right-click menu does. Double-clicking a checkbox still only ticks it.
+
 ### Fixes
 
 - **"+ Add Term" in the Terms window now offers to add a similar term as a synonym.** Adding a term whose source (or target) is already in the termbase with another translation asks "Similar term found", as adding from the Editor always did, instead of making a second entry. It works in the termbase's own direction, whatever project is open.

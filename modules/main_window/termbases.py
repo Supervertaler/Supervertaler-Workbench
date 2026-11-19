@@ -1629,6 +1629,22 @@ class TermbasesMixin:
         termbase_table.customContextMenuRequested.connect(
             lambda pos: self._show_termbase_context_menu(pos, termbase_table, termbase_mgr, refresh_termbase_list)
         )
+
+        # Double-clicking a termbase opens its terms, like the right-click
+        # menu's Edit Terms… (its default action). Not on the checkbox
+        # columns: a checkbox passes a double-click on to the table, and
+        # quickly ticking one off and on again must not open a window.
+        def open_terms_of_row(row, column):
+            from PyQt6.QtWidgets import QAbstractButton
+            widget = termbase_table.cellWidget(row, column)
+            if widget is not None and (isinstance(widget, QAbstractButton)
+                                       or widget.findChild(QAbstractButton) is not None):
+                return
+            name_item = termbase_table.item(row, 1)
+            if name_item is not None:
+                self._open_termbase_terms(name_item.data(Qt.ItemDataRole.UserRole), name_item.text())
+
+        termbase_table.cellDoubleClicked.connect(open_terms_of_row)
         
         # NOTE: do NOT capture the current project here. This tab is built once
         # at startup, before any project is open, so anything derived from it
