@@ -762,6 +762,13 @@ class TermbasesMixin:
             source_synonyms, target_synonyms)
         if decision == 'cancel':
             return
+        if decision == 'failed':
+            QMessageBox.warning(
+                self, "Term not added",
+                f"Workbench could not add “{source_text} → {target_text}” as a synonym.\n\n"
+                "Another program may be using the database (it is locked). "
+                "The Session Log has the details.")
+            return
 
         # Add term to selected termbases only
         success_count = 0
@@ -1224,6 +1231,10 @@ class TermbasesMixin:
         decision, merged_ids = self._detect_and_merge_synonyms(
             source_text, target_text, [target_termbase])
         if decision == 'cancel':
+            return
+        if decision == 'failed':
+            self.statusBar().showMessage(
+                f"✗ Could not add as synonym (database locked?): {source_text} → {target_text}", 5000)
             return
         if decision == 'merged':
             self._play_sound_effect('glossary_term_added')
@@ -2418,6 +2429,35 @@ class TermbasesMixin:
                 return
             if existing_id:
                 already_there(existing_id)
+                return
+
+            # "Similar term found": the same source with another target (or the
+            # other way round) is offered as a synonym of that entry, as when
+            # adding from the Editor. The dialog is in this termbase's own
+            # direction, so nothing is turned round.
+            decision, _merged = self._detect_and_merge_synonyms(
+                source, target, [{**tb, 'id': tb_id, 'name': tb_name}],
+                dialog.get_source_synonyms(), dialog.get_target_synonyms(),
+                in_termbase_direction=True)
+            if decision == 'cancel':
+                return
+            if decision == 'failed':
+                QMessageBox.warning(
+                    terms_window, self.tr("Term not added"),
+                    f"Workbench could not add “{source} → {target}” to {tb_name} as a synonym.\n\n"
+                    "Another program may be using the database (it is locked). "
+                    "The Session Log has the details.")
+                return
+            if decision == 'merged':
+                self.log(f"✓ Added as a synonym in termbase '{tb_name}': {source} → {target}")
+                refresh_termbase_list()
+                try:
+                    self.force_refresh_matches()
+                except Exception as e:
+                    self.log(f"⚠️ Refresh after adding a synonym failed: {e}")
+                merged_into = termbase_mgr.find_merge_matches(tb_id, source, target)
+                if merged_into:
+                    show_term(merged_into[0]['term_id'])
                 return
 
             term_id = termbase_mgr.add_term(

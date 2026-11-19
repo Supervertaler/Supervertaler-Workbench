@@ -5,6 +5,13 @@ All notable changes to Supervertaler Workbench are documented in this file.
 **Current Version:** v1.10.381 (November 19, 2026)
 
 
+## Unreleased
+
+### Fixes
+
+- **"+ Add Term" in the Terms window now offers to add a similar term as a synonym.** Adding a term whose source (or target) is already in the termbase with another translation asks "Similar term found", as adding from the Editor always did, instead of making a second entry. It works in the termbase's own direction, whatever project is open.
+- **A synonym that can't be saved is reported.** When you chose to add a term as a synonym but the termbase was locked (the Trados plugin writing to it, say), Workbench said nothing and the term went nowhere. It now says it wasn't added.
+
 ## v1.10.381 - November 19, 2026
 
 Five fixes, two of which protect your settings: a data folder that seemed to vanish, and Custom endpoint profiles that weren't saved properly.
