@@ -2,10 +2,12 @@
 
 All notable changes to Supervertaler Workbench are documented in this file.
 
-**Current Version:** v1.10.380 (November 17, 2026)
+**Current Version:** v1.10.381 (November 19, 2026)
 
 
-## Unreleased
+## v1.10.381 - November 19, 2026
+
+Five fixes, two of which protect your settings: a data folder that seemed to vanish, and Custom endpoint profiles that weren't saved properly.
 
 ### Fixes
 
