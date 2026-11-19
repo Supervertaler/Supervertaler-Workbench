@@ -1489,7 +1489,8 @@ class SupervertalerQt(TrayMixin, WindowShellMixin, MTEnginesMixin, FirstRunMixin
     def _detect_and_merge_synonyms(self, source_text: str, target_text: str,
                                    target_termbases: list,
                                    source_synonyms: list = None,
-                                   target_synonyms: list = None):
+                                   target_synonyms: list = None,
+                                   in_termbase_direction: bool = False):
         """Trados-parity "Similar Term Found" check across the given termbases.
 
         Detects entries that share the new term's source (but a different
@@ -1505,6 +1506,16 @@ class SupervertalerQt(TrayMixin, WindowShellMixin, MTEnginesMixin, FirstRunMixin
                                added as synonyms to the matched entries in
                                ``merged_tb_ids``; caller must skip those
                                termbases and insert only into the rest.
+          * ``'failed'``     – the user chose to merge, but no synonym could be
+                               saved (the database was locked, say); caller
+                               must add nothing and say so. Before Nov 2026
+                               this still said ``'merged'``, so the term
+                               silently went nowhere.
+
+        ``in_termbase_direction``: the terms are already in the termbase's own
+        direction (the Termbases tab's Add Term dialog is labelled with the
+        termbase's languages), so they must not be turned round to match the
+        project.
 
         When there are no conflicts the method returns ``('keep_both', set())``
         WITHOUT showing any dialog, so the quick-add paths stay silent and fast
@@ -1517,8 +1528,11 @@ class SupervertalerQt(TrayMixin, WindowShellMixin, MTEnginesMixin, FirstRunMixin
         # term to its termbase's storage direction first (same as add_term).
         all_matches = []
         for tb in target_termbases:
-            src_term, tgt_term, _sl, _tl = self._orient_term_for_termbase(
-                source_text, target_text, tb)
+            if in_termbase_direction:
+                src_term, tgt_term = source_text, target_text
+            else:
+                src_term, tgt_term, _sl, _tl = self._orient_term_for_termbase(
+                    source_text, target_text, tb)
             tb_was_swapped = (src_term != source_text)
             for row in self.termbase_mgr.find_merge_matches(
                     tb['id'], src_term, tgt_term):
@@ -1552,6 +1566,7 @@ class SupervertalerQt(TrayMixin, WindowShellMixin, MTEnginesMixin, FirstRunMixin
         # so when the termbase is reverse of the project the project-source
         # text belongs in the target column and vice versa.
         merged_ids = set()
+        failed_ids = set()
         for m in all_matches:
             try:
                 if m['match_type'] == 'source':
@@ -1560,10 +1575,15 @@ class SupervertalerQt(TrayMixin, WindowShellMixin, MTEnginesMixin, FirstRunMixin
                 else:
                     ok = self.termbase_mgr.add_synonym(
                         m['term_id'], m['oriented_src'], language='source')
-                if ok:
+                if not ok:
+                    failed_ids.add(m['termbase_id'])
                     self.log(
-                        f"  ✓ Merged as synonym into '{m['termbase_name']}' "
-                        f"(entry #{m['term_id']})")
+                        f"  ✗ Could not save the synonym in '{m['termbase_name']}' "
+                        f"(entry #{m['term_id']}); the database may be locked")
+                    continue
+                self.log(
+                    f"  ✓ Merged as synonym into '{m['termbase_name']}' "
+                    f"(entry #{m['term_id']})")
                 # Also fold in any synonyms the user typed in the add dialog.
                 syn_source_lang = 'target' if m['tb_was_swapped'] else 'source'
                 syn_target_lang = 'source' if m['tb_was_swapped'] else 'target'
@@ -1579,13 +1599,23 @@ class SupervertalerQt(TrayMixin, WindowShellMixin, MTEnginesMixin, FirstRunMixin
                         forbidden=syn.get('forbidden', False))
                 merged_ids.add(m['termbase_id'])
             except Exception as e:
+                failed_ids.add(m['termbase_id'])
                 self.log(
                     f"  ✗ Failed to merge synonym into "
                     f"'{m['termbase_name']}': {e}")
 
-        # "Add & Edit" – open the term entry editor on the first matched entry.
-        if choice == MergePromptDialog.EDIT and all_matches:
-            first = all_matches[0]
+        if not merged_ids:
+            return ('failed', set())
+        saved_ids = set(merged_ids)
+        # With several termbases, one whose synonym could not be saved still
+        # counts as handled: the user chose a synonym, not a fresh entry. Its
+        # failure is in the log.
+        merged_ids |= failed_ids
+
+        # "Add & Edit" – open the term entry editor on the first entry that
+        # took the synonym.
+        if choice == MergePromptDialog.EDIT:
+            first = next(m for m in all_matches if m['termbase_id'] in saved_ids)
             try:
                 from modules.termbase_entry_editor import TermbaseEntryEditor
                 editor = TermbaseEntryEditor(
