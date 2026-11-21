@@ -76,6 +76,7 @@ _OWN_ALIASES = {'gemini': ('google',), 'microsoft_translate': ('azure_translate'
 _RETIRED_NAMES = {'google', 'azure_translate', 'anthropic'}
 
 PROFILE_KEY_PREFIX = "workbench:custom_openai:"
+MT_PROFILE_KEY_PREFIX = "workbench:custom_mt:"
 
 
 def _own_settings_paths() -> List[str]:
@@ -236,12 +237,12 @@ def save_api_key(name: str, value: str) -> bool:
     return True if key_id is None else api_key_store.set_key(key_id, value)
 
 
-def _profile_keys(profiles) -> Dict[str, str]:
+def _profile_keys(profiles, kind: str = "custom_openai") -> Dict[str, str]:
     from modules import api_key_store
     keys = {}
     for p in profiles or []:
         if isinstance(p, dict) and (p.get('api_key') or '').strip():
-            keys[api_key_store.private_id("workbench", "custom_openai", p.get('name') or '')] = p['api_key'].strip()
+            keys[api_key_store.private_id("workbench", kind, p.get('name') or '')] = p['api_key'].strip()
     return keys
 
 
@@ -254,13 +255,23 @@ def save_profile_keys(profiles) -> bool:
     return api_key_store.set_private_keys(PROFILE_KEY_PREFIX, _profile_keys(profiles))
 
 
+def save_mt_profile_keys(profiles) -> bool:
+    """QuickTrans's Custom MT profiles, the same way, under
+    ``workbench:custom_mt:<profile name>``: kept apart from the AI profiles,
+    which may share a name. Without it, step 2 (which removes the plain copies)
+    would have no locked copy of these keys to keep."""
+    from modules import api_key_store
+    return api_key_store.set_private_keys(MT_PROFILE_KEY_PREFIX, _profile_keys(profiles, "custom_mt"))
+
+
 class PreparedKeys(NamedTuple):
     joined: bool                     # the first-start join ran (mark it done)
     notices: List[str]               # for the status line and the log: M8, M6
     keychain_missing: Optional[str]  # M7, to be said once
 
 
-def prepare_api_keys(settings_path: Optional[str], join: bool, profiles=None) -> PreparedKeys:
+def prepare_api_keys(settings_path: Optional[str], join: bool, profiles=None,
+                     mt_profiles=None) -> PreparedKeys:
     """Once per start, before any key is read.
 
     ``join`` (Workbench's first step-1 start): its own keys go into the shared
@@ -291,7 +302,8 @@ def prepare_api_keys(settings_path: Optional[str], join: bool, profiles=None) ->
                     + (f"Your Workbench key for {listed} was different; the shared one is used from now on."
                        if len(names) == 1 else
                        f"Your Workbench keys for {listed} were different; the shared ones are used from now on."))
-    sync = api_key_store.sync_locked(extra=_profile_keys(profiles))
+    sync = api_key_store.sync_locked(extra={**_profile_keys(profiles),
+                                            **_profile_keys(mt_profiles, "custom_mt")})
     if sync.locked:
         log.info("API keys: %d locked to this computer.", sync.locked)
     if sync.notice:

@@ -4004,9 +4004,11 @@ class AITranslationMixin:
             from modules.llm_clients import prepare_api_keys
             general = self._load_settings_section("general")
             state = dict(general.get("api_key_lock") or {})
+            llm = self.load_llm_settings()
             prepared = prepare_api_keys(str(self._get_unified_settings_path()),
                                         join=not state.get("joined"),
-                                        profiles=self.load_llm_settings().get('custom_openai_profiles', []))
+                                        profiles=llm.get('custom_openai_profiles', []),
+                                        mt_profiles=llm.get('custom_mt_profiles', []))
             notices = list(prepared.notices)
             if prepared.joined:
                 state["joined"] = datetime.now().strftime("%Y-%m-%d")
