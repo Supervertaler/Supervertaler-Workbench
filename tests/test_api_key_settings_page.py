@@ -145,7 +145,8 @@ def test_start_up_joins_once_says_m8_once_and_locks_the_keys(app, scratch):
     window = FakeWindow(scratch)
     write_plain(scratch, openai=OAI_SHARED)
     write_settings(scratch, {"openai": OAI_OWN, "deepl": DL},
-                   profiles=[{"name": "Acme", "endpoint": "http://localhost:1/v1", "model": "m", "api_key": K2}])
+                   profiles=[{"name": "Acme", "endpoint": "http://localhost:1/v1", "model": "m", "api_key": K2}],
+                   mt_profiles=[{"name": "PROJ-001 MT", "endpoint": "http://localhost:2/v1", "api_key": K1}])
     window._prepare_api_keys()
     QTest.qWait(3300)
     m8 = ("Workbench now uses the same API keys as Supervertaler for Trados, memoQ and Sidekick. "
@@ -153,7 +154,8 @@ def test_start_up_joins_once_says_m8_once_and_locks_the_keys(app, scratch):
     assert window.logged == [m8]
     general = json.load(open(scratch.settings, encoding="utf-8"))["general"]
     assert general["api_key_lock"]["joined"]
-    assert set(locked_map(scratch.locked)) == {"openai", "deepl", "workbench:custom_openai:Acme"}
+    assert set(locked_map(scratch.locked)) == {"openai", "deepl", "workbench:custom_openai:Acme",
+                                               "workbench:custom_mt:PROJ-001 MT"}
     assert window.load_api_keys()["openai"] == OAI_SHARED
     window.logged.clear()
     window._prepare_api_keys()

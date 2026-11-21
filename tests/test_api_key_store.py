@@ -109,10 +109,12 @@ def write_locked(s, entries):
     write(s.locked, json.dumps(entries))
 
 
-def write_settings(s, api_keys=None, profiles=None):
+def write_settings(s, api_keys=None, profiles=None, mt_profiles=None):
     data = {"api_keys": api_keys or {}, "general": {}, "ui": {}, "features": {}}
     if profiles is not None:
         data["ui"]["llm_settings"] = {"custom_openai_profiles": profiles}
+    if mt_profiles is not None:
+        data["ui"].setdefault("llm_settings", {})["custom_mt_profiles"] = mt_profiles
     write(s.settings, json.dumps(data))
 
 
@@ -530,6 +532,30 @@ def test_profile_keys_are_locked_under_their_own_ids_and_go_with_their_profile(s
     write_settings(scratch, {})
     llm_clients.prepare_api_keys(scratch.settings, join=False, profiles=profiles)
     assert store.get("workbench:custom_openai:PROJ-001 proxy") == K2
+
+
+@windows_only
+def test_custom_mt_profile_keys_are_locked_apart_from_the_ai_profiles(scratch):
+    # QuickTrans's Custom MT profiles had no locked copy, so step 2 (which
+    # removes the plain copies) would have had nothing to keep.
+    ai = [{"name": "Acme", "api_key": K1}]
+    mt = [{"name": "Acme", "api_key": K2}, {"name": "PROJ-001 MT", "api_key": K1}, {"name": "Empty", "api_key": ""}]
+    assert llm_clients.save_profile_keys(ai)
+    assert llm_clients.save_mt_profile_keys(mt)
+    assert set(locked_map(scratch.locked)) == {"workbench:custom_openai:Acme", "workbench:custom_mt:Acme",
+                                               "workbench:custom_mt:PROJ-001 MT"}
+    assert store.get("workbench:custom_mt:Acme") == K2 and store.get("workbench:custom_openai:Acme") == K1
+    assert not os.path.exists(scratch.plain)                     # private: never in the shared plain file
+    # Removing an MT profile takes only its key; the AI profiles are untouched,
+    # and saving the AI profiles leaves the MT keys alone.
+    assert llm_clients.save_mt_profile_keys(mt[1:])
+    assert llm_clients.save_profile_keys(ai)
+    assert set(locked_map(scratch.locked)) == {"workbench:custom_openai:Acme", "workbench:custom_mt:PROJ-001 MT"}
+    # The start-up sync locks MT profile keys it does not have yet.
+    os.remove(scratch.locked)
+    write_settings(scratch, {})
+    llm_clients.prepare_api_keys(scratch.settings, join=False, profiles=ai, mt_profiles=mt)
+    assert store.get("workbench:custom_mt:Acme") == K2 and store.get("workbench:custom_openai:Acme") == K1
 
 
 @windows_only

@@ -1943,6 +1943,11 @@ class SettingsMixin:
             llm_settings['custom_mt_profiles'] = self._custom_mt_profiles
             llm_settings['custom_mt_active_profile'] = self._custom_mt_profile_combo.currentText()
             self.save_llm_settings(llm_settings)
+            # Each profile's key is also locked to this computer, under
+            # workbench:custom_mt:<name> (step 1; settings.json still decides).
+            from modules.llm_clients import save_mt_profile_keys
+            if not save_mt_profile_keys(self._custom_mt_profiles):
+                self.log("⚠ The Custom MT profiles' keys could not be locked to this computer; the next start tries again.")
 
         self.log("✓ QuickTrans settings saved")
         QMessageBox.information(self, "Settings Saved", "QuickTrans settings have been saved.")
