@@ -27,6 +27,11 @@ import re
 
 from modules.styled_widgets import CheckmarkCheckBox  # noqa: E402
 
+# Output limit per page for OpenAI's reasoning models: their thinking is
+# counted in it, so the old 4,000 could leave nothing for the page's text.
+# Only what is used is billed.
+REASONING_OUTPUT_TOKENS = 16000
+
 
 class PDFRescueQt:
     """
@@ -91,6 +96,7 @@ class PDFRescueQt:
                 import google.generativeai as genai
                 genai.configure(api_key=gemini_key)
                 self.clients['gemini'] = genai
+                self._gemini_key = gemini_key
                 self.log_message("✓ Gemini client initialized")
             except ImportError:
                 self.log_message("⚠ Gemini requested but 'google-generativeai' library not installed. Run: pip install google-generativeai")
@@ -600,7 +606,8 @@ Please:
         formatting_label.setFont(QFont("Segoe UI", 9))
         info_layout.addWidget(formatting_label)
         
-        tokens_label = QLabel("Max Tokens: 4000")
+        tokens_label = QLabel(
+            f"Max output tokens: OpenAI {REASONING_OUTPUT_TOKENS:,}, Claude 4,000, Gemini Google's maximum")
         tokens_label.setFont(QFont("Segoe UI", 9))
         info_layout.addWidget(tokens_label)
         
@@ -827,7 +834,7 @@ Please:
         
         # Use appropriate token parameter based on model
         if model.startswith("gpt-5") or model.startswith("gpt-6") or model.startswith("o1"):
-            api_params["max_completion_tokens"] = 4000
+            api_params["max_completion_tokens"] = REASONING_OUTPUT_TOKENS
         else:
             api_params["max_tokens"] = 4000
         
@@ -886,16 +893,15 @@ Please:
         """Extract text using Gemini Vision API"""
         from PIL import Image
         
-        # Load image
+        from modules.llm_clients import LLMClient
+
         img = Image.open(image_path)
-        
-        # Create model instance
-        gemini_model = self.clients['gemini'].GenerativeModel(model)
-        
-        # Generate content with image and prompt
-        response = gemini_model.generate_content([instructions, img])
-        
-        return response.text
+        # The shared client pins a thinking model's level (REST); otherwise
+        # Gemini 3+ thinks at Google's default on every page, billed as output.
+        # No output limit: Google's own maximum, so a dense page isn't cut short.
+        client = LLMClient(api_key=self._gemini_key, provider="gemini", model=model)
+        text, _usage = client._call_gemini_with_usage(instructions, images=[("page", img)])
+        return text
     
     def _process_selected(self):
         """Process currently selected image"""
