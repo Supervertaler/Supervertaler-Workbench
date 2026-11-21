@@ -79,6 +79,28 @@ _ahk_process = None
 
 _hotkey_manager = None
 
+HOTKEY_SCRIPT_NAME = "supervertaler_hotkeys.ahk"
+
+
+def stop_leftover_hotkey_scripts() -> int:
+    """End AutoHotkey processes running our hotkey script (e.g. left by a crash).
+
+    Only processes with the script's name on their command line: the user's own
+    AutoHotkey scripts run in AutoHotkey.exe too, and must be left alone (this
+    used to end every AutoHotkey.exe on the PC). Returns how many were ended.
+    """
+    import psutil
+    ended = 0
+    for proc in psutil.process_iter(['cmdline']):
+        try:
+            cmdline = ' '.join(proc.info.get('cmdline') or [])
+            if HOTKEY_SCRIPT_NAME in cmdline.lower():
+                proc.kill()
+                ended += 1
+        except (psutil.Error, OSError):
+            pass  # gone already, or not ours to end
+    return ended
+
 
 def cleanup_hotkey_processes():
     """Cleanup function to stop hotkey processes on exit"""
@@ -4981,31 +5003,13 @@ class SuperlookupTab(QWidget):
         global _ahk_process
         self._using_ahk_library = False
         try:
-            # Kill any existing instances of the AHK script first
+            # End a copy of our script still running from before, so its
+            # hotkeys don't fire twice. Never other AutoHotkey scripts.
             if os.name == 'nt':
                 try:
-                    # Use multiple methods to ensure cleanup
-                    # Method 1: Kill by window title
-                    subprocess.run(['taskkill', '/F', '/FI', 'WINDOWTITLE eq supervertaler_hotkeys.ahk*'],
-                                 capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
-                    
-                    # Method 2: Kill AutoHotkey processes more aggressively
-                    subprocess.run(['taskkill', '/F', '/IM', 'AutoHotkey.exe'],
-                                 capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
-                    
-                    # Method 3: Kill by process name pattern
-                    import psutil
-                    try:
-                        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-                            try:
-                                if 'supervertaler_hotkeys' in ' '.join(proc.cmdline() or []):
-                                    proc.kill()
-                            except:
-                                pass
-                    except:
-                        pass
-                except:
-                    pass
+                    stop_leftover_hotkey_scripts()
+                except Exception as e:
+                    print(f"[Hotkeys] Could not check for a leftover hotkey script: {e}")
             
             # Find AutoHotkey executable using shared function
             ahk_exe, source = self._find_autohotkey_executable()
@@ -5024,7 +5028,7 @@ class SuperlookupTab(QWidget):
             
             print(f"[Hotkeys] Found AutoHotkey at: {ahk_exe} (source: {source})")
             
-            ahk_script = _APP_DIR / "supervertaler_hotkeys.ahk"
+            ahk_script = _APP_DIR / HOTKEY_SCRIPT_NAME
             print(f"[Hotkeys] Looking for script at: {ahk_script}")
             print(f"[Hotkeys] Script exists: {ahk_script.exists()}")
             
