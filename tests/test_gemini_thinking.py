@@ -164,3 +164,16 @@ def test_every_gemini_3_or_later_in_settings_is_pinned():
     for model in sorted(listed - {"gemini-3.1-flash-lite"}):
         if model.startswith(("gemini-3", "gemini-4")):
             assert gemini_thinking_level(model), model
+
+
+@pytest.mark.parametrize("model", ["gemini-3.8-flash", "gemini-3.5-flash-lite"])
+def test_new_gemini_models_are_offered_everywhere(model):
+    # Both were pinned for thinking before they were offered; this checks they
+    # can now be picked in Settings, QuickTrans, the chat and PDF Rescue, and
+    # are allowed to take images.
+    assert model in LLMClient.VISION_MODELS["gemini"]
+    for rel in (("modules", "main_window", "settings.py"),
+                ("modules", "chat_view_widget.py"),
+                ("modules", "pdf_rescue_Qt.py")):
+        with open(os.path.join(REPO, *rel), encoding="utf-8") as f:
+            assert f'"{model}' in f.read(), rel

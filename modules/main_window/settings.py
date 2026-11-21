@@ -478,7 +478,9 @@ class SettingsMixin:
         # Gemini 4 Argon as in the Trados and memoQ plugins (since release 203).
         gemini_combo.addItems([
             "gemini-3.1-flash-lite (Recommended - Fast & Economical)",
-            "gemini-3.5-flash (Premium Flash - Higher Cost)",
+            "gemini-3.5-flash-lite (Budget - Newer Flash-Lite)",
+            "gemini-3.8-flash (Newest Flash - Strong Quality)",
+            "gemini-3.5-flash (Older Flash - Higher Cost)",
             "gemini-2.5-pro (Premium - Complex Reasoning)",
             "gemini-3.1-pro-preview (Premium - Previous Pro)",
             "gemini-4-argon (Top Quality - Smartest Gemini)",
@@ -486,7 +488,9 @@ class SettingsMixin:
         ])
         gemini_combo.setToolTip(
             "Gemini 3.1 Flash-Lite: Fast and economical – great for routine translation.\n"
-            "Gemini 3.5 Flash: Highest-quality Flash – ~6x the cost of Flash-Lite; for hard segments.\n"
+            "Gemini 3.5 Flash-Lite: newer Flash-Lite ($0.30/$2.50 per million tokens).\n"
+            "Gemini 3.8 Flash: newest Flash, strong quality ($0.75/$3.75 until end 2026), 1M context.\n"
+            "Gemini 3.5 Flash: older Flash – twice the price of 3.8 Flash.\n"
             "Gemini 2.5 Pro: Premium for complex problems.\n"
             "Gemini 3.1 Pro Preview: the Pro before Gemini 4 Argon.\n"
             "Gemini 4 Argon: Google's most capable model ($4/$20 per million tokens,\n"
@@ -779,6 +783,7 @@ class SettingsMixin:
                 "claude-sonnet-5": "Claude Sonnet 5", "claude-opus-5": "Claude Opus 5", "claude-fable-5": "Claude Fable 5",
                 "claude-haiku-4-5-20251001": "Claude Haiku 4.5",
                 "gemini-3.1-flash-lite": "Gemini 3.1 Flash-Lite", "gemini-3.5-flash": "Gemini 3.5 Flash",
+                "gemini-3.5-flash-lite": "Gemini 3.5 Flash-Lite", "gemini-3.8-flash": "Gemini 3.8 Flash",
                 "gemini-2.5-pro": "Gemini 2.5 Pro",
                 "gemini-3.1-pro-preview": "Gemini 3.1 Pro", "gemini-4-argon": "Gemini 4 Argon",
                 "gemma-4-26b-a4b-it": "Gemma 4 26B MoE",
@@ -1767,6 +1772,8 @@ class SettingsMixin:
             ]),
             ("gemini", "Gemini (Google AI)", "gemini", [
                 ("gemini-3.1-flash-lite", "Gemini 3.1 Flash-Lite (Recommended)"),
+                ("gemini-3.5-flash-lite", "Gemini 3.5 Flash-Lite (Budget)"),
+                ("gemini-3.8-flash", "Gemini 3.8 Flash (Newest Flash)"),
                 ("gemini-2.5-pro", "Gemini 2.5 Pro (Premium)"),
                 ("gemini-3.1-pro-preview", "Gemini 3.1 Pro (Previous Pro)"),
                 ("gemini-4-argon", "Gemini 4 Argon (Top Quality)"),

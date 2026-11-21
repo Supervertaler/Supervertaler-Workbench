@@ -654,6 +654,8 @@ class ChatViewWidget(QWidget):
             ("openai", "OpenAI", LLMClient.OPENAI_MODELS),
             ("gemini", "Google", {
                 "gemini-3.1-flash-lite": {"name": "Gemini 3.1 Flash-Lite", "description": "Fast & economical"},
+                "gemini-3.5-flash-lite": {"name": "Gemini 3.5 Flash-Lite", "description": "Newer Flash-Lite, budget"},
+                "gemini-3.8-flash": {"name": "Gemini 3.8 Flash", "description": "Newest Flash, strong quality"},
                 "gemini-2.5-pro": {"name": "Gemini 2.5 Pro", "description": "High quality"},
                 "gemini-3.1-pro-preview": {"name": "Gemini 3.1 Pro", "description": "The Pro before Gemini 4 Argon"},
                 "gemini-4-argon": {"name": "Gemini 4 Argon", "description": "Google's most capable, 1M context"},

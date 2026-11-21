@@ -9,6 +9,7 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ### Improvements
 
+- **Gemini 3.8 Flash and 3.5 Flash-Lite can be chosen.** Google's newest Flash ($0.75/$3.75 per million tokens until the end of 2026) and its newer Flash-Lite ($0.30/$2.50) are now in the Gemini lists in Settings, QuickTrans, the AI chat and PDF Rescue, as in the Trados plugin. Both think at the lowest level they accept, so their thinking stays cheap. 3.1 Flash-Lite is still the default.
 - **Double-click a termbase to open its terms.** In the Termbases tab, double-clicking a termbase's name (or its type, languages or term count) opens its terms window, as **Edit Terms…** in the right-click menu does. Double-clicking a checkbox still only ticks it.
 
 ### Fixes
