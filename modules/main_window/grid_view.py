@@ -18,6 +18,7 @@ from PyQt6.QtGui import (
     QTextCharFormat,
 )
 from PyQt6.QtWidgets import (
+    QAbstractItemView,
     QApplication,
     QButtonGroup,
     QComboBox,
@@ -1661,6 +1662,14 @@ class GridViewMixin:
         self.table.verticalHeader().setVisible(False)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)  # Select full rows for multi-selection
         self.table.setSelectionMode(QTableWidget.SelectionMode.ExtendedSelection)  # Allow Ctrl/Shift multi-selection
+
+        # Scroll by pixels, not by whole rows. Qt's default jumps a row at a
+        # time, so the wheel moved in uneven lurches (a notch was three rows,
+        # whether those were one line or twenty) and a segment taller than the
+        # window could never be scrolled through. One wheel notch is three
+        # steps: 120 px, about four one-line rows.
+        self.table.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        self.table.verticalScrollBar().setSingleStep(40)
         
         # Alternating row colors (simplified view)
         self.table.setAlternatingRowColors(True)

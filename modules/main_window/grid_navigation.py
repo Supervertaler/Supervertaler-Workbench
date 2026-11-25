@@ -195,7 +195,8 @@ class GridNavigationMixin:
                     _instant_seg = next((s for s in self.current_project.segments
                                          if s.id == int(_id_item.text())), None)
                     if _instant_seg:
-                        _instant_shown = self._show_instant_tm_match(_instant_seg)
+                        with self._pcs("instant TM match (before the move shows)"):
+                            _instant_shown = self._show_instant_tm_match(_instant_seg)
         except Exception:
             pass
 
@@ -243,7 +244,8 @@ class GridNavigationMixin:
         self._deferred_lookup_timer.start(debounce_ms)
 
         # Do minimal UI update immediately (orange highlight, scroll)
-        self._on_cell_selected_minimal(current_row, previous_row)
+        with self._pcs("highlight and scroll (before the move shows)"):
+            self._on_cell_selected_minimal(current_row, previous_row)
 
         # In filtered mode, also update glossary highlights from cache (cheap)
         if is_filtering:
@@ -1031,7 +1033,9 @@ class GridNavigationMixin:
             self.log(f"Critical error in on_cell_selected: {e}")
         finally:
             _total_ms = (_profile_time.perf_counter() - _profile_t0) * 1000.0
-            if _total_ms > 250.0:
+            # 100 ms is where a move starts to feel slow (it was 250 ms,
+            # which hid the moves that are sluggish rather than frozen).
+            if _total_ms > 100.0:
                 self.log(f"⏱️ [cell-select] TOTAL: {_total_ms:.1f} ms")
 
     def on_selection_changed(self):
