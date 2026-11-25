@@ -9,6 +9,7 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ### Improvements
 
+- **The grid scrolls smoothly.** The Editor's grid scrolled a whole row at a time, so the mouse wheel moved in uneven jumps (three rows per notch, whether they were one line or twenty) and a segment taller than the window couldn't be scrolled through: the view jumped from its top to the next segment. It now scrolls by an even distance, as Trados does, and you can stop anywhere in a long segment. Going to a segment still centres it. A move between segments that takes longer than a tenth of a second is now noted in the Log tab (it was a quarter of a second), with the part that took the time.
 - **Gemini 3.8 Flash and 3.5 Flash-Lite can be chosen.** Google's newest Flash ($0.75/$3.75 per million tokens until the end of 2026) and its newer Flash-Lite ($0.30/$2.50) are now in the Gemini lists in Settings, QuickTrans, the AI chat and PDF Rescue, as in the Trados plugin. Both think at the lowest level they accept, so their thinking stays cheap. 3.1 Flash-Lite is still the default.
 - **Double-click a termbase to open its terms.** In the Termbases tab, double-clicking a termbase's name (or its type, languages or term count) opens its terms window, as **Edit Terms…** in the right-click menu does. Double-clicking a checkbox still only ticks it.
 
