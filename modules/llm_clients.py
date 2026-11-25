@@ -385,6 +385,21 @@ def gemini_thinking_level(model: str) -> Optional[str]:
     return None
 
 
+def openrouter_reasoning_effort(model: str) -> Optional[str]:
+    """The reasoning effort to send OpenRouter for a model, or None to send none.
+
+    OpenRouter passes reasoning.effort to Gemini 3 as its thinkingLevel
+    ("minimal" -> minimal, "low" -> low; openrouter.ai/docs, reasoning tokens,
+    read 22 Nov 2026), and bills the thinking as output, as Google does. So a
+    google/gemini-* model gets the level it gets direct; every other model is
+    sent nothing, as before.
+    """
+    name = (model or "").strip().lower()
+    if not name.startswith("google/"):
+        return None
+    return gemini_thinking_level(name[len("google/"):])
+
+
 @dataclass
 class LLMConfig:
     """Configuration for LLM client"""
@@ -1244,6 +1259,10 @@ class LLMClient:
         else:
             api_params["max_tokens"] = tokens_to_use
             api_params["temperature"] = self.temperature
+        if self.provider == "openrouter":
+            effort = openrouter_reasoning_effort(self.model)
+            if effort:
+                api_params["extra_body"] = {"reasoning": {"effort": effort}}
 
         response = client.chat.completions.create(**api_params)
 
