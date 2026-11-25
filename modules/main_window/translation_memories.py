@@ -3402,11 +3402,20 @@ class TranslationMemoriesMixin:
                     match_type='TM', compare_source=tm_match['source'], provider_code='TM')
                 with self.translation_matches_cache_lock:
                     entry = self.translation_matches_cache.get(segment.id)
-                    if entry is None:
-                        self.translation_matches_cache[segment.id] = {
-                            "LLM": [], "NT": [], "MT": [], "TM": [mo], "Termbases": []}
-                    else:
+                    if entry is not None:
                         entry["TM"] = [mo]
+                if entry is None:
+                    # No entry yet: make a whole one, terms included. An entry
+                    # holding only the TM match (an empty term list) was read
+                    # back as "this segment has no terms", so TermLens showed
+                    # nothing on a segment with a 100% match until F5. The
+                    # terms come from the term cache or the in-memory index,
+                    # as in the prefetch; no cursor, so no second TM lookup.
+                    # If that fails, no entry is made and the move does a
+                    # fresh lookup, as on any segment not cached yet.
+                    fresh = self._fetch_all_matches_for_segment(segment)
+                    with self.translation_matches_cache_lock:
+                        self.translation_matches_cache.setdefault(segment.id, fresh)["TM"] = [mo]
             except Exception:
                 pass
             return True
