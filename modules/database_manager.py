@@ -2179,8 +2179,11 @@ class DatabaseManager:
         """, (tm_id,))
         self.connection.commit()
     
-    def delete_entry(self, tm_id: str, source: str, target: str):
-        """Delete a specific entry from a TM"""
+    def delete_entry(self, tm_id: str, source: str, target: str) -> bool:
+        """Delete a specific entry from a TM. False if it was not found.
+
+        The search indexes follow by trigger (tu_fts_delete, tu_trig_delete).
+        """
         # Get the ID first
         self.cursor.execute("""
             SELECT id FROM translation_units 
@@ -2189,17 +2192,9 @@ class DatabaseManager:
         
         result = self.cursor.fetchone()
         if not result:
-            return  # Entry not found
+            return False  # Entry not found
         
         entry_id = result['id']
-        
-        # Delete from FTS5 index first
-        try:
-            self.cursor.execute("""
-                DELETE FROM tm_fts WHERE rowid = ?
-            """, (entry_id,))
-        except Exception:
-            pass  # FTS5 table might not exist
         
         # Delete from main table
         self.cursor.execute("""
@@ -2208,6 +2203,7 @@ class DatabaseManager:
         """, (entry_id,))
         
         self.connection.commit()
+        return True
 
     def update_entry(self, tm_id: str, old_source: str, old_target: str,
                      new_source: str, new_target: str) -> bool:
@@ -2242,16 +2238,8 @@ class DatabaseManager:
         new_target_hash = hashlib.md5(
             _normalize_for_matching(new_target_stripped).encode('utf-8')).hexdigest()
 
-        # Update FTS5 index
-        try:
-            self.cursor.execute("""
-                UPDATE tm_fts SET source_text = ?, target_text = ?
-                WHERE rowid = ?
-            """, (new_source_stripped, new_target_stripped, entry_id))
-        except Exception:
-            pass  # FTS5 table might not exist
-
-        # Update main table
+        # Update main table; the search indexes follow by trigger
+        # (tu_fts_update, tu_trig_update).
         self.cursor.execute("""
             UPDATE translation_units
             SET source_text = ?, target_text = ?, source_hash = ?, target_hash = ?,

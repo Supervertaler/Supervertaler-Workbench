@@ -395,151 +395,42 @@ class CompactMatchItem(QFrame):
     # ------------------------------------------------------------------
 
     def _edit_tm_entry(self):
-        """Open an inline editor dialog to edit this TM entry's target text."""
+        """Edit this TM entry's source and target."""
         if self.match.match_type != "TM":
             return
 
-        from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout,
-                                     QLabel, QTextEdit, QDialogButtonBox,
-                                     QMessageBox)
+        from modules.tm_entry_actions import edit_tm_entry
 
-        tm_id = self.match.metadata.get('tm_id', '')
-        tm_name = self.match.metadata.get('tm_name', tm_id or 'TM')
-        old_source = self.match.source
-        old_target = self.match.target
-
-        if not tm_id:
-            QMessageBox.warning(self.window(), "Cannot Edit",
-                                "TM identifier is not available for this entry.")
+        md = self.match.metadata or {}
+        tm_id = md.get('tm_id', '')
+        edited = edit_tm_entry(self.window(), tm_id, md.get('tm_name', tm_id or 'TM'),
+                               self.match.source, self.match.target,
+                               reverse=bool(md.get('reverse_match', False)))
+        if edited is None:
             return
 
-        parent_window = self.window()
-
-        # Build a simple edit dialog
-        dialog = QDialog(parent_window)
-        dialog.setWindowTitle(f"Edit TM Entry – {tm_name}")
-        dialog.setMinimumWidth(520)
-        layout = QVBoxLayout(dialog)
-        layout.setSpacing(8)
-
-        # Source (read-only for display context only)
-        layout.addWidget(QLabel("Source (read-only):"))
-        source_edit = QTextEdit()
-        source_edit.setPlainText(old_source)
-        source_edit.setReadOnly(True)
-        source_edit.setMaximumHeight(90)
-        layout.addWidget(source_edit)
-
-        # Target (editable)
-        layout.addWidget(QLabel("Target:"))
-        target_edit = QTextEdit()
-        target_edit.setPlainText(old_target)
-        target_edit.setMaximumHeight(120)
-        layout.addWidget(target_edit)
-
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
-        buttons.accepted.connect(dialog.accept)
-        buttons.rejected.connect(dialog.reject)
-        layout.addWidget(buttons)
-
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-
-        new_target = target_edit.toPlainText()
-        if new_target == old_target:
-            return  # Nothing changed
-
-        # Perform update via tm_manager or db_manager
-        tm_manager = getattr(parent_window, 'tm_manager', None)
-        db_manager = getattr(parent_window, 'db_manager', None)
-
-        updated = False
-        try:
-            if tm_manager and hasattr(tm_manager, 'update_entry'):
-                updated = tm_manager.update_entry(tm_id, old_source, old_target,
-                                                  old_source, new_target)
-            elif db_manager and hasattr(db_manager, 'update_entry'):
-                updated = db_manager.update_entry(tm_id, old_source, old_target,
-                                                  old_source, new_target)
-        except Exception as e:
-            QMessageBox.critical(parent_window, "Error", f"Failed to update TM entry:\n{e}")
-            return
-
-        if updated:
-            if hasattr(parent_window, 'log'):
-                parent_window.log(f"✏️ Updated TM entry in '{tm_name}'")
-            # Update the in-memory match object so the card reflects the change immediately
-            self.match.target = new_target
-            if self.target_label:
-                self.target_label.setText(self._format_text(new_target))
-            # Invalidate TM cache so the next lookup picks up the new value
-            if hasattr(parent_window, '_last_selected_row'):
-                parent_window._last_selected_row = None
-        else:
-            QMessageBox.warning(parent_window, "Not Found",
-                                "The entry could not be found in the database.\n"
-                                "It may have already been changed or deleted.")
+        # Update the match and the card so the change shows at once
+        self.match.source, self.match.target = edited
+        self.match.compare_source = edited[0]
+        if self.source_label:
+            self.source_label.setText(self._format_text(edited[0]))
+        if self.target_label:
+            self.target_label.setText(self._format_text(edited[1]))
 
     def _delete_tm_entry(self):
         """Delete this TM entry from the database."""
         if self.match.match_type != "TM":
             return
 
-        from PyQt6.QtWidgets import QMessageBox
+        from modules.tm_entry_actions import delete_tm_entry
 
-        tm_id = self.match.metadata.get('tm_id', '')
-        tm_name = self.match.metadata.get('tm_name', tm_id or 'TM')
-        source_text = self.match.source
-        target_text = self.match.target
-
-        if not tm_id:
-            QMessageBox.warning(self.window(), "Cannot Delete",
-                                "TM identifier is not available for this entry.")
-            return
-
-        parent_window = self.window()
-
-        reply = QMessageBox.question(
-            parent_window,
-            "Confirm Deletion",
-            f"Delete TM entry from '{tm_name}'?\n\n"
-            f"Source: {source_text[:120]}\n"
-            f"Target: {target_text[:120]}\n\n"
-            "This action cannot be undone.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
-        )
-
-        if reply != QMessageBox.StandardButton.Yes:
-            return
-
-        tm_manager = getattr(parent_window, 'tm_manager', None)
-        db_manager = getattr(parent_window, 'db_manager', None)
-
-        try:
-            if tm_manager and hasattr(tm_manager, 'delete_entry'):
-                tm_manager.delete_entry(tm_id, source_text, target_text)
-            elif db_manager and hasattr(db_manager, 'delete_entry'):
-                db_manager.delete_entry(tm_id, source_text, target_text)
-            else:
-                QMessageBox.critical(parent_window, "Error",
-                                     "No TM manager available to perform deletion.")
-                return
-        except Exception as e:
-            QMessageBox.critical(parent_window, "Error", f"Failed to delete TM entry:\n{e}")
-            return
-
-        if hasattr(parent_window, 'log'):
-            parent_window.log(f"🗑️ Deleted TM entry from '{tm_name}'")
-
-        # Invalidate row cache so the next navigation re-runs the TM search
-        if hasattr(parent_window, '_last_selected_row'):
-            parent_window._last_selected_row = None
-
-        # Hide this card – it no longer exists in the DB
-        self.hide()
+        md = self.match.metadata or {}
+        tm_id = md.get('tm_id', '')
+        if delete_tm_entry(self.window(), tm_id, md.get('tm_name', tm_id or 'TM'),
+                           self.match.source, self.match.target,
+                           reverse=bool(md.get('reverse_match', False))):
+            # Hide this card – it no longer exists in the DB
+            self.hide()
 
     def select(self):
         """Select this match"""
@@ -2035,81 +1926,21 @@ class TranslationResultsPanel(QWidget):
         if match is None or match.match_type != "TM":
             return
 
-        from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QLabel,
-                                     QTextEdit, QDialogButtonBox, QMessageBox)
+        from modules.tm_entry_actions import edit_tm_entry
 
-        tm_id = match.metadata.get('tm_id', '')
-        tm_name = match.metadata.get('tm_name', tm_id or 'TM')
-        old_source = match.source
-        old_target = match.target
-
-        if not tm_id:
-            QMessageBox.warning(self.window(), "Cannot Edit",
-                                "TM identifier is not available for this entry.")
+        md = match.metadata or {}
+        tm_id = md.get('tm_id', '')
+        edited = edit_tm_entry(self.window(), tm_id, md.get('tm_name', tm_id or 'TM'),
+                               match.source, match.target,
+                               reverse=bool(md.get('reverse_match', False)))
+        if edited is None:
             return
 
-        parent_window = self.window()
-
-        dialog = QDialog(parent_window)
-        dialog.setWindowTitle(f"Edit TM Entry – {tm_name}")
-        dialog.setMinimumWidth(520)
-        layout = QVBoxLayout(dialog)
-        layout.setSpacing(8)
-
-        layout.addWidget(QLabel("Source (read-only):"))
-        source_edit = QTextEdit()
-        source_edit.setPlainText(old_source)
-        source_edit.setReadOnly(True)
-        source_edit.setMaximumHeight(90)
-        layout.addWidget(source_edit)
-
-        layout.addWidget(QLabel("Target:"))
-        target_edit = QTextEdit()
-        target_edit.setPlainText(old_target)
-        target_edit.setMaximumHeight(120)
-        layout.addWidget(target_edit)
-
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
-        buttons.accepted.connect(dialog.accept)
-        buttons.rejected.connect(dialog.reject)
-        layout.addWidget(buttons)
-
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-
-        new_target = target_edit.toPlainText()
-        if new_target == old_target:
-            return
-
-        tm_manager = getattr(parent_window, 'tm_manager', None)
-        db_manager = getattr(parent_window, 'db_manager', None)
-
-        updated = False
-        try:
-            if tm_manager and hasattr(tm_manager, 'update_entry'):
-                updated = tm_manager.update_entry(tm_id, old_source, old_target,
-                                                  old_source, new_target)
-            elif db_manager and hasattr(db_manager, 'update_entry'):
-                updated = db_manager.update_entry(tm_id, old_source, old_target,
-                                                  old_source, new_target)
-        except Exception as e:
-            QMessageBox.critical(parent_window, "Error", f"Failed to update TM entry:\n{e}")
-            return
-
-        if updated:
-            if hasattr(parent_window, 'log'):
-                parent_window.log(f"✏️ Updated TM entry in '{tm_name}'")
-            # Update the live match object and compare box so the change is visible immediately
-            match.target = new_target
-            self.compare_tm_target.setPlainText(new_target)
-            if hasattr(parent_window, '_last_selected_row'):
-                parent_window._last_selected_row = None
-        else:
-            QMessageBox.warning(parent_window, "Not Found",
-                                "The entry could not be found in the database.\n"
-                                "It may have already been changed or deleted.")
+        # Update the match and the compare boxes so the change shows at once
+        match.source, match.target = edited
+        match.compare_source = edited[0]
+        self.compare_tm_source.setPlainText(edited[0])
+        self.compare_tm_target.setPlainText(edited[1])
 
     def _delete_current_tm_entry(self):
         """Delete the TM entry currently shown in the compare boxes."""
@@ -2117,58 +1948,16 @@ class TranslationResultsPanel(QWidget):
         if match is None or match.match_type != "TM":
             return
 
-        from PyQt6.QtWidgets import QMessageBox
+        from modules.tm_entry_actions import delete_tm_entry
 
-        tm_id = match.metadata.get('tm_id', '')
-        tm_name = match.metadata.get('tm_name', tm_id or 'TM')
-        source_text = match.source
-        target_text = match.target
-
-        if not tm_id:
-            QMessageBox.warning(self.window(), "Cannot Delete",
-                                "TM identifier is not available for this entry.")
-            return
-
-        parent_window = self.window()
-
-        reply = QMessageBox.question(
-            parent_window,
-            "Confirm Deletion",
-            f"Delete TM entry from '{tm_name}'?\n\n"
-            f"Source: {source_text[:120]}\n"
-            f"Target: {target_text[:120]}\n\n"
-            "This action cannot be undone.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
-        )
-        if reply != QMessageBox.StandardButton.Yes:
-            return
-
-        tm_manager = getattr(parent_window, 'tm_manager', None)
-        db_manager = getattr(parent_window, 'db_manager', None)
-
-        try:
-            if tm_manager and hasattr(tm_manager, 'delete_entry'):
-                tm_manager.delete_entry(tm_id, source_text, target_text)
-            elif db_manager and hasattr(db_manager, 'delete_entry'):
-                db_manager.delete_entry(tm_id, source_text, target_text)
-            else:
-                QMessageBox.critical(parent_window, "Error",
-                                     "No TM manager available to perform deletion.")
-                return
-        except Exception as e:
-            QMessageBox.critical(parent_window, "Error", f"Failed to delete TM entry:\n{e}")
-            return
-
-        if hasattr(parent_window, 'log'):
-            parent_window.log(f"🗑️ Deleted TM entry from '{tm_name}'")
-
-        if hasattr(parent_window, '_last_selected_row'):
-            parent_window._last_selected_row = None
-
-        # Hide the compare frame since this entry no longer exists
-        self.compare_frame.hide()
-        self.current_selection = None
+        md = match.metadata or {}
+        tm_id = md.get('tm_id', '')
+        if delete_tm_entry(self.window(), tm_id, md.get('tm_name', tm_id or 'TM'),
+                           match.source, match.target,
+                           reverse=bool(md.get('reverse_match', False))):
+            # Hide the compare frame since this entry no longer exists
+            self.compare_frame.hide()
+            self.current_selection = None
 
     def _apply_diff_highlighting(self, current_source: str, tm_source: str):
         """
