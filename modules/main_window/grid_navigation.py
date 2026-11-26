@@ -590,16 +590,22 @@ class GridNavigationMixin:
                     # 🚀 CHECK PREFETCH CACHE FIRST for instant display (like memoQ)
                     segment_id = segment.id
                     with self.translation_matches_cache_lock:
-                        if segment_id in self.translation_matches_cache:
-                            cached_matches = self.translation_matches_cache[segment_id]
-                            
-                            # Count matches in each category
-                            tm_count = len(cached_matches.get("TM", []))
-                            tb_count = len(cached_matches.get("Termbases", []))
-                            mt_count = len(cached_matches.get("MT", []))
-                            llm_count = len(cached_matches.get("LLM", []))
-                            
-                            self.log(f"⚡ CACHE HIT for segment {segment_id}: TM={tm_count}, TB={tb_count}, MT={mt_count}, LLM={llm_count}")
+                        cached_matches = self.translation_matches_cache.get(segment_id)
+                    cached_terms = {}
+                    if cached_matches is not None:
+                        # The entry holds no terms: they come from the one
+                        # place every view reads them (_segment_terms).
+                        with self._pcs("_segment_terms (cache-hit)"):
+                            cached_terms = self._segment_terms(segment)
+                        cached_matches = {**cached_matches, "Termbases": self._terms_as_matches(cached_terms)}
+
+                        # Count matches in each category
+                        tm_count = len(cached_matches.get("TM", []))
+                        tb_count = len(cached_matches.get("Termbases", []))
+                        mt_count = len(cached_matches.get("MT", []))
+                        llm_count = len(cached_matches.get("LLM", []))
+
+                        self.log(f"⚡ CACHE HIT for segment {segment_id}: TM={tm_count}, TB={tb_count}, MT={mt_count}, LLM={llm_count}")
                 else:
                     if self.debug_mode_enabled:
                         self.log(f"🧪 Cache DISABLED - forcing fresh lookup for segment {segment.id}")
@@ -618,20 +624,7 @@ class GridNavigationMixin:
                     # 🔄 Update TermLens with cached termbase matches (always update, even if empty)
                     if self.current_project and ((hasattr(self, 'termlens_widget') and self.termlens_widget) or (hasattr(self, 'termlens_widget_match') and self.termlens_widget_match)):
                         try:
-                            # Convert TranslationMatch objects to dict format for termlens
-                            termbase_matches = [
-                                {
-                                    'source_term': match.source,
-                                    'target_term': match.target,
-                                    'termbase_name': match.metadata.get('termbase_name', '') if match.metadata else '',
-                                    'ranking': match.metadata.get('ranking', 0) if match.metadata else 0,
-                                    'is_project_termbase': match.metadata.get('is_project_termbase', False) if match.metadata else False,
-                                    'term_id': match.metadata.get('term_id') if match.metadata else None,
-                                    'termbase_id': match.metadata.get('termbase_id') if match.metadata else None,
-                                    'notes': match.metadata.get('notes', '') if match.metadata else ''
-                                }
-                                for match in cached_matches.get("Termbases", [])
-                            ]
+                            termbase_matches = self._terms_for_termlens(cached_terms)
                             # Also get NT matches (fresh, not cached - they may have changed)
                             with self._pcs("find_nt_matches_in_source (cache-hit)"):
                                 nt_matches = self.find_nt_matches_in_source(segment.source)
@@ -675,38 +668,10 @@ class GridNavigationMixin:
                         if has_fuzzy_match and not has_100_match:
                             self._play_sound_effect('tm_fuzzy_match')
                     
-                    # Highlight termbase matches in source cell (from termbase_cache, dict format)
-                    if self.enable_termbase_grid_highlighting:
-                        with self.termbase_cache_lock:
-                            tb_dict = self.termbase_cache.get(segment_id, {})
-                        if not tb_dict:
-                            # termbase_cache may be empty if prefetch ran before batch worker,
-                            # or after termbase_cache was cleared. Fall back to the TB matches
-                            # already in translation_matches_cache (cached_matches["Termbases"]).
-                            cached_tb_matches = cached_matches.get("Termbases", [])
-                            if cached_tb_matches:
-                                tb_dict = {}
-                                for match in cached_tb_matches:
-                                    term_id = match.metadata.get('term_id') if match.metadata else None
-                                    key = term_id if term_id is not None else match.source
-                                    tb_dict[key] = {
-                                        'source': match.source,
-                                        'translation': match.target,
-                                        'ranking': match.metadata.get('ranking', 0) if match.metadata else 0,
-                                        'is_project_termbase': match.metadata.get('is_project_termbase', False) if match.metadata else False,
-                                        'forbidden': match.metadata.get('forbidden', False) if match.metadata else False,
-                                        'termbase_name': match.metadata.get('termbase_name', '') if match.metadata else '',
-                                        'notes': match.metadata.get('notes', '') if match.metadata else '',
-                                        'term_id': term_id,
-                                        'termbase_id': match.metadata.get('termbase_id') if match.metadata else None,
-                                    }
-                                # Backfill termbase_cache so future navigations don't need this fallback
-                                if tb_dict:
-                                    with self.termbase_cache_lock:
-                                        self.termbase_cache[segment_id] = tb_dict
-                        if tb_dict:
-                            with self._pcs("highlight_source_with_termbase (cache-hit)"):
-                                self.highlight_source_with_termbase(current_row, segment.source, tb_dict)
+                    # Highlight termbase matches in source cell
+                    if self.enable_termbase_grid_highlighting and cached_terms:
+                        with self._pcs("highlight_source_with_termbase (cache-hit)"):
+                            self.highlight_source_with_termbase(current_row, segment.source, cached_terms)
 
                     # Skip the slow TERMBASE lookup below, we already have termbase matches cached
                     # But TM lookup was skipped in prefetch (not thread-safe), so schedule it now
@@ -768,25 +733,9 @@ class GridNavigationMixin:
                         # Termbase lookup (if enabled)
                         stored_matches = {}
                         if self.enable_termbase_matching:
-                            # 🧪 EXPERIMENTAL: Skip termbase cache if cache kill switch is enabled
-                            cache_checked = False
-                            if not getattr(self, 'disable_all_caches', False):
-                                # Check cache first (thread-safe) - uses `in` check to properly handle empty caches
-                                with self.termbase_cache_lock:
-                                    if segment_id in self.termbase_cache:
-                                        stored_matches = self.termbase_cache[segment_id]
-                                        cache_checked = True
-                            
-                            if not cache_checked and source_widget:
-                                with self._pcs("find_termbase_matches_in_source"):
-                                    stored_matches = self.find_termbase_matches_in_source(segment.source)
+                            with self._pcs("_segment_terms (miss)"):
+                                stored_matches = self._segment_terms(segment)
 
-                                # Store in cache for future access (thread-safe) - EVEN IF EMPTY
-                                # BUT skip cache storage if cache kill switch is enabled
-                                if not getattr(self, 'disable_all_caches', False):
-                                    with self.termbase_cache_lock:
-                                        self.termbase_cache[segment_id] = stored_matches
-                            
                             # CRITICAL FIX: Always update TermLens (even with empty results) - show "No matches" state
                             if self.current_project and ((hasattr(self, 'termlens_widget') and self.termlens_widget) or (hasattr(self, 'termlens_widget_match') and self.termlens_widget_match)):
                                 try:
