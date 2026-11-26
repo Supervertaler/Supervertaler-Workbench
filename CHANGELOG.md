@@ -5,6 +5,13 @@ All notable changes to Supervertaler Workbench are documented in this file.
 **Current Version:** v1.10.382 (November 26, 2026)
 
 
+## Unreleased
+
+### Fixes
+
+- **Ctrl+B, Ctrl+I and Ctrl+U use Phrase's tags in a Phrase project.** In a project imported from Phrase (MXLIFF or bilingual DOCX), these shortcuts on selected text now add Phrase's own tags (`{b>…<b}`, `{i>…<i}`, `{u>…<u}`), not Workbench's `<b>`, which Phrase would have taken as plain text. Pressing the same shortcut again removes the formatting, and on text that already has a Phrase tag the two are combined into one: Ctrl+I on `{b>word<b}` gives `{bi>word<bi}`. In WYSIWYG view the text simply turns bold, italic or underlined, and is saved with Phrase's tags. Other projects keep using `<b>`, `<i>` and `<u>`.
+
+
 ## v1.10.382 - November 26, 2026
 
 Claude Desktop can now look at the project you have open in Workbench (read-only for now), the grid scrolls smoothly, and TermLens is faster and no longer shows “No matches” when your termbases do have terms.

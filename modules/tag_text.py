@@ -373,6 +373,54 @@ def wysiwyg_runs_to_phrase_text(runs) -> str:
     return ''.join(parts)
 
 
+def is_phrase_project(project) -> bool:
+    """True for a project imported from Phrase (MXLIFF or bilingual DOCX),
+    whose formatting tags are Phrase's {b>…<b}, not Workbench's <b>."""
+    return bool(project is not None and (getattr(project, 'mxliff_source_path', None)
+                                         or getattr(project, 'phrase_source_path', None)))
+
+
+_PHRASE_OPEN_START_RE = re.compile(r'\{([biu]{1,3})>')
+_PHRASE_OPEN_END_RE = re.compile(r'\{([biu]{1,3})>$')
+_PHRASE_CLOSE_START_RE = re.compile(r'<([biu]{1,3})\}')
+_PHRASE_CLOSE_END_RE = re.compile(r'<([biu]{1,3})\}$')
+_PHRASE_FMT_ONLY_RE = re.compile(r'\{[biu]{1,3}>|<[biu]{1,3}\}')
+
+
+def toggle_phrase_tag(text: str, start: int, end: int, tag: str):
+    """Ctrl+B/I/U in Tags view of a Phrase project.
+
+    Toggles ``tag`` ('b', 'i' or 'u') on ``text[start:end]`` in Phrase
+    syntax. A Phrase tag pair right around the selection – or the selection
+    being exactly such a pair – is changed rather than nested:
+    ``{b>x<b}`` + Ctrl+I → ``{bi>x<bi}``, ``{bi>x<bi}`` + Ctrl+B →
+    ``{i>x<i}``, ``{b>x<b}`` + Ctrl+B → ``x``.
+
+    Returns ``(replace_start, replace_end, replacement)``: the span of
+    ``text`` to replace and what to put there.
+    """
+    sel = text[start:end]
+    letters, inner, rep_start, rep_end = '', sel, start, end
+    open_m = _PHRASE_OPEN_START_RE.match(sel)
+    close_m = _PHRASE_CLOSE_END_RE.search(sel)
+    if (open_m and close_m and open_m.group(1) == close_m.group(1)
+            and open_m.end() <= close_m.start()
+            and not _PHRASE_FMT_ONLY_RE.search(sel, open_m.end(), close_m.start())):
+        # The selection is a whole tag pair: {b>x<b}
+        letters, inner = open_m.group(1), sel[open_m.end():close_m.start()]
+    else:
+        before = _PHRASE_OPEN_END_RE.search(text, 0, start)
+        after = _PHRASE_CLOSE_START_RE.match(text, end)
+        if before and after and before.group(1) == after.group(1):
+            # A tag pair right around the selection: {b>[x]<b}
+            letters, rep_start, rep_end = before.group(1), before.start(), after.end()
+    wanted = set(letters) ^ {tag}
+    new = ''.join(t for t in 'biu' if t in wanted)
+    if not new:
+        return rep_start, rep_end, inner
+    return rep_start, rep_end, f'{{{new}>{inner}<{new}}}'
+
+
 def get_formatted_html_display(text: str) -> str:
     """
     Convert our simple tags to HTML for rich text display.
