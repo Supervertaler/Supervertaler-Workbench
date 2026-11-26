@@ -441,7 +441,24 @@ def go_to_segment(window, params: Params) -> Dict[str, Any]:
     if not any(s.id == segment_id for s in project.segments):
         raise BridgeToolError(f"This project has no segment {segment_id}.")
 
+    # Switches to the right grid page and the Editor tab, and asks for focus
+    # in the target cell.
     window._navigate_to_segment_by_id(segment_id)
+
+    table = getattr(window, "table", None)
+    row = window._find_row_for_segment(segment_id) if hasattr(window, "_find_row_for_segment") else -1
+    hidden = bool(table is not None and row >= 0 and table.isRowHidden(row))
+
+    # That is not enough when Workbench is not the window in front, which is
+    # the normal case here (the user is typing in the chat app). The grid's
+    # current row only follows the target cell's focus: the cell under the
+    # target editor is a disabled item, which Qt refuses to make current, and
+    # a window in the background is given no focus. So make the row current
+    # through its number cell, which is an ordinary item. The focus asked for
+    # above is still granted when the user comes back to Workbench.
+    if table is not None and row >= 0 and not hidden and table.currentRow() != row:
+        table.setCurrentCell(row, 0)
+
     # Say what happened, not what was asked.
     landed = _active_segment_id(window)
     if landed == segment_id:
@@ -449,9 +466,6 @@ def go_to_segment(window, params: Params) -> Dict[str, Any]:
 
     # Why not? Tell a filter (the user can clear it) from a fault (they cannot),
     # with what the grid itself says rather than a guess.
-    table = getattr(window, "table", None)
-    row = window._find_row_for_segment(segment_id) if hasattr(window, "_find_row_for_segment") else -1
-    hidden = bool(table is not None and row >= 0 and table.isRowHidden(row))
     filtered = getattr(window, "_active_text_filter_rows", None) is not None
     if hidden and filtered:
         raise BridgeToolError(

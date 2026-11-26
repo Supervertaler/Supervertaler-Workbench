@@ -214,7 +214,8 @@ def navigating_window(count=10, lands=True, hidden=False, filtered=False):
     window._get_current_segment_id = lambda: state["active"]
     window._navigate_to_segment_by_id = lambda segment_id: state.update(active=segment_id) if lands else None
     window._find_row_for_segment = lambda segment_id: segment_id - 1
-    window.table = SimpleNamespace(isRowHidden=lambda row: hidden)
+    window.table = SimpleNamespace(isRowHidden=lambda row: hidden, currentRow=lambda: state["active"] - 1,
+                                   setCurrentCell=lambda row, column: None)
     window._active_text_filter_rows = [0] if filtered else None
     return window, state
 
@@ -244,6 +245,45 @@ def test_go_to_a_segment_that_does_not_exist_or_cannot_be_reached_says_so():
         bridge_tools.go_to_segment(window, {"id": "7"})
     assert "fault in Workbench" in str(error.value) and "cursor is on segment 1" in str(error.value)
     assert "grid row 6, row hidden: False, text filter set: False" in str(error.value)
+
+
+def test_go_to_segment_moves_the_cursor_when_workbench_is_in_the_background(qapp):
+    # Found in the first live try (26 Nov 2026): the user asks from the chat
+    # app, so Workbench is not the active window. Workbench's own navigation
+    # then changes nothing: it makes the TARGET cell current, whose item is
+    # disabled (Qt ignores that), and relies on the editor's focus event,
+    # which a background window never gets. A real QTableWidget, built the
+    # way the grid builds its rows, shows it.
+    from PyQt6.QtCore import Qt
+    from PyQt6.QtWidgets import QTableWidget, QTableWidgetItem
+
+    table = QTableWidget(10, 4)
+    for row in range(10):
+        table.setItem(row, 0, QTableWidgetItem(str(row + 1)))
+        target = QTableWidgetItem()
+        target.setFlags(Qt.ItemFlag.NoItemFlags)
+        table.setItem(row, 3, target)
+    table.setCurrentCell(0, 0)
+
+    window = make_window(make_project(10))
+    window.table = table
+    window._active_text_filter_rows = None
+    window._find_row_for_segment = lambda segment_id: segment_id - 1
+    window._get_current_segment_id = lambda: int(table.item(table.currentRow(), 0).text())
+    window._navigate_to_segment_by_id = lambda segment_id: table.setCurrentCell(segment_id - 1, 3)
+
+    window._navigate_to_segment_by_id(7)
+    assert window._get_current_segment_id() == 1  # the fault: Workbench's own call does not move
+
+    assert bridge_tools.go_to_segment(window, {"id": "7"}) == {"ok": True, "activeSegmentId": 7}
+    assert table.currentRow() == 6
+
+    # A row a filter hides is still left alone, and reported.
+    table.setRowHidden(2, True)
+    window._active_text_filter_rows = [0]
+    with pytest.raises(bridge_tools.BridgeToolError, match="hidden by the filter"):
+        bridge_tools.go_to_segment(window, {"id": "3"})
+    assert table.currentRow() == 6
 
 
 # ── Terms and TMs, against a real (temporary) database ─────────────────────
