@@ -38,6 +38,15 @@ Endpoints (URL path versioned for forward compatibility):
        Hands the prompt off to the GUI thread via a Qt signal so the
        Chat tab actually runs it on the GUI thread.
 
+  GET /v1/tools and the read-only tool paths it lists (modules/bridge_tools.py)
+       For the Supervertaler MCP Server, which lets a desktop chat agent
+       (Claude Desktop, ChatGPT Desktop) look at the open project. The MCP
+       server finds this Workbench through a second, per-process handshake:
+       ``<root>/workbench/runtime/instances/bridge-<pid>.json``. One file per
+       process, so two Workbench windows do not overwrite each other and
+       closing one leaves the other reachable. A tool call runs on the GUI
+       thread and the HTTP thread waits for its answer (``call_tool``).
+
 Threading: the listener runs on a dedicated daemon thread; per-request
 handlers run on whatever thread the stdlib HTTPServer hands them. We
 marshal back to the GUI thread by emitting a Qt signal connected with
@@ -53,12 +62,16 @@ import socket
 import sys
 import threading
 import time
-from datetime import datetime
+from concurrent.futures import Future, TimeoutError as FutureTimeout
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Dict, Optional, Tuple
+from urllib.parse import parse_qs, urlsplit
 
 from PyQt6.QtCore import QObject, pyqtSignal
+
+from modules import bridge_tools
 
 
 # ── Logging ────────────────────────────────────────────────────────────────
@@ -139,6 +152,43 @@ def _handshake_path() -> Path:
     return _runtime_dir() / "sidekick-bridge.json"
 
 
+def _instances_dir() -> Path:
+    return _runtime_dir() / "instances"
+
+
+def _instance_handshake_path() -> Path:
+    return _instances_dir() / f"bridge-{os.getpid()}.json"
+
+
+def _write_json_atomically(path: Path, payload: dict) -> None:
+    """Write to a temp file then rename, so a reader never sees half a file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def _remove_stale_instance_handshakes() -> None:
+    """Delete instance handshakes whose Workbench is gone. ``stop()`` removes
+    our own, but a crash or a killed process leaves its file behind for good;
+    without this the folder grows by one file per crash. Never raises."""
+    try:
+        import psutil
+        for path in _instances_dir().glob("bridge-*.json"):
+            try:
+                pid = int(path.stem.split("-", 1)[1])
+            except ValueError:
+                continue
+            if pid != os.getpid() and not psutil.pid_exists(pid):
+                try:
+                    path.unlink()
+                    _log(f"removed stale instance handshake {path.name}")
+                except OSError:
+                    pass
+    except Exception as exc:
+        _log(f"stale handshake sweep skipped: {exc}")
+
+
 # ── HTTP handler ───────────────────────────────────────────────────────────
 
 
@@ -152,6 +202,10 @@ class _BridgeRequestHandler(BaseHTTPRequestHandler):
     # log_message to a no-op.
     def log_message(self, format: str, *args) -> None:  # noqa: A003
         pass
+
+    # Requests are handled one at a time, so a client that connects and then
+    # sends nothing would block every later call. Give up on it instead.
+    timeout = 30
 
     def _send_json(self, status: int, payload: dict) -> None:
         body = json.dumps(payload).encode("utf-8")
@@ -179,7 +233,8 @@ class _BridgeRequestHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802 (stdlib API name)
         try:
-            if self.path != "/v1/run-prompt":
+            tool = bridge_tools.POST_ROUTES.get(self.path)
+            if self.path != "/v1/run-prompt" and tool is None:
                 self._send_json(404, {"ok": False, "error": "unknown endpoint"})
                 return
 
@@ -195,6 +250,17 @@ class _BridgeRequestHandler(BaseHTTPRequestHandler):
                 data = json.loads(raw)
             except json.JSONDecodeError:
                 self._send_json(400, {"ok": False, "error": "body is not JSON"})
+                return
+            if not isinstance(data, dict):
+                self._send_json(400, {"ok": False, "error": "body is not a JSON object"})
+                return
+
+            if tool is not None:
+                # Tools read their parameters as strings, as from a query string.
+                params = {k: v if isinstance(v, str) else json.dumps(v) for k, v in data.items()}
+                bridge = self.server.bridge  # type: ignore[attr-defined]
+                status, payload = bridge.call_tool(tool, params)
+                self._send_json(status, payload)
                 return
 
             prompt = (data.get("prompt") or "").strip()
@@ -219,13 +285,38 @@ class _BridgeRequestHandler(BaseHTTPRequestHandler):
                 pass
 
     def do_GET(self) -> None:  # noqa: N802
-        # Health check – useful for clients that want to verify the bridge
-        # is alive before posting. No auth required because the response
-        # contains no privileged information.
-        if self.path == "/v1/ping":
-            self._send_json(200, {"ok": True})
-            return
-        self._send_json(404, {"ok": False, "error": "unknown endpoint"})
+        try:
+            url = urlsplit(self.path)
+
+            # Health check – useful for clients that want to verify the bridge
+            # is alive before posting. No auth required because the response
+            # contains no privileged information.
+            if url.path == "/v1/ping":
+                self._send_json(200, {"ok": True})
+                return
+
+            if not self._check_auth():
+                return
+
+            if url.path == "/v1/tools":
+                self._send_json(200, bridge_tools.registry())
+                return
+
+            handler = bridge_tools.ROUTES.get(url.path)
+            if handler is None:
+                self._send_json(404, {"ok": False, "error": "unknown endpoint"})
+                return
+
+            params = {k: v[-1] for k, v in parse_qs(url.query, keep_blank_values=True).items()}
+            bridge: SupervertalerBridgeServer = self.server.bridge  # type: ignore[attr-defined]
+            status, payload = bridge.call_tool(handler, params)
+            self._send_json(status, payload)
+        except Exception as exc:
+            _log(f"do_GET threw: {type(exc).__name__}: {exc}")
+            try:
+                self._send_json(500, {"ok": False, "error": str(exc)})
+            except Exception:
+                pass
 
 
 # ── Bridge ─────────────────────────────────────────────────────────────────
@@ -241,8 +332,17 @@ class SupervertalerBridgeServer(QObject):
     # default Qt::QueuedConnection marshals back to the GUI thread.
     run_prompt_requested = pyqtSignal(str, str, str)
 
+    # (future, callable). Emitted from the HTTP thread; because this object
+    # lives on the GUI thread the slot runs there. See call_tool.
+    _ui_call_requested = pyqtSignal(object)
+
     _BIND_HOST = "127.0.0.1"
     _MAX_BIND_ATTEMPTS = 10
+
+    # How long a tool call waits for the GUI thread. The tools themselves take
+    # milliseconds; this is for a Workbench that is busy with something long
+    # (an import, a batch translation that blocks the window).
+    UI_CALL_TIMEOUT_SECONDS = 10.0
 
     def __init__(self, parent: Optional[QObject] = None) -> None:
         super().__init__(parent)
@@ -251,6 +351,55 @@ class SupervertalerBridgeServer(QObject):
         self._server: Optional[HTTPServer] = None
         self._thread: Optional[threading.Thread] = None
         self._started_at: Optional[datetime] = None
+        # What the instance handshake last said, so note_state only rewrites
+        # the file when something in it changed.
+        self._project_name: str = ""
+        self._app_version: str = ""
+        self._ui_call_requested.connect(self._run_ui_call)
+
+    # ── Tool calls on the GUI thread ──────────────────────────────────
+
+    def call_tool(self, handler: Callable, params: Dict[str, str]) -> Tuple[int, dict]:
+        """Run ``handler(main window, params)`` on the GUI thread and wait for
+        it. Called from the HTTP thread. Returns (HTTP status, JSON body).
+
+        If the GUI thread does not get to it in time the call is cancelled, so
+        it can never run late, after the caller was told it did not happen
+        (that matters once tools write; today they only read).
+        """
+        future: Future = Future()
+        self._ui_call_requested.emit((future, lambda: handler(self.parent(), params)))
+        try:
+            try:
+                result = future.result(timeout=self.UI_CALL_TIMEOUT_SECONDS)
+            except FutureTimeout:
+                if future.cancel():
+                    return 503, {"ok": False, "error":
+                                 "Supervertaler Workbench is busy and did not answer in time. "
+                                 "Wait until it has finished what it is doing, then try again."}
+                # Not cancellable: the GUI thread has already started on it.
+                result = future.result(timeout=self.UI_CALL_TIMEOUT_SECONDS)
+            # A database search: the GUI thread has handed over what it needs,
+            # the search itself runs here, on the HTTP thread.
+            if isinstance(result, bridge_tools.RunOffGuiThread):
+                result = result.function()
+            return 200, result
+        except bridge_tools.BridgeToolError as exc:
+            return exc.status, {"ok": False, "error": str(exc)}
+        except FutureTimeout:
+            return 503, {"ok": False, "error": "Supervertaler Workbench did not answer in time."}
+        except Exception as exc:
+            _log(f"tool call threw: {type(exc).__name__}: {exc}")
+            return 500, {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+
+    def _run_ui_call(self, request) -> None:
+        future, function = request
+        if not future.set_running_or_notify_cancel():
+            return  # the caller gave up waiting
+        try:
+            future.set_result(function())
+        except BaseException as exc:  # hand every failure to the waiting thread
+            future.set_exception(exc)
 
     # ── Lifecycle ─────────────────────────────────────────────────────
 
@@ -299,6 +448,13 @@ class SupervertalerBridgeServer(QObject):
         except Exception as exc:
             _log(f"failed to write handshake file: {exc}")
 
+        _remove_stale_instance_handshakes()
+        try:
+            self._write_instance_handshake()
+            _log(f"instance handshake written at {_instance_handshake_path()}")
+        except Exception as exc:
+            _log(f"failed to write instance handshake: {exc}")
+
         _log(f"start() complete. Bridge live on http://{self._BIND_HOST}:{self._port}/ "
              f"with token {self.token[:8]}…")
         return True
@@ -319,13 +475,13 @@ class SupervertalerBridgeServer(QObject):
             pass
         self._server = None
         self._thread = None
-        try:
-            handshake = _handshake_path()
-            if handshake.exists():
-                handshake.unlink()
-        except Exception:
-            pass
-        _log("stop() complete; handshake removed.")
+        # Each in its own try: failing to remove one must not leave the other.
+        for handshake in (_handshake_path(), _instance_handshake_path()):
+            try:
+                handshake.unlink(missing_ok=True)
+            except Exception:
+                pass
+        _log("stop() complete; handshakes removed.")
 
     # ── Handshake ─────────────────────────────────────────────────────
 
@@ -345,6 +501,38 @@ class SupervertalerBridgeServer(QObject):
         tmp = path.with_suffix(".json.tmp")
         tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         os.replace(tmp, path)
+
+    def _write_instance_handshake(self) -> None:
+        """The handshake the Supervertaler MCP Server discovers this Workbench
+        by. Field names are the ones its BridgeClient reads; ``startedAt`` is
+        UTC because it compares it with the process start time, and
+        ``processName`` lets it tell a live Workbench from a reused PID."""
+        _write_json_atomically(_instance_handshake_path(), {
+            "version": 1,
+            "port": self._port,
+            "token": self.token,
+            "pid": os.getpid(),
+            # When the bridge started, not when this file was last rewritten:
+            # the MCP server takes the newest startedAt as the newest Workbench.
+            "startedAt": (self._started_at or datetime.now()).astimezone(timezone.utc).isoformat(),
+            "processName": Path(sys.executable).stem,
+            "pluginVersion": self._app_version,
+            "projectName": self._project_name,
+        })
+
+    def note_state(self, project_name: str, app_version: str) -> None:
+        """Tell the bridge which project is open, so the instance handshake
+        names it (that is how two Workbench windows are told apart). Cheap to
+        call often: the file is rewritten only when something changed."""
+        if (project_name, app_version) == (self._project_name, self._app_version):
+            return
+        self._project_name, self._app_version = project_name, app_version
+        if self._server is None:
+            return
+        try:
+            self._write_instance_handshake()
+        except Exception as exc:
+            _log(f"failed to update instance handshake: {exc}")
 
     # ── Diagnostics ───────────────────────────────────────────────────
 
