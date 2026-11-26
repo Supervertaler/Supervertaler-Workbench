@@ -37,7 +37,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, List, Optional
 
-from modules.statuses import STATUSES
+from modules.statuses import STATUSES, get_status
 
 DEFAULT_SEGMENTS_PER_CALL = 200
 MAX_SEGMENTS_PER_CALL = 500
@@ -88,12 +88,21 @@ def _int(params: Params, name: str, default: Optional[int]) -> Optional[int]:
         raise BridgeToolError(f"'{name}' must be a whole number, got '{raw}'.")
 
 
+def _status(segment) -> str:
+    """The segment's status as Workbench itself reads it. A stored value is
+    not always a current key: older projects hold renamed ones ("translated"),
+    and the DOCX and text importers write "untranslated", which is no status
+    at all and which Workbench shows as Not started. Reporting the stored
+    value would give the assistant a status it cannot filter on."""
+    return get_status(segment.status).key
+
+
 def _segment_dict(segment) -> Dict[str, Any]:
     out: Dict[str, Any] = {
         "id": segment.id,
         "source": segment.source,
         "target": segment.target,
-        "status": segment.status,
+        "status": _status(segment),
         "locked": bool(segment.locked),
     }
     if segment.file_name:
@@ -133,7 +142,7 @@ def get_active_project(window, params: Params) -> Dict[str, Any]:
     status_counts: Dict[str, int] = {}
     source_words = 0
     for segment in project.segments:
-        status_counts[segment.status] = status_counts.get(segment.status, 0) + 1
+        status_counts[_status(segment)] = status_counts.get(_status(segment), 0) + 1
         source_words += len(segment.source.split())
 
     return {
@@ -184,7 +193,7 @@ def get_segments(window, params: Params) -> Dict[str, Any]:
             raise BridgeToolError(f"No file of this project matches '{params.get('file')}'. Files: {names}.")
 
     def matches(segment) -> bool:
-        if status and segment.status != status:
+        if status and _status(segment) != status:
             return False
         if from_number is not None and segment.id < from_number:
             return False

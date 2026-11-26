@@ -105,6 +105,25 @@ def test_segments_are_paged_and_the_page_size_is_capped():
     assert last["segments"][-1]["id"] == 1200
 
 
+def test_statuses_are_reported_and_filtered_as_workbench_reads_them():
+    # Found on a real project (26 Nov 2026): imported segments are stored as
+    # "untranslated", which is not a status; Workbench shows them as Not
+    # started. The assistant was told 234 "untranslated" and could not filter
+    # on it, while status=not_started found nothing.
+    project = make_project(4)
+    project.segments[0].status = "untranslated"   # what the importers write
+    project.segments[1].status = "translated"     # renamed to draft long ago
+    project.segments[2].status = "not_started"
+    project.segments[3].status = "confirmed"
+    window = make_window(project)
+
+    assert bridge_tools.get_active_project(window, {})["segmentsByStatus"] == {
+        "not_started": 2, "draft": 1, "confirmed": 1}
+    found = bridge_tools.get_segments(window, {"status": "not_started"})
+    assert [(s["id"], s["status"]) for s in found["segments"]] == [(1, "not_started"), (3, "not_started")]
+    assert bridge_tools.get_segments(window, {"status": "draft"})["totalMatching"] == 1
+
+
 def test_segment_filters():
     window = make_window(make_project(20))
     assert bridge_tools.get_segments(window, {"status": "confirmed"})["totalMatching"] == 10
