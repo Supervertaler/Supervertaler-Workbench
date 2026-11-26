@@ -9,7 +9,7 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 ### Improvements
 
-- **Gemini 3.8 Flash is now the recommended Gemini model, as in the Trados and memoQ plugins.** It is first in the Gemini lists in Settings and the AI Assistant, and it is what Workbench uses when no Gemini model has been chosen. Gemini 3.1 Flash-Lite, the previous recommendation, is still in every list, and a Gemini model already saved in your settings stays as it is.
+- **Gemini 3.8 Flash is now the recommended Gemini model, as in the Trados and memoQ plugins.** It is first in the Gemini lists in Settings, the AI Assistant and PDF Rescue, and it is what Workbench uses when no Gemini model has been chosen. Gemini 3.1 Flash-Lite, the previous recommendation, is still in every list, and a Gemini model already saved in your settings stays as it is.
 
 - **SuperBrowser is spelled with a capital B.** The Tools menu item, the window title and the panel's heading now say “SuperBrowser”, like SuperLookup and the other Super- names, and as the Help site already does. Only the name on screen changes: your saved logins for ChatGPT, Claude and Gemini are kept.
 
