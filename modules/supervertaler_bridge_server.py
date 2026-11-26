@@ -495,7 +495,9 @@ class SupervertalerBridgeServer(QObject):
             "port": self._port,
             "token": self.token,
             "pid": os.getpid(),
-            "startedAt": datetime.now(timezone.utc).isoformat(),
+            # When the bridge started, not when this file was last rewritten:
+            # the MCP server takes the newest startedAt as the newest Workbench.
+            "startedAt": (self._started_at or datetime.now()).astimezone(timezone.utc).isoformat(),
             "processName": Path(sys.executable).stem,
             "pluginVersion": self._app_version,
             "projectName": self._project_name,

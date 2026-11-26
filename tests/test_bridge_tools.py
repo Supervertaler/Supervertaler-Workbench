@@ -316,8 +316,10 @@ def test_the_instance_handshake_names_the_project_and_goes_when_the_bridge_stops
     assert handshake["projectName"] == ""
 
     bridge.note_state("Acme PROJ-001", "1.2.3")
+    started = handshake["startedAt"]
     handshake = json.loads(path.read_text(encoding="utf-8"))
     assert (handshake["projectName"], handshake["pluginVersion"]) == ("Acme PROJ-001", "1.2.3")
+    assert handshake["startedAt"] == started  # opening a project does not make this Workbench "newer"
 
     legacy = tmp_path / "workbench" / "runtime" / "sidekick-bridge.json"
     assert legacy.exists()  # the Trados plugin still finds Workbench the old way
