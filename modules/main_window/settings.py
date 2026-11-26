@@ -477,9 +477,9 @@ class SettingsMixin:
         gemini_combo = QComboBox()
         # Gemini 4 Argon as in the Trados and memoQ plugins (since release 203).
         gemini_combo.addItems([
-            "gemini-3.1-flash-lite (Recommended - Fast & Economical)",
+            "gemini-3.8-flash (Recommended - Newest Flash, Strong Quality)",
             "gemini-3.5-flash-lite (Budget - Newer Flash-Lite)",
-            "gemini-3.8-flash (Newest Flash - Strong Quality)",
+            "gemini-3.1-flash-lite (Older Flash-Lite - Fast & Economical)",
             "gemini-3.5-flash (Older Flash - Higher Cost)",
             "gemini-2.5-pro (Premium - Complex Reasoning)",
             "gemini-3.1-pro-preview (Premium - Previous Pro)",
@@ -497,7 +497,7 @@ class SettingsMixin:
             "  $2/$10 until 30 Nov 2026), 1M context.\n"
             "Gemma 4 26B MoE: Google's open model, lightweight and capable."
         )
-        _select_saved_model(gemini_combo, settings.get('gemini_model', 'gemini-3.1-flash-lite'))
+        _select_saved_model(gemini_combo, settings.get('gemini_model', 'gemini-3.8-flash'))
         gemini_combo.setEnabled(gemini_radio.isChecked())
         model_layout.addWidget(gemini_combo)
 
@@ -1771,9 +1771,9 @@ class SettingsMixin:
                 ("gpt-6-luna", "GPT-6 Luna (Budget)"),
             ]),
             ("gemini", "Gemini (Google AI)", "gemini", [
-                ("gemini-3.1-flash-lite", "Gemini 3.1 Flash-Lite (Recommended)"),
+                ("gemini-3.8-flash", "Gemini 3.8 Flash (Recommended)"),
                 ("gemini-3.5-flash-lite", "Gemini 3.5 Flash-Lite (Budget)"),
-                ("gemini-3.8-flash", "Gemini 3.8 Flash (Newest Flash)"),
+                ("gemini-3.1-flash-lite", "Gemini 3.1 Flash-Lite (Older Flash-Lite)"),
                 ("gemini-2.5-pro", "Gemini 2.5 Pro (Premium)"),
                 ("gemini-3.1-pro-preview", "Gemini 3.1 Pro (Previous Pro)"),
                 ("gemini-4-argon", "Gemini 4 Argon (Top Quality)"),

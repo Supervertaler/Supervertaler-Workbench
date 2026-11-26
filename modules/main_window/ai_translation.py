@@ -1585,7 +1585,7 @@ class AITranslationMixin:
             'provider': 'openai',
             'openai_model': 'gpt-6.1-sol',
             'claude_model': 'claude-sonnet-5-5',
-            'gemini_model': 'gemini-3.1-flash-lite',
+            'gemini_model': 'gemini-3.8-flash',
             'ollama_model': 'translategemma:12b',
             'custom_openai_model': '',
             'custom_openai_endpoint': '',
@@ -4349,7 +4349,7 @@ class AITranslationMixin:
                         from modules.llm_clients import LLMClient
                         self.log("🧠 DIRECT LLM SEARCH: LLMClient imported for Gemini")
                         
-                        gemini_model = settings.get('gemini_model', 'gemini-3.1-flash-lite')
+                        gemini_model = settings.get('gemini_model', 'gemini-3.8-flash')
                         self.log(f"🧠 DIRECT LLM SEARCH: Using Gemini model: {gemini_model}")
                         client = LLMClient(
                             api_key=gemini_api_key,
