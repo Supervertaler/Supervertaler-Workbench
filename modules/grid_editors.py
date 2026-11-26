@@ -38,7 +38,7 @@ from modules import inline_codes as _inline_codes
 from modules.platform_helpers import IS_MACOS
 from modules.shortcut_display import format_shortcut_for_display
 from typing import Dict, Optional
-from modules.tag_text import WORD_JOINER, expand_compact_tags, extract_html_tags, extract_memoq_tags, find_next_unused_tag, get_formatted_html_display, get_html_wrapping_tag_pair, get_next_pipe_count_needed, get_wrapping_tag_pair, has_formatting_tags, has_phrase_tags, strip_invisible_markers
+from modules.tag_text import WORD_JOINER, expand_compact_tags, extract_html_tags, extract_memoq_tags, find_next_unused_tag, get_formatted_html_display, get_html_wrapping_tag_pair, get_next_pipe_count_needed, get_wrapping_tag_pair, has_formatting_tags, has_phrase_tags, is_phrase_project, strip_invisible_markers, toggle_phrase_tag
 
 
 def _cleaned_modifiers(event):
@@ -4138,7 +4138,24 @@ class EditableGridTextEditor(QTextEdit):
         cursor = self.textCursor()
         if not cursor.hasSelection():
             return
-        
+
+        # A Phrase project's tags are {b>…<b}: <b> would go to Phrase as text.
+        main_window = self._get_main_window()
+        if is_phrase_project(getattr(main_window, 'current_project', None)):
+            if getattr(main_window, 'tag_view_mode', 'tags') == 'wysiwyg':
+                self._toggle_wysiwyg_format(tag)
+            else:
+                start, end = cursor.selectionStart(), cursor.selectionEnd()
+                rep_start, rep_end, replacement = toggle_phrase_tag(
+                    self.toPlainText(), start, end, tag)
+                cursor.setPosition(rep_start)
+                cursor.setPosition(rep_end, cursor.MoveMode.KeepAnchor)
+                cursor.insertText(replacement)
+                cursor.setPosition(rep_start)
+                cursor.setPosition(rep_start + len(replacement), cursor.MoveMode.KeepAnchor)
+                self.setTextCursor(cursor)
+            return
+
         selected_text = cursor.selectedText()
         
         # Check if the text is already wrapped with this tag
@@ -4169,6 +4186,37 @@ class EditableGridTextEditor(QTextEdit):
             cursor.setPosition(start)
             cursor.setPosition(start + len(wrapped_text), cursor.MoveMode.KeepAnchor)
             self.setTextCursor(cursor)
+
+    def _toggle_wysiwyg_format(self, tag: str):
+        """Ctrl+B/I/U in WYSIWYG view of a Phrase project: make the selection
+        really bold/italic/underlined (or not, when all of it already is).
+        The cell is then saved back in Phrase syntax ({b>…<b})."""
+        cursor = self.textCursor()
+        start, end = cursor.selectionStart(), cursor.selectionEnd()
+        probe = QTextCursor(self.document())
+
+        def is_on(fmt):
+            if tag == 'b':
+                return fmt.fontWeight() >= QFont.Weight.Bold
+            return fmt.fontItalic() if tag == 'i' else fmt.fontUnderline()
+
+        all_on = True
+        for pos in range(start + 1, end + 1):   # charFormat() is that of the char before pos
+            probe.setPosition(pos)
+            if not is_on(probe.charFormat()):
+                all_on = False
+                break
+        fmt = QTextCharFormat()
+        if tag == 'b':
+            fmt.setFontWeight(QFont.Weight.Normal if all_on else QFont.Weight.Bold)
+        elif tag == 'i':
+            fmt.setFontItalic(not all_on)
+        else:
+            fmt.setFontUnderline(not all_on)
+        # Set before the change: the edit handler reads it when textChanged fires
+        self._phrase_tags = True
+        cursor.mergeCharFormat(fmt)
+        self.setTextCursor(cursor)
 
     def update_display_mode(self, text: str, show_tags: bool):
         """
