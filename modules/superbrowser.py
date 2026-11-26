@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 =============================================================================
-MODULE: Superbrowser - Multi-Chat AI Browser
+MODULE: SuperBrowser - Multi-Chat AI Browser
 =============================================================================
 Display multiple AI chat pages side by side in a single interface.
 Supports ChatGPT, Claude, and Gemini in a three-column resizable layout.
@@ -177,7 +177,7 @@ class ChatColumn(QWidget):
 
 class SuperbrowserWidget(QWidget):
     """
-    Superbrowser - Multi-Chat AI Browser Widget
+    SuperBrowser - Multi-Chat AI Browser Widget
     
     Displays multiple AI chat interfaces side by side for easy comparison
     and concurrent interaction with different AI models.
@@ -196,7 +196,7 @@ class SuperbrowserWidget(QWidget):
         self.init_ui()
 
     def init_ui(self):
-        """Initialize the Superbrowser UI"""
+        """Initialize the SuperBrowser UI"""
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(5, 5, 5, 5)
         main_layout.setSpacing(5)
@@ -205,7 +205,7 @@ class SuperbrowserWidget(QWidget):
         title_bar_layout = QHBoxLayout()
         title_bar_layout.setContentsMargins(0, 0, 0, 0)
         
-        title_label = QLabel("🌐 Superbrowser - Multi-Chat AI Browser")
+        title_label = QLabel("🌐 SuperBrowser - Multi-Chat AI Browser")
         title_label.setStyleSheet("""
             QLabel {
                 font-size: 12px;
@@ -340,7 +340,7 @@ if __name__ == "__main__":
 
     # Create main window for testing
     window = QMainWindow()
-    window.setWindowTitle("Superbrowser - Multi-Chat AI Browser")
+    window.setWindowTitle("SuperBrowser - Multi-Chat AI Browser")
     window.setGeometry(100, 100, 1800, 1000)
     
     # Create and set central widget

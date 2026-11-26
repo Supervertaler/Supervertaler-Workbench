@@ -1387,7 +1387,7 @@ class WindowShellMixin:
         superlookup_action.triggered.connect(self.show_concordance_search)
         tools_menu.addAction(superlookup_action)
 
-        superbrowser_action = QAction(self.tr("🌐 Super&browser..."), self)
+        superbrowser_action = QAction(self.tr("🌐 Super&Browser..."), self)
         superbrowser_action.setToolTip(self.tr(
             "ChatGPT, Claude, and Gemini side by side in one window, with "
             "persistent logins – compare answers without switching tabs"))
