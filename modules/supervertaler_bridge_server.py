@@ -233,7 +233,8 @@ class _BridgeRequestHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802 (stdlib API name)
         try:
-            if self.path != "/v1/run-prompt":
+            tool = bridge_tools.POST_ROUTES.get(self.path)
+            if self.path != "/v1/run-prompt" and tool is None:
                 self._send_json(404, {"ok": False, "error": "unknown endpoint"})
                 return
 
@@ -249,6 +250,17 @@ class _BridgeRequestHandler(BaseHTTPRequestHandler):
                 data = json.loads(raw)
             except json.JSONDecodeError:
                 self._send_json(400, {"ok": False, "error": "body is not JSON"})
+                return
+            if not isinstance(data, dict):
+                self._send_json(400, {"ok": False, "error": "body is not a JSON object"})
+                return
+
+            if tool is not None:
+                # Tools read their parameters as strings, as from a query string.
+                params = {k: v if isinstance(v, str) else json.dumps(v) for k, v in data.items()}
+                bridge = self.server.bridge  # type: ignore[attr-defined]
+                status, payload = bridge.call_tool(tool, params)
+                self._send_json(status, payload)
                 return
 
             prompt = (data.get("prompt") or "").strip()
@@ -359,14 +371,19 @@ class SupervertalerBridgeServer(QObject):
         self._ui_call_requested.emit((future, lambda: handler(self.parent(), params)))
         try:
             try:
-                return 200, future.result(timeout=self.UI_CALL_TIMEOUT_SECONDS)
+                result = future.result(timeout=self.UI_CALL_TIMEOUT_SECONDS)
             except FutureTimeout:
                 if future.cancel():
                     return 503, {"ok": False, "error":
                                  "Supervertaler Workbench is busy and did not answer in time. "
                                  "Wait until it has finished what it is doing, then try again."}
                 # Not cancellable: the GUI thread has already started on it.
-                return 200, future.result(timeout=self.UI_CALL_TIMEOUT_SECONDS)
+                result = future.result(timeout=self.UI_CALL_TIMEOUT_SECONDS)
+            # A database search: the GUI thread has handed over what it needs,
+            # the search itself runs here, on the HTTP thread.
+            if isinstance(result, bridge_tools.RunOffGuiThread):
+                result = result.function()
+            return 200, result
         except bridge_tools.BridgeToolError as exc:
             return exc.status, {"ok": False, "error": str(exc)}
         except FutureTimeout:

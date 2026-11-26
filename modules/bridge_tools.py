@@ -1,6 +1,6 @@
 """
-Read-only tools the Supervertaler Bridge offers to desktop chat agents
-======================================================================
+The tools the Supervertaler Bridge offers to desktop chat agents
+================================================================
 
 The Supervertaler MCP Server (the small program Claude Desktop or ChatGPT
 Desktop starts) is a forwarder: it asks the bridge for its tool list
@@ -11,12 +11,22 @@ functions that answer the calls.
 Every function here takes the main window and the call's parameters (strings,
 straight from the query string) and returns a JSON-ready dict. They read
 ``window.current_project`` and the grid, so they MUST run on the GUI thread;
-``SupervertalerBridgeServer.call_tool`` sees to that. Nothing here writes.
+``SupervertalerBridgeServer.call_tool`` sees to that. None of them changes the
+project, a termbase or a TM. One acts on the window: go_to_segment moves the
+cursor, and is marked "write" so the MCP server refuses it when it cannot tell
+which Workbench is meant.
 
-Scale: a call walks the project's segment list once (get_segments twice, the
-second time only over the page it returns). Designed for projects of tens of
-thousands of segments; results are paged so a reply never carries more than
-``MAX_SEGMENTS_PER_CALL`` segments.
+A tool whose real work is a database search returns ``RunOffGuiThread``: the
+GUI thread only collects what the search needs (which TMs are active), and the
+search itself then runs on the bridge's own thread with its own read-only
+connection, so a large TM can never freeze the window.
+
+Scale: a segment call walks the project's segment list once (get_segments
+twice, the second time only over the page it returns). Designed for projects
+of tens of thousands of segments; results are paged so a reply never carries
+more than ``MAX_SEGMENTS_PER_CALL`` segments. lookup_term makes one pass over
+the in-memory term index Workbench already keeps for TermLens (tested at
+50,000 terms). search_tm uses the TM's full-text index, at most 100 rows.
 
 Errors: raise ``BridgeToolError``. Status 200 (the default) reaches the agent
 as ordinary JSON ``{"ok": false, "error": ...}``; status 503 is for "not now"
@@ -32,6 +42,9 @@ from modules.statuses import STATUSES
 DEFAULT_SEGMENTS_PER_CALL = 200
 MAX_SEGMENTS_PER_CALL = 500
 CONTEXT_SEGMENTS = 2  # segments returned before and after the active one
+MAX_TERM_MATCHES = 100
+DEFAULT_TM_RESULTS = 20
+MAX_TM_RESULTS = 100  # database_manager.concordance_search returns at most 100
 
 Params = Dict[str, str]
 
@@ -42,6 +55,14 @@ class BridgeToolError(Exception):
     def __init__(self, message: str, status: int = 200) -> None:
         super().__init__(message)
         self.status = status
+
+
+class RunOffGuiThread:
+    """Returned by a tool to say: the GUI-thread part is done, now call
+    ``function()`` on the bridge's own thread and return its result."""
+
+    def __init__(self, function: Callable[[], Dict[str, Any]]) -> None:
+        self.function = function
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────
@@ -298,14 +319,144 @@ def get_prompt(window, params: Params) -> Dict[str, Any]:
     raise BridgeToolError(f"No prompt found for '{path or name}'. Call list_prompts for the ones there are.")
 
 
+def lookup_term(window, params: Params) -> Dict[str, Any]:
+    _project(window)
+    text = (params.get("text") or "").strip()
+    if not text:
+        raise BridgeToolError("'text' is required: the text to look for terms in.")
+
+    found = window.find_termbase_matches_in_source(text)
+    matches = []
+    for info in found.values():
+        entry: Dict[str, Any] = {
+            "source": info.get("source", ""),
+            "target": info.get("translation", ""),
+            "termbase": info.get("termbase_name", ""),
+        }
+        if info.get("is_project_termbase"):
+            entry["projectTermbase"] = True
+        if info.get("forbidden"):
+            entry["forbidden"] = True
+        if info.get("is_nontranslatable"):
+            entry["nonTranslatable"] = True
+        synonyms = [s for s in info.get("target_synonyms") or [] if isinstance(s, str) and s]
+        if synonyms:
+            entry["targetSynonyms"] = synonyms
+        for key, name in (("definition", "definition"), ("notes", "notes"), ("domain", "domain")):
+            if info.get(key):
+                entry[name] = info[key]
+        matches.append(entry)
+
+    # Longest source term first: the most specific match is the one to follow.
+    matches.sort(key=lambda m: (-len(m["source"]), m["source"].casefold()))
+    result: Dict[str, Any] = {
+        "ok": True,
+        "count": len(matches),
+        "matches": matches[:MAX_TERM_MATCHES],
+        "truncated": len(matches) > MAX_TERM_MATCHES,
+    }
+    if not matches and not getattr(window, "termbase_index", None):
+        result["note"] = ("No termbase with terms is active for this project, so nothing can match. "
+                          "Termbases are ticked per project in Workbench's Termbases tab.")
+    return result
+
+
+def _tm_rows(window) -> List[Dict[str, Any]]:
+    """Every TM with whether it is active for the open project. GUI thread."""
+    project = _project(window)
+    manager = getattr(window, "tm_metadata_mgr", None)
+    database = getattr(window, "db_manager", None)
+    if manager is None or database is None:
+        raise BridgeToolError("Workbench's translation memories are not loaded yet. Try again in a moment.",
+                              status=503)
+    active = set(manager.get_active_tm_ids(getattr(project, "id", None)))
+    # Not tm_metadata_mgr.get_all_tms(): that counts every unit of every TM,
+    # which is a slow way to learn six names.
+    cursor = database.get_reader_connection().cursor()
+    try:
+        cursor.execute("SELECT name, tm_id, source_lang, target_lang, is_project_tm, read_only "
+                       "FROM translation_memories ORDER BY name COLLATE NOCASE")
+        return [{
+            "name": row[0],
+            "tmId": row[1],
+            "sourceLanguage": row[2],
+            "targetLanguage": row[3],
+            "projectTm": bool(row[4]),
+            "readOnly": bool(row[5]),
+            "activeForProject": row[1] in active,
+        } for row in cursor.fetchall()]
+    finally:
+        cursor.close()
+
+
+def list_tms(window, params: Params) -> Dict[str, Any]:
+    tms = _tm_rows(window)
+    return {"ok": True, "count": len(tms), "tms": tms}
+
+
+def search_tm(window, params: Params):
+    text = (params.get("text") or "").strip()
+    if not text:
+        raise BridgeToolError("'text' is required: the words to look for.")
+    limit = min(MAX_TM_RESULTS, max(1, _int(params, "limit", DEFAULT_TM_RESULTS)))
+    all_tms = (params.get("allTms") or "").strip().lower() == "true"
+
+    tms = _tm_rows(window)
+    names = {tm["tmId"]: tm["name"] for tm in tms}
+    tm_ids = None if all_tms else [tm["tmId"] for tm in tms if tm["activeForProject"]]
+    if tm_ids is not None and not tm_ids:
+        return {"ok": True, "count": 0, "matches": [],
+                "note": "No TM is active for this project. Pass allTms=true to search every TM, "
+                        "or tick TMs for the project in Workbench's TMs tab."}
+    database = window.db_manager
+
+    def search() -> Dict[str, Any]:
+        rows = database.concordance_search(text, tm_ids=tm_ids, connection=database.get_reader_connection())
+        matches = [{
+            "source": row.get("source", row.get("source_text", "")),
+            "target": row.get("target", row.get("target_text", "")),
+            "tm": names.get(row.get("tm_id"), row.get("tm_id", "")),
+            "modified": row.get("modified_date", ""),
+        } for row in rows[:limit]]
+        return {
+            "ok": True,
+            "searched": "all TMs" if all_tms else "the TMs active for this project",
+            "count": len(matches),
+            "truncated": len(rows) > limit or len(rows) >= MAX_TM_RESULTS,
+            "matches": matches,
+        }
+
+    return RunOffGuiThread(search)
+
+
+def go_to_segment(window, params: Params) -> Dict[str, Any]:
+    project = _project(window)
+    segment_id = _int(params, "id", None)
+    if segment_id is None:
+        raise BridgeToolError("'id' is required: the segment id from get_segments.")
+    if not any(s.id == segment_id for s in project.segments):
+        raise BridgeToolError(f"This project has no segment {segment_id}.")
+
+    window._navigate_to_segment_by_id(segment_id)
+    # Say what happened, not what was asked: a grid filter can hide the row.
+    if _active_segment_id(window) != segment_id:
+        raise BridgeToolError(
+            f"Workbench could not move to segment {segment_id}. It may be hidden by a filter in the grid: "
+            "ask the user to clear the filter.")
+    return {"ok": True, "activeSegmentId": segment_id}
+
+
 HELP_CARD = """\
 ## Supervertaler Workbench – what you can ask
 
-This connection is **read-only** for now: I can look at the project that is open in Workbench, but not change it.
+I can look at the project that is open in Workbench and move the cursor for you, but I **cannot change** your translations, termbases or TMs.
 
 - **Where am I?** – the open project, its languages, progress per status, and the segment you are in.
 - **Show me segments** – all of them or a selection: by status, by number range, by file, or containing some text.
 - **Review my translation** – I read source and target and point out problems, citing segment numbers.
+- **Take me to segment 120** – I move Workbench's cursor there.
+- **Which terms apply here?** – I look up the terms your active termbases have for a piece of text.
+- **How did I translate this before?** – I search your translation memories for a word or phrase.
 - **What do the comments say?** – the comments on a segment.
 - **Which prompts do I have?** – list the prompt library and read a prompt.
 
@@ -324,16 +475,17 @@ _INTEGER = {"type": ["integer", "null"]}
 
 
 def _tool(name: str, path: str, handler: Callable, description: str,
-          properties: Optional[Dict[str, Any]] = None, required: Optional[List[str]] = None) -> Dict[str, Any]:
+          properties: Optional[Dict[str, Any]] = None, required: Optional[List[str]] = None,
+          method: str = "GET", access: str = "read") -> Dict[str, Any]:
     schema: Dict[str, Any] = {"type": "object", "properties": properties or {}}
     if required:
         schema["required"] = required
     return {
         "name": name,
-        "access": "read",
+        "access": access,
         "description": description,
         "inputSchema": schema,
-        "method": "GET",
+        "method": method,
         "path": path,
         "paramMap": {},
         "fixedQuery": {},
@@ -351,7 +503,7 @@ _TOOLS: List[Dict[str, Any]] = [
           "Get the project open in Supervertaler Workbench: name, source and target language, the project "
           "file, whether it has unsaved changes, segment counts per status, an approximate source word "
           "count and the id of the segment the translator is in. Call this first to orient yourself. "
-          "This connection is read-only: nothing can be changed in Workbench through it."),
+          "Translations, termbases and TMs cannot be changed through this connection."),
     _tool("get_files", "/v1/files", get_files,
           "List the files of the project open in Workbench: id, name, segment count, and which one the "
           "translator is in. Most projects have one file. Use a name or id with get_segments' 'file' filter."),
@@ -389,6 +541,37 @@ _TOOLS: List[Dict[str, Any]] = [
           "comment that came in with the imported document.",
           {"id": {"type": "integer", "description": "Segment id from get_segments."}},
           ["id"]),
+    _tool("go_to_segment", "/v1/go-to-segment", go_to_segment,
+          "Move Workbench's cursor to a segment and bring it into view, as if the translator had clicked "
+          "it. Use it when the user asks to be taken to a segment, or to show them the one you are "
+          "talking about. It changes no text. Fails with an explanation when the segment is hidden by a "
+          "grid filter.",
+          {"id": {"type": "integer", "description": "Segment id from get_segments."}},
+          ["id"], method="POST", access="write"),
+    _tool("lookup_term", "/v1/term-lookup", lookup_term,
+          "Find the terms that the termbases active for this project have for a piece of text: pass a "
+          "segment, a phrase or a single word. Returns each match with its source term, target term and "
+          "termbase, and where they apply targetSynonyms, definition, notes, domain, projectTermbase, "
+          "nonTranslatable and forbidden. A forbidden term must never appear in a translation. Matching "
+          "is the same as Workbench's own TermLens (whole words, synonyms and abbreviations included).",
+          {"text": {**_STRING, "description": "Text to scan for termbase terms."}},
+          ["text"]),
+    _tool("list_tms", "/v1/tms", list_tms,
+          "List Workbench's translation memories: name, languages, whether it is the project's own TM, "
+          "read-only, and activeForProject (ticked for the open project)."),
+    _tool("search_tm", "/v1/tm-search", search_tm,
+          "Search the translation memories for a word or phrase (a concordance search): finds units whose "
+          "source or target contains it, newest first, with the TM each came from. Use it for 'how was "
+          "this translated before?'. It is a text search, not a fuzzy match on a whole segment. By default "
+          "only the TMs active for the open project are searched.",
+          {
+              "text": {**_STRING, "description": "The word or phrase to look for."},
+              "limit": {**_INTEGER, "description":
+                        f"Maximum units to return (default {DEFAULT_TM_RESULTS}, at most {MAX_TM_RESULTS})."},
+              "allTms": {"type": ["boolean", "null"], "description":
+                         "true searches every TM, not only those active for the project."},
+          },
+          ["text"]),
     _tool("list_prompts", "/v1/prompts", list_prompts,
           "List the prompts in Supervertaler Workbench's prompt library: name, description, category "
           "(folder), relativePath (pass it to get_prompt), isDefault (built in) and isQuickLauncher.",
@@ -405,7 +588,8 @@ _TOOLS: List[Dict[str, Any]] = [
           }),
 ]
 
-ROUTES: Dict[str, Callable] = {tool["path"]: tool["_handler"] for tool in _TOOLS}
+ROUTES: Dict[str, Callable] = {t["path"]: t["_handler"] for t in _TOOLS if t["method"] == "GET"}
+POST_ROUTES: Dict[str, Callable] = {t["path"]: t["_handler"] for t in _TOOLS if t["method"] == "POST"}
 
 
 def registry() -> Dict[str, Any]:
