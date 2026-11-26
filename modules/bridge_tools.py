@@ -37,6 +37,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, List, Optional
 
+from modules import bridge_checks
 from modules.statuses import STATUSES, get_status
 
 DEFAULT_SEGMENTS_PER_CALL = 200
@@ -442,6 +443,29 @@ def search_tm(window, params: Params):
     return RunOffGuiThread(search)
 
 
+def _check_rows(window) -> List[bridge_checks.Row]:
+    """A plain copy of what the checks read, so they can run off the GUI thread
+    while the translator carries on typing."""
+    return [bridge_checks.Row(s.id, s.source or "", s.target or "", _status(s), s.file_name or "")
+            for s in _project(window).segments]
+
+
+def qa_check(window, params: Params):
+    check = (params.get("type") or "").strip()
+    if check not in ("numbers", "tags", "nbsp"):
+        raise BridgeToolError(f"Unknown check '{check}'. Use numbers, tags or nbsp.")
+    limit = min(bridge_checks.MAX_ISSUES, max(1, _int(params, "limit", bridge_checks.DEFAULT_ISSUES)))
+    rows = _check_rows(window)
+    return RunOffGuiThread(lambda: bridge_checks.qa_check(rows, check, limit))
+
+
+def find_inconsistencies(window, params: Params):
+    limit = min(bridge_checks.MAX_ISSUES, max(1, _int(params, "limit", bridge_checks.DEFAULT_ISSUES)))
+    offset = max(0, _int(params, "offset", 0))
+    rows = _check_rows(window)
+    return RunOffGuiThread(lambda: bridge_checks.inconsistencies(rows, limit, offset))
+
+
 def go_to_segment(window, params: Params) -> Dict[str, Any]:
     project = _project(window)
     segment_id = _int(params, "id", None)
@@ -494,6 +518,7 @@ I can look at the project that is open in Workbench and move the cursor for you,
 - **Where am I?** – the open project, its languages, progress per status, and the segment you are in.
 - **Show me segments** – all of them or a selection: by status, by number range, by file, or containing some text.
 - **Review my translation** – I read source and target and point out problems, citing segment numbers.
+- **Check my translation** – numbers that differ from the source, missing or extra tags, lost non-breaking spaces, and the same sentence translated in different ways.
 - **Take me to segment 120** – I move Workbench's cursor there.
 - **Which terms apply here?** – I look up the terms your active termbases have for a piece of text.
 - **How did I translate this before?** – I search your translation memories for a word or phrase.
@@ -516,7 +541,8 @@ _INTEGER = {"type": ["integer", "null"]}
 
 def _tool(name: str, path: str, handler: Callable, description: str,
           properties: Optional[Dict[str, Any]] = None, required: Optional[List[str]] = None,
-          method: str = "GET", access: str = "read") -> Dict[str, Any]:
+          method: str = "GET", access: str = "read",
+          fixed_query: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
     schema: Dict[str, Any] = {"type": "object", "properties": properties or {}}
     if required:
         schema["required"] = required
@@ -528,11 +554,15 @@ def _tool(name: str, path: str, handler: Callable, description: str,
         "method": method,
         "path": path,
         "paramMap": {},
-        "fixedQuery": {},
+        "fixedQuery": fixed_query or {},
         "fixedBody": {},
         "_handler": handler,
     }
 
+
+_LIMIT = {"limit": {**_INTEGER, "description":
+                    f"Maximum issues to return (default {bridge_checks.DEFAULT_ISSUES}, "
+                    f"at most {bridge_checks.MAX_ISSUES})."}}
 
 _TOOLS: List[Dict[str, Any]] = [
     _tool("help", "/v1/help", help_card,
@@ -613,6 +643,36 @@ _TOOLS: List[Dict[str, Any]] = [
                          "true searches every TM, not only those active for the project."},
           },
           ["text"]),
+    _tool("check_numbers", "/v1/qa-check", qa_check,
+          "QA check: find translated segments where the numbers in source and target do not match (digits "
+          "compared with thousands and decimal separators set aside, so 1.234,56 matches 1,234.56). "
+          "Returns each mismatch with both lists of numbers. Only translated segments are checked. A "
+          "difference is not always an error (a number written out as a word, a converted unit): review "
+          "each against the source. This connection cannot change segments; the user corrects them in "
+          "Workbench, and go_to_segment takes them there.",
+          _LIMIT, fixed_query={"type": "numbers"}),
+    _tool("check_tags", "/v1/qa-check", qa_check,
+          "QA check: find translated segments whose inline tags or inline codes differ from the source: "
+          "missing from the target, or in the target but not in the source. The same check as Workbench's "
+          "Tools > QA Checks. Formatting can legitimately differ, so present the findings for review.",
+          _LIMIT, fixed_query={"type": "tags"}),
+    _tool("check_nbsp", "/v1/qa-check", qa_check,
+          "QA check: find translated segments with fewer non-breaking spaces (U+00A0) than their source. "
+          "They are invisible in every tool result, so this is the only way to see a lost one. Relevant "
+          "when a style guide wants a non-breaking space between a value and its unit (230 V, 50 %). "
+          "Fewer in the target is not always wrong: review each hit.",
+          _LIMIT, fixed_query={"type": "nbsp"}),
+    _tool("find_inconsistencies", "/v1/inconsistencies", find_inconsistencies,
+          "Find translation inconsistencies in the open project: repeated source segments (compared with "
+          "tags removed and spacing collapsed) whose translations differ. Returns each group with its "
+          "source and every occurrence (segment id, target, status, file). Results are paged: groupsFound "
+          "is the true total, and when 'truncated' is true the note gives the offset for the next page.",
+          {
+              "limit": {**_INTEGER, "description":
+                        f"Maximum groups per page (default {bridge_checks.DEFAULT_ISSUES}, "
+                        f"at most {bridge_checks.MAX_ISSUES})."},
+              "offset": {**_INTEGER, "description": "Groups to skip, for paging (default 0)."},
+          }),
     _tool("list_prompts", "/v1/prompts", list_prompts,
           "List the prompts in Supervertaler Workbench's prompt library: name, description, category "
           "(folder), relativePath (pass it to get_prompt), isDefault (built in) and isQuickLauncher.",

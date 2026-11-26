@@ -204,7 +204,8 @@ def test_prompts_are_listed_with_forward_slashes_and_read_by_either_spelling():
 def test_the_registry_is_json_and_every_tool_is_routed():
     registry = bridge_tools.registry()
     json.dumps(registry)  # the handlers must not leak into it
-    assert len(registry["tools"]) == len(bridge_tools.ROUTES) + len(bridge_tools.POST_ROUTES) == 12
+    assert len(registry["tools"]) == 16
+    assert len({t["name"] for t in registry["tools"]}) == 16
     for tool in registry["tools"]:
         routes = bridge_tools.ROUTES if tool["method"] == "GET" else bridge_tools.POST_ROUTES
         assert tool["path"] in routes
@@ -222,6 +223,122 @@ def test_a_large_project_is_answered_quickly():
     bridge_tools.get_segments(window, {"contains": "sentence 4999", "limit": "500"})
     bridge_tools.get_active_segment(window, {})
     assert time.perf_counter() - started < 2.0
+
+
+# ── Checks ─────────────────────────────────────────────────────────────────
+
+
+def run_off_gui(prepared):
+    """As call_tool does it: what the tool returns runs on another thread."""
+    assert isinstance(prepared, bridge_tools.RunOffGuiThread)
+    out = {}
+    thread = threading.Thread(target=lambda: out.update(result=prepared.function()))
+    thread.start()
+    thread.join()
+    return out["result"]
+
+
+def checked_project(pairs):
+    return make_window(Project(name="Acme PROJ-001", source_lang="nl", target_lang="en", segments=[
+        Segment(id=i, source=source, target=target, status="draft")
+        for i, (source, target) in enumerate(pairs, start=1)]))
+
+
+def issues(window, check, **params):
+    result = run_off_gui(bridge_tools.qa_check(window, {"type": check, **params}))
+    return result, {i["id"]: i["detail"] for i in result["issues"]}
+
+
+def test_check_numbers_sets_separators_aside_and_ignores_the_digits_in_tags():
+    window = checked_project([
+        ("De prijs is 1.234,56 euro.", "The price is 1,234.56 euros."),      # same number, other separators
+        ("Zie <t1>figuur 3</t1> en 4.", "See <t1>Figure 3</t1> and 5."),      # 4 became 5
+        ("Draai 90 graden.", "Turn 90 degrees."),
+        ("Twee kleppen, 10 mm.", ""),                                        # not translated: not checked
+        ("Stap <t2>één</t2>.", "Step <t9>one</t9>."),                        # tag numbers are not numbers
+    ])
+    result, found = issues(window, "numbers")
+    assert result["segmentsChecked"] == 4 and result["issuesFound"] == 1
+    assert found == {2: "source numbers [3, 4] vs target [3, 5]"}
+
+
+def test_check_tags_reports_what_was_lost_and_gained():
+    window = checked_project([
+        ("Druk op <b>Start</b>.", "Press <b>Start</b>."),
+        ("Druk op <b>Start</b>.", "Press Start."),
+        ("Klaar.", "Done<i>.</i>"),
+    ])
+    result, found = issues(window, "tags")
+    assert result["issuesFound"] == 2
+    assert found[2] == "missing from the target: <b>, </b>"
+    assert found[3] == "in the target but not in the source: <i>, </i>"
+
+
+def test_check_nbsp_counts_only_the_ordinary_non_breaking_space():
+    window = checked_project([
+        ("230\u00a0V en 50\u00a0%.", "230\u00a0V and 50 %."),     # one lost
+        ("230\u00a0V.", "230\u00a0V."),
+        ("230\u00a0V.", "230\u202fV."),                           # narrow one is another character
+        ("230 V.", "230\u00a0V."),                                 # more in the target is not reported
+    ])
+    result, found = issues(window, "nbsp")
+    assert found == {1: "source has 2 non-breaking space(s), target has 1",
+                     3: "source has 1 non-breaking space(s), target has 0"}
+
+
+def test_a_clean_or_untranslated_project_says_so_and_a_long_list_is_cut_off():
+    clean, _ = issues(checked_project([("Een 1.", "One 1.")]), "numbers")
+    assert clean["issuesFound"] == 0 and "match" in clean["note"]
+    empty, _ = issues(checked_project([("Een 1.", "")]), "numbers")
+    assert empty["segmentsChecked"] == 0 and "nothing to check" in empty["note"]
+
+    many = checked_project([(f"Maat {i}.", "Size 0.") for i in range(1, 121)])
+    result, found = issues(many, "numbers", limit="50")
+    assert result["issuesFound"] == 120 and len(found) == 50 and result["truncated"] is True
+
+    with pytest.raises(bridge_tools.BridgeToolError, match="Unknown check"):
+        bridge_tools.qa_check(many, {"type": "spelling"})
+
+
+def test_inconsistencies_compare_text_without_tags_and_are_paged():
+    window = checked_project([
+        ("Sluit de klep.", "Close the valve."),
+        ("Sluit de <b>klep</b>.", "Shut the valve."),        # same source apart from tags: inconsistent
+        ("Open de klep.", "Open the valve."),
+        ("Open de klep.", "Open  the <b>valve</b>."),         # same target apart from tags and spacing: fine
+        ("Sluit de klep.", ""),                               # not translated: not counted
+        ("Start de pomp.", "Start the pump."),
+        ("Start de pomp.", "Switch on the pump."),
+    ])
+    result = run_off_gui(bridge_tools.find_inconsistencies(window, {}))
+    assert result["groupsFound"] == 2
+    first = result["groups"][0]
+    assert first["source"] == "Sluit de klep." and first["translations"] == 2
+    assert [o["id"] for o in first["occurrences"]] == [1, 2]
+
+    page = run_off_gui(bridge_tools.find_inconsistencies(window, {"limit": "1"}))
+    assert page["returned"] == 1 and page["truncated"] is True and "offset=1" in page["note"]
+    last = run_off_gui(bridge_tools.find_inconsistencies(window, {"limit": "1", "offset": "1"}))
+    assert last["groups"][0]["source"] == "Start de pomp." and last["truncated"] is False
+
+
+def test_checks_work_on_a_copy_so_typing_during_a_check_cannot_disturb_it():
+    window = checked_project([("Maat 5.", "Size 6.")])
+    prepared = bridge_tools.qa_check(window, {"type": "numbers"})
+    window.current_project.segments[0].target = "Size 5."   # the translator fixes it meanwhile
+    window.current_project.segments.clear()                  # or closes the project
+    assert run_off_gui(prepared)["issuesFound"] == 1         # the check reports what it was given
+
+
+def test_the_checks_are_quick_on_a_large_project():
+    # Tested at 50,000 segments, half of them repeats.
+    window = checked_project([(f"Zie <t1>figuur {i % 25000}</t1>, 1.234,5 mm.",
+                               f"See <t1>Figure {i % 25000}</t1>, 1,234.5 mm.") for i in range(50_000)])
+    started = time.perf_counter()
+    for check in ("numbers", "tags", "nbsp"):
+        assert issues(window, check)[0]["issuesFound"] == 0
+    assert run_off_gui(bridge_tools.find_inconsistencies(window, {}))["groupsFound"] == 0
+    assert time.perf_counter() - started < 20.0
 
 
 # ── Go to segment ──────────────────────────────────────────────────────────
