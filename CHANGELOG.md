@@ -5,6 +5,13 @@ All notable changes to Supervertaler Workbench are documented in this file.
 **Current Version:** v1.10.382 (November 26, 2026)
 
 
+## Unreleased
+
+### Improvements
+
+- **SuperBrowser is spelled with a capital B.** The Tools menu item, the window title and the panel's heading now say “SuperBrowser”, like SuperLookup and the other Super- names, and as the Help site already does. Only the name on screen changes: your saved logins for ChatGPT, Claude and Gemini are kept.
+
+
 ## v1.10.382 - November 26, 2026
 
 Claude Desktop can now look at the project you have open in Workbench (read-only for now), the grid scrolls smoothly, and TermLens is faster and no longer shows “No matches” when your termbases do have terms.

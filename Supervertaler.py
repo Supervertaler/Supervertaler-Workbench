@@ -1208,7 +1208,7 @@ class SupervertalerQt(TrayMixin, WindowShellMixin, MTEnginesMixin, FirstRunMixin
     
     
     def open_superbrowser_window(self):
-        """Open Superbrowser (the multi-chat AI browser) in its own window.
+        """Open SuperBrowser (the multi-chat AI browser) in its own window.
 
         Removed in v1.9.385's simplification series, restored in v1.10.365
         because a user asked after it. Its old home - the Tools tab - no
@@ -1234,7 +1234,7 @@ class SupervertalerQt(TrayMixin, WindowShellMixin, MTEnginesMixin, FirstRunMixin
 
         window = QWidget()
         window.setWindowFlags(Qt.WindowType.Window)
-        window.setWindowTitle(self.tr("🌐 Superbrowser – Supervertaler"))
+        window.setWindowTitle(self.tr("🌐 SuperBrowser – Supervertaler"))
         # Three browser columns want width; height matches the TMX Editor.
         window.resize(1500, 850)
 
