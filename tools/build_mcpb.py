@@ -41,8 +41,9 @@ def manifest(version: str) -> dict:
         "long_description": (
             "Gives AI assistants a live view of the project open in Supervertaler Workbench: the project "
             "and its progress, its segments with source and target, the segment you are in, the terms "
-            "your termbases have for a text, a search of your translation memories, comments, and your "
-            "prompt library. The assistant can move the cursor but cannot change the project. Requires "
+            "your termbases have for a text, a search of your translation memories, checks on numbers, "
+            "tags, non-breaking spaces and inconsistent translations, comments, and your prompt library. "
+            "The assistant can move the cursor but cannot change the project. Requires "
             "Supervertaler Workbench to be running. Everything stays on your machine: the connection is "
             "loopback-only and token-authenticated."
         ),

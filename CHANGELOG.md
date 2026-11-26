@@ -2,10 +2,12 @@
 
 All notable changes to Supervertaler Workbench are documented in this file.
 
-**Current Version:** v1.10.381 (November 19, 2026)
+**Current Version:** v1.10.382 (November 26, 2026)
 
 
-## Unreleased
+## v1.10.382 - November 26, 2026
+
+Claude Desktop can now look at the project you have open in Workbench (read-only for now), the grid scrolls smoothly, and TermLens is faster and no longer shows “No matches” when your termbases do have terms.
 
 ### Improvements
 
