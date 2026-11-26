@@ -3487,13 +3487,21 @@ class TranslationMemoriesMixin:
             # Cache results regardless of whether user moved
             if tm_match_objects:
                 with self.translation_matches_cache_lock:
-                    if segment_id in self.translation_matches_cache:
-                        self.translation_matches_cache[segment_id]["TM"] = tm_match_objects
-                    else:
-                        self.translation_matches_cache[segment_id] = {
-                            "LLM": [], "NT": [], "MT": [], "TM": tm_match_objects,
-                            "Termbases": getattr(self, '_pending_termbase_matches', [])
-                        }
+                    entry = self.translation_matches_cache.get(segment_id)
+                    if entry is not None:
+                        entry["TM"] = tm_match_objects
+                if entry is None:
+                    # No entry yet: make a whole one, terms included. This
+                    # used to borrow the term list last worked out for an AI
+                    # translation (_pending_termbase_matches): another
+                    # segment's terms, or none, which TermLens then showed
+                    # here as this segment's.
+                    segment = next((s for s in (self.current_project.segments if self.current_project else [])
+                                    if s.id == segment_id), None)
+                    if segment is not None:
+                        fresh = self._fetch_all_matches_for_segment(segment)
+                        with self.translation_matches_cache_lock:
+                            self.translation_matches_cache.setdefault(segment_id, fresh)["TM"] = tm_match_objects
 
             # If user moved to a different segment, don't update UI
             if current_segment_id is not None and current_segment_id != segment_id:
