@@ -1369,6 +1369,7 @@ class TermbasesMixin:
                                     ]
                                     self.termbase_index.append(index_entry)
                                     self.termbase_index.sort(key=lambda x: len(x['source_term_lower']), reverse=True)
+                                    self.termbase_index_generation = getattr(self, 'termbase_index_generation', 0) + 1
 
                                 # v1.10.232: recompute the FULL match set for this
                                 # segment rather than seeding the cache with only
@@ -4531,6 +4532,18 @@ class TermbasesMixin:
                 # find_termbase_matches_in_source knows an empty list
                 # means "no active terms" rather than "not yet built".
                 self._termbase_index_built = True
+                self.termbase_index_generation = getattr(self, 'termbase_index_generation', 0) + 1
+
+            # Everything worked out from the old terms goes. The match cache
+            # keeps a term list per segment, and nothing cleared it here: a
+            # segment looked ahead to before a termbase was ticked, or before
+            # the index was built at all, kept its empty list and TermLens
+            # showed "No matches" there until F5 (Nov 2026). The callers
+            # cleared termbase_cache, most of them, and never this one.
+            with self.termbase_cache_lock:
+                self.termbase_cache.clear()
+            with self.translation_matches_cache_lock:
+                self.translation_matches_cache.clear()
 
             elapsed = time.time() - start_time
             self.log(f"✅ Built termbase index: {len(new_index)} terms in {elapsed:.2f}s")

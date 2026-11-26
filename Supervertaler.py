@@ -827,6 +827,10 @@ class SupervertalerQt(TrayMixin, WindowShellMixin, MTEnginesMixin, FirstRunMixin
         # Structure: list of term dicts with pre-compiled regex patterns
         self.termbase_index = []
         self.termbase_index_lock = threading.Lock()
+        # Goes up each time the index is replaced. The look-ahead worker reads
+        # it before it searches and drops its result if it has moved on: the
+        # result was worked out from terms that are no longer the terms.
+        self.termbase_index_generation = 0
         # v1.10.153: distinguishes "no terms" from "not yet built". Without
         # this flag, find_termbase_matches_in_source treats an empty index
         # as "fall back to the per-word SQL query path" — fine when the

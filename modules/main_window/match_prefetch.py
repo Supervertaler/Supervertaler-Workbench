@@ -212,7 +212,13 @@ class MatchPrefetchMixin:
                     continue
                 
                 # Fetch TM/termbase matches (pass cursor for thread-safe termbase lookups)
+                generation = getattr(self, 'termbase_index_generation', 0)
                 matches = self._fetch_all_matches_for_segment(segment, thread_db_cursor, tm_ids=active_tm_ids)
+                if generation != getattr(self, 'termbase_index_generation', 0):
+                    # The terms changed while this segment was being looked
+                    # up, and the caches were cleared for it: what we have
+                    # is from the old terms. Leave it to a later pass.
+                    continue
 
                 # Count matches for logging and proactive highlighting
                 tm_count = len(matches.get("TM", []))
@@ -372,13 +378,16 @@ class MatchPrefetchMixin:
         # thread-safe to call from this worker; no DB cursor needed.
         if termbase_matches_raw is None:
             try:
+                generation = getattr(self, 'termbase_index_generation', 0)
                 termbase_matches_raw = self._deduplicate_termbase_matches(
                     self._search_termbase_in_memory(segment.source)
                 )
-                # Also populate the termbase cache for future use
+                # Also populate the termbase cache for future use (not with a
+                # result from terms that were replaced while we searched)
                 if termbase_matches_raw:
                     with self.termbase_cache_lock:
-                        self.termbase_cache[segment.id] = termbase_matches_raw
+                        if generation == getattr(self, 'termbase_index_generation', 0):
+                            self.termbase_cache[segment.id] = termbase_matches_raw
             except Exception:
                 pass  # Silently continue
         
