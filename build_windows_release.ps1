@@ -158,3 +158,19 @@ Write-Host "=== Zipping to $zipPath ===" -ForegroundColor Cyan
 & $py .\create_release_zip.py --dist-dir $distDir --output-zip $zipPath --flavor unified
 
 Write-Host "DONE. Release asset: $zipPath" -ForegroundColor Green
+
+# The second release asset: the Claude Desktop extension that connects an AI
+# assistant to a running Workbench. The Help page links to it by this exact
+# name under releases/latest, so every release must carry it. It needs the
+# .NET SDK and the Supervertaler-for-Trados checkout next to this one (the
+# MCP server's source lives there); see tools\build_mcpb.py.
+Write-Host "=== Building the MCP Server extension (.mcpb) ===" -ForegroundColor Cyan
+& $py .\tools\build_mcpb.py --version $version
+if ($LASTEXITCODE -eq 0) {
+  Write-Host "DONE. Release asset: dist\Supervertaler-Workbench-MCP-Server.mcpb" -ForegroundColor Green
+} else {
+  Write-Host "WARNING: the MCP Server extension was NOT built. The ZIP above is fine, but attach" -ForegroundColor Red
+  Write-Host "  dist\Supervertaler-Workbench-MCP-Server.mcpb to the release too, or the download link" -ForegroundColor Red
+  Write-Host "  on docs.supervertaler.com/workbench/ai-translation/mcp-server/ will not work." -ForegroundColor Red
+  Write-Host "  Fix the error above and run: python tools\build_mcpb.py --version $version" -ForegroundColor Red
+}

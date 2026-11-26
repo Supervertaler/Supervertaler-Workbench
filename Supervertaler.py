@@ -2886,6 +2886,11 @@ class SupervertalerQt(TrayMixin, WindowShellMixin, MTEnginesMixin, FirstRunMixin
             if self.project_modified:
                 title += " *"
         self.setWindowTitle(title)
+        # Every project open/close passes through here: keep the bridge's
+        # handshake naming the open project (see supervertaler_bridge_server).
+        bridge = getattr(self, '_bridge_server', None)
+        if bridge is not None:
+            bridge.note_state(self.current_project.name if self.current_project else "", __version__)
     
     def _go_to_superlookup(self, query=None, source_lang=None, target_lang=None,
                            switch_to_vertical=True):
