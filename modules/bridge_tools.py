@@ -369,19 +369,23 @@ def _tm_rows(window) -> List[Dict[str, Any]]:
     if manager is None or database is None:
         raise BridgeToolError("Workbench's translation memories are not loaded yet. Try again in a moment.",
                               status=503)
-    active = set(manager.get_active_tm_ids(getattr(project, "id", None)))
+    project_id = getattr(project, "id", None)
+    active = set(manager.get_active_tm_ids(project_id))
     # Not tm_metadata_mgr.get_all_tms(): that counts every unit of every TM,
     # which is a slow way to learn six names.
     cursor = database.get_reader_connection().cursor()
     try:
-        cursor.execute("SELECT name, tm_id, source_lang, target_lang, is_project_tm, read_only "
+        cursor.execute("SELECT name, tm_id, source_lang, target_lang, is_project_tm, read_only, project_id "
                        "FROM translation_memories ORDER BY name COLLATE NOCASE")
         return [{
             "name": row[0],
             "tmId": row[1],
             "sourceLanguage": row[2],
             "targetLanguage": row[3],
-            "projectTm": bool(row[4]),
+            # "Project TM" is a flag a TM keeps from the project it was made
+            # for. Only say it for the project that is open, or the assistant
+            # reports another project's TM as this one's.
+            "projectTm": bool(row[4]) and project_id is not None and row[6] == project_id,
             "readOnly": bool(row[5]),
             "activeForProject": row[1] in active,
         } for row in cursor.fetchall()]
@@ -438,12 +442,25 @@ def go_to_segment(window, params: Params) -> Dict[str, Any]:
         raise BridgeToolError(f"This project has no segment {segment_id}.")
 
     window._navigate_to_segment_by_id(segment_id)
-    # Say what happened, not what was asked: a grid filter can hide the row.
-    if _active_segment_id(window) != segment_id:
+    # Say what happened, not what was asked.
+    landed = _active_segment_id(window)
+    if landed == segment_id:
+        return {"ok": True, "activeSegmentId": segment_id}
+
+    # Why not? Tell a filter (the user can clear it) from a fault (they cannot),
+    # with what the grid itself says rather than a guess.
+    table = getattr(window, "table", None)
+    row = window._find_row_for_segment(segment_id) if hasattr(window, "_find_row_for_segment") else -1
+    hidden = bool(table is not None and row >= 0 and table.isRowHidden(row))
+    filtered = getattr(window, "_active_text_filter_rows", None) is not None
+    if hidden and filtered:
         raise BridgeToolError(
-            f"Workbench could not move to segment {segment_id}. It may be hidden by a filter in the grid: "
-            "ask the user to clear the filter.")
-    return {"ok": True, "activeSegmentId": segment_id}
+            f"Segment {segment_id} is hidden by the filter that is set in Workbench's grid, so the cursor "
+            "was not moved. Ask the user to clear the filter, then try again.")
+    raise BridgeToolError(
+        f"Workbench did not move to segment {segment_id} (the cursor is on segment {landed}). No text "
+        f"filter explains it: grid row {row}, row hidden: {hidden}, text filter set: {filtered}. Tell the "
+        "user this looks like a fault in Workbench and give them these details.")
 
 
 HELP_CARD = """\
@@ -544,8 +561,8 @@ _TOOLS: List[Dict[str, Any]] = [
     _tool("go_to_segment", "/v1/go-to-segment", go_to_segment,
           "Move Workbench's cursor to a segment and bring it into view, as if the translator had clicked "
           "it. Use it when the user asks to be taken to a segment, or to show them the one you are "
-          "talking about. It changes no text. Fails with an explanation when the segment is hidden by a "
-          "grid filter.",
+          "talking about. It changes no text. When the cursor does not end up on that segment it fails "
+          "and says why: relay the reason as given, do not guess one.",
           {"id": {"type": "integer", "description": "Segment id from get_segments."}},
           ["id"], method="POST", access="write"),
     _tool("lookup_term", "/v1/term-lookup", lookup_term,
@@ -557,8 +574,9 @@ _TOOLS: List[Dict[str, Any]] = [
           {"text": {**_STRING, "description": "Text to scan for termbase terms."}},
           ["text"]),
     _tool("list_tms", "/v1/tms", list_tms,
-          "List Workbench's translation memories: name, languages, whether it is the project's own TM, "
-          "read-only, and activeForProject (ticked for the open project)."),
+          "List Workbench's translation memories: name, languages, projectTm (it is the open project's "
+          "own TM), readOnly, and activeForProject (ticked for the open project, so it is searched and "
+          "used for matches)."),
     _tool("search_tm", "/v1/tm-search", search_tm,
           "Search the translation memories for a word or phrase (a concordance search): finds units whose "
           "source or target contains it, newest first, with the TM each came from. Use it for 'how was "

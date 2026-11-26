@@ -208,11 +208,14 @@ def test_a_large_project_is_answered_quickly():
 # ── Go to segment ──────────────────────────────────────────────────────────
 
 
-def navigating_window(count=10, lands=True):
+def navigating_window(count=10, lands=True, hidden=False, filtered=False):
     window = make_window(make_project(count), active_id=1)
     state = {"active": 1}
     window._get_current_segment_id = lambda: state["active"]
     window._navigate_to_segment_by_id = lambda segment_id: state.update(active=segment_id) if lands else None
+    window._find_row_for_segment = lambda segment_id: segment_id - 1
+    window.table = SimpleNamespace(isRowHidden=lambda row: hidden)
+    window._active_text_filter_rows = [0] if filtered else None
     return window, state
 
 
@@ -230,9 +233,17 @@ def test_go_to_a_segment_that_does_not_exist_or_cannot_be_reached_says_so():
 
     # Hidden by a grid filter: Workbench does not move. Reporting success
     # would have the assistant talk about a segment the user is not looking at.
-    window, state = navigating_window(lands=False)
-    with pytest.raises(bridge_tools.BridgeToolError, match="could not move"):
+    window, state = navigating_window(lands=False, hidden=True, filtered=True)
+    with pytest.raises(bridge_tools.BridgeToolError, match="hidden by the filter"):
         bridge_tools.go_to_segment(window, {"id": "7"})
+
+    # Not moved and no filter to blame: say that, with what the grid reports,
+    # instead of sending the user to clear a filter that is not there.
+    window, state = navigating_window(lands=False)
+    with pytest.raises(bridge_tools.BridgeToolError) as error:
+        bridge_tools.go_to_segment(window, {"id": "7"})
+    assert "fault in Workbench" in str(error.value) and "cursor is on segment 1" in str(error.value)
+    assert "grid row 6, row hidden: False, text filter set: False" in str(error.value)
 
 
 # ── Terms and TMs, against a real (temporary) database ─────────────────────
@@ -343,6 +354,13 @@ def test_list_tms_says_which_are_active_for_the_project(db, tms):
     listed = bridge_tools.list_tms(DataWindow(db), {})
     assert [(t["name"], t["activeForProject"]) for t in listed["tms"]] == [
         ("Acme TM", True), ("Other client", False)]
+
+
+def test_only_the_open_projects_own_tm_is_called_its_project_tm(db, tms):
+    tms.create_tm("This project", "this_tm", "nl", "en", is_project_tm=True, project_id=PROJECT_ID)
+    tms.create_tm("Another project", "another_tm", "nl", "en", is_project_tm=True, project_id=7)
+    flags = {t["name"]: t["projectTm"] for t in bridge_tools.list_tms(DataWindow(db), {})["tms"]}
+    assert flags == {"Acme TM": False, "Other client": False, "This project": True, "Another project": False}
 
 
 def test_search_tm_searches_the_active_tms_off_the_gui_thread(db, tms):
