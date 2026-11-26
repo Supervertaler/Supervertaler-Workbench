@@ -3404,18 +3404,11 @@ class TranslationMemoriesMixin:
                     entry = self.translation_matches_cache.get(segment.id)
                     if entry is not None:
                         entry["TM"] = [mo]
-                if entry is None:
-                    # No entry yet: make a whole one, terms included. An entry
-                    # holding only the TM match (an empty term list) was read
-                    # back as "this segment has no terms", so TermLens showed
-                    # nothing on a segment with a 100% match until F5. The
-                    # terms come from the term cache or the in-memory index,
-                    # as in the prefetch; no cursor, so no second TM lookup.
-                    # If that fails, no entry is made and the move does a
-                    # fresh lookup, as on any segment not cached yet.
-                    fresh = self._fetch_all_matches_for_segment(segment)
-                    with self.translation_matches_cache_lock:
-                        self.translation_matches_cache.setdefault(segment.id, fresh)["TM"] = [mo]
+                    else:
+                        # No entry yet. It holds no terms (see _segment_terms),
+                        # so one with only the TM match says nothing wrong.
+                        self.translation_matches_cache[segment.id] = {
+                            "LLM": [], "NT": [], "MT": [], "TM": [mo]}
             except Exception:
                 pass
             return True
@@ -3490,18 +3483,9 @@ class TranslationMemoriesMixin:
                     entry = self.translation_matches_cache.get(segment_id)
                     if entry is not None:
                         entry["TM"] = tm_match_objects
-                if entry is None:
-                    # No entry yet: make a whole one, terms included. This
-                    # used to borrow the term list last worked out for an AI
-                    # translation (_pending_termbase_matches): another
-                    # segment's terms, or none, which TermLens then showed
-                    # here as this segment's.
-                    segment = next((s for s in (self.current_project.segments if self.current_project else [])
-                                    if s.id == segment_id), None)
-                    if segment is not None:
-                        fresh = self._fetch_all_matches_for_segment(segment)
-                        with self.translation_matches_cache_lock:
-                            self.translation_matches_cache.setdefault(segment_id, fresh)["TM"] = tm_match_objects
+                    else:
+                        self.translation_matches_cache[segment_id] = {
+                            "LLM": [], "NT": [], "MT": [], "TM": tm_match_objects}
 
             # If user moved to a different segment, don't update UI
             if current_segment_id is not None and current_segment_id != segment_id:
