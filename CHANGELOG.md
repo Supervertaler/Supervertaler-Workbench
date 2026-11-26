@@ -2,10 +2,12 @@
 
 All notable changes to Supervertaler Workbench are documented in this file.
 
-**Current Version:** v1.10.382 (November 26, 2026)
+**Current Version:** v1.10.383 (November 26, 2026)
 
 
-## Unreleased
+## v1.10.383 - November 26, 2026
+
+Gemini 3.8 Flash is the recommended Gemini model, the formatting shortcuts work in Phrase projects, and SuperBrowser gets its capital B.
 
 ### Improvements
 
