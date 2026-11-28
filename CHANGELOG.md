@@ -11,6 +11,8 @@ All notable changes to Supervertaler Workbench are documented in this file.
 
 - **Edit TM Entry: the source can be edited too.** Right-clicking a TM match and choosing **Edit TM Entry** let you change only the target. You can now correct the source as well. An entry needs both, so an empty source or target is refused.
 
+- **A slow move between segments now says where the time went.** When moving to a segment takes longer than a tenth of a second, the Log tab already noted the total. It now adds a second line listing each step that took a millisecond or more, slowest first, so we can see which part to speed up. Nothing else changes, and a fast move logs nothing.
+
 ### Fixes
 
 - **An edited or deleted TM entry no longer comes back.** After **Edit TM Entry** or **Delete TM Entry**, the TM itself was right, but going to another segment and back could show the entry as it was before, and insert that. Workbench now looks those matches up again. Deleting an entry that was already gone said it was deleted; it now says it couldn't be found. Editing or deleting a match found in the other direction ("reversed") now works too.

@@ -25,6 +25,24 @@ from modules.tag_text import expand_compact_tags, strip_outer_wrapping_tags
 from typing import Dict, Optional
 
 
+def format_move_steps(steps, total_ms: float) -> str:
+    """One log line saying where a slow move's time went.
+
+    `steps` is [(label, ms), ...] in the order they ran. Steps of 1 ms or
+    more are named, slowest first; a label that ran twice is added up.
+    Everything else (the steps under 1 ms, and whatever ran after the last
+    one) is the "rest", so the figures always add up to the total.
+    """
+    by_label = {}
+    for label, ms in steps:
+        by_label[label] = by_label.get(label, 0.0) + ms
+    named = sorted(((ms, label) for label, ms in by_label.items() if ms >= 1.0), reverse=True)
+    parts = [f"{label} {ms:.1f}" for ms, label in named]
+    rest = total_ms - sum(ms for ms, _ in named)
+    parts.append(f"rest {max(rest, 0.0):.1f}")
+    return ", ".join(parts)
+
+
 class GridNavigationMixin:
     def get_status_icon(self, status: str) -> str:
         """Get status icon for display"""
@@ -427,6 +445,18 @@ class GridNavigationMixin:
         import time as _profile_time
         _profile_t0 = _profile_time.perf_counter()
 
+        # Every stretch of this method is timed, so a slow move can say where
+        # its time went: the named `_pcs` blocks only speak above 50 ms, and
+        # on a real project two thirds of a 250 ms move sat in steps below
+        # that. `_lap` costs one clock read; nothing is logged for a fast move.
+        _steps = []
+        _lap_t = [_profile_t0]
+
+        def _lap(label):
+            now = _profile_time.perf_counter()
+            _steps.append((label, (now - _lap_t[0]) * 1000.0))
+            _lap_t[0] = now
+
         # Clear text selections in previous row's source and target cells
         if previous_row >= 0 and previous_row < self.table.rowCount():
             # Clear source cell selection (column 2)
@@ -442,6 +472,7 @@ class GridNavigationMixin:
                 cursor = target_widget.textCursor()
                 cursor.clearSelection()
                 target_widget.setTextCursor(cursor)
+        _lap("clear old selection")
         
         # DEBUG: Also log all connected signals for this table (only in debug mode)
         if self.debug_mode_enabled:
@@ -471,6 +502,7 @@ class GridNavigationMixin:
 
             if not self.current_project or current_row < 0:
                 return
+            _lap("number highlight and centre")
 
             if current_row < len(self.current_project.segments):
                 # CRITICAL: Get segment by ID from the grid, not by row index!
@@ -492,6 +524,7 @@ class GridNavigationMixin:
                 if not segment:
                     self.log(f"⚠️ Could not find segment with ID {segment_id} in project")
                     return
+                _lap("find segment")
                 
                 # If segment has a batch TM match, display it in the Match Panel immediately
                 batch_match = getattr(segment, '_batch_tm_match', None)
@@ -510,14 +543,17 @@ class GridNavigationMixin:
                         'reverse_match': batch_match.get('reverse_match', False),
                     }]
                     self.set_compare_panel_matches(segment.id, search_source, tm_matches, [])
+                _lap("batch TM match")
 
                 # ⚡ ALWAYS show the exact (100%) TM match instantly on selection —
                 # synchronous, cache-independent, never blocked by a termbase match
                 # or the debounced async worker. Fuzzy matches still stream in below.
                 self._show_instant_tm_match(segment)
+                _lap("instant TM match")
 
                 # Update Preview panel - scroll to and highlight this segment
                 self._scroll_preview_to_segment(segment_id)
+                _lap("preview scroll")
 
                 # Update Translation Results panel header with segment info
                 if hasattr(self, 'results_panels'):
@@ -526,6 +562,7 @@ class GridNavigationMixin:
                             panel.set_segment_info(segment.id, segment.source)
                         except Exception as e:
                             self.log(f"Error updating Translation Results panel header: {e}")
+                _lap("results header")
                 
                 # Update toolbar segment info and status
                 if hasattr(self, 'tab_seg_info'):
@@ -546,6 +583,7 @@ class GridNavigationMixin:
                                 self.tab_status_combo.blockSignals(False)
                     except Exception as e:
                         self.log(f"Error updating toolbar: {e}")
+                _lap("toolbar")
                 
                 # Update Translation Results panel notes
                 if hasattr(self, 'translation_results_panel') and self.translation_results_panel:
@@ -556,13 +594,17 @@ class GridNavigationMixin:
                         self.translation_results_panel.notes_edit.blockSignals(False)
                     except Exception as e:
                         self.log(f"Error updating notes in Translation Results panel: {e}")
+                _lap("results notes")
                 
                 # Update bottom Notes tab with segment notes
                 self._update_bottom_notes_for_segment(segment)
+                _lap("bottom notes")
                 # Scroll + highlight the Segment-Comments list to this segment (pt.3)
                 self._sync_segment_comments_to_active(segment.id)
+                _lap("segment comments")
                 # Update Proofreading note tab
                 self._update_proofreading_notes_for_segment(segment)
+                _lap("proofreading notes")
 
                 # Update legacy tabbed panels (if they exist for other views)
                 if hasattr(self, 'update_tab_segment_editor'):
@@ -573,6 +615,7 @@ class GridNavigationMixin:
                         status=segment.status,
                         notes=segment.notes
                     )
+                _lap("segment editor tab")
                 
                 # ⚡ PERFORMANCE: Skip heavy lookups if Preview tab is open
                 # User is likely just reading/reviewing, not actively translating
@@ -609,6 +652,7 @@ class GridNavigationMixin:
                 else:
                     if self.debug_mode_enabled:
                         self.log(f"🧪 Cache DISABLED - forcing fresh lookup for segment {segment.id}")
+                _lap("match cache and segment terms")
                 
                 # Process cached matches if we have them
                 if cached_matches is not None:
@@ -620,11 +664,13 @@ class GridNavigationMixin:
                                 panel.set_matches(cached_matches)
                             except Exception as e:
                                 self.log(f"Error displaying cached matches: {e}")
+                    _lap("results panels")
                     
                     # 🔄 Update TermLens with cached termbase matches (always update, even if empty)
                     if self.current_project and ((hasattr(self, 'termlens_widget') and self.termlens_widget) or (hasattr(self, 'termlens_widget_match') and self.termlens_widget_match)):
                         try:
                             termbase_matches = self._terms_for_termlens(cached_terms)
+                            _lap("terms for TermLens")
                             # Also get NT matches (fresh, not cached - they may have changed)
                             with self._pcs("find_nt_matches_in_source (cache-hit)"):
                                 nt_matches = self.find_nt_matches_in_source(segment.source)
@@ -632,12 +678,14 @@ class GridNavigationMixin:
                             # Get status hint for termbase activation
                             with self._pcs("_get_termbase_status_hint (cache-hit)"):
                                 status_hint = self._get_termbase_status_hint()
+                            _lap("NT matches and termbase hint")
 
                             # Update both TermLens widgets (left and right)
                             with self._pcs("_update_both_termlens (cache-hit)"):
                                 self._update_both_termlens(segment.source, termbase_matches, nt_matches, status_hint)
                         except Exception as e:
                             self.log(f"Error updating termlens from cache: {e}")
+                    _lap("TermLens")
                     
                     # 🎯 AUTO-FILL 100% TM MATCH from cache (if enabled in settings)
                     tm_count = len(cached_matches.get("TM", []))
@@ -667,11 +715,13 @@ class GridNavigationMixin:
                         has_fuzzy_match = any(float(tm.relevance) < 99.5 and float(tm.relevance) >= 50 for tm in tm_matches)
                         if has_fuzzy_match and not has_100_match:
                             self._play_sound_effect('tm_fuzzy_match')
+                    _lap("auto-fill and sounds")
                     
                     # Highlight termbase matches in source cell
                     if self.enable_termbase_grid_highlighting and cached_terms:
                         with self._pcs("highlight_source_with_termbase (cache-hit)"):
                             self.highlight_source_with_termbase(current_row, segment.source, cached_terms)
+                    _lap("source highlight")
 
                     # Skip the slow TERMBASE lookup below, we already have termbase matches cached
                     # But TM lookup was skipped in prefetch (not thread-safe), so schedule it now
@@ -722,6 +772,7 @@ class GridNavigationMixin:
                                 for match in cached_matches.get("Termbases", [])
                             ]
                             self._schedule_mt_and_llm_matches(segment, termbase_matches_for_tm)
+                    _lap("match panel and scheduling TM/MT/AI")
                 
                 # Check if TM/Termbase matching is enabled
                 if not matches_dict and (not self.enable_tm_matching and not self.enable_termbase_matching):
@@ -947,6 +998,7 @@ class GridNavigationMixin:
                         # Get termbase matches if they exist (could be None or empty)
                         termbase_matches = matches_dict.get('Termbases', []) if matches_dict else []
                         self._schedule_mt_and_llm_matches(segment, termbase_matches)
+                _lap("lookup without a cached entry")
                 
                 # Trigger prefetch for next 20 segments (adaptive background caching)
                 # Also trigger PROACTIVE HIGHLIGHTING for already-cached segments
@@ -977,6 +1029,7 @@ class GridNavigationMixin:
 
                     if next_segment_ids:
                         self._start_prefetch_worker(next_segment_ids)
+                _lap("prefetch and highlighting of the next 20")
 
         except Exception as e:
             self.log(f"Critical error in on_cell_selected: {e}")
@@ -986,6 +1039,7 @@ class GridNavigationMixin:
             # which hid the moves that are sluggish rather than frozen).
             if _total_ms > 100.0:
                 self.log(f"⏱️ [cell-select] TOTAL: {_total_ms:.1f} ms")
+                self.log(f"⏱️ [cell-select] steps: {format_move_steps(_steps, _total_ms)}")
 
     def on_selection_changed(self):
         """Handle selection change for row-based selection mode"""
