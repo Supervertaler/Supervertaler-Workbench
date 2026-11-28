@@ -417,7 +417,7 @@ class LLMClient:
     DEFAULT_MODELS = {
         "openai": "gpt-6.1-sol",  # GPT-6.1 Sol - the middle of OPENAI_MODELS, not its first
         "claude": "claude-sonnet-5-5",  # Claude Sonnet 5.5 (older IDs still selectable)
-        "gemini": "gemini-3.1-flash-lite",  # Gemini 3.1 Flash-Lite
+        "gemini": "gemini-3.8-flash",  # Gemini 3.8 Flash, as in the Trados and memoQ plugins (26 Nov 2026)
         "mistral": "mistral-large-latest",  # Mistral Large (flagship)
         "deepseek": "deepseek-v4-pro",  # DeepSeek V4 Pro (flagship)
         "ollama": "translategemma:12b",  # Local LLM via Ollama - purpose-built translation model
@@ -642,9 +642,9 @@ class LLMClient:
             "claude-fable-5"
         ],
         "gemini": [
-            "gemini-3.1-flash-lite",
-            "gemini-3.5-flash-lite",
             "gemini-3.8-flash",
+            "gemini-3.5-flash-lite",
+            "gemini-3.1-flash-lite",
             "gemini-3.5-flash",
             "gemini-2.5-pro",
             "gemini-3.1-pro-preview",

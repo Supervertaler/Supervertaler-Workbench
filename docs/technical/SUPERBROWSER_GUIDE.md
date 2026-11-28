@@ -1,16 +1,16 @@
-# 🌐 Superbrowser - Multi-Chat AI Browser
+# 🌐 SuperBrowser - Multi-Chat AI Browser
 
 **Version:** 1.6.4  
 **Release Date:** November 18, 2025  
 **Status:** Production Ready
 
-![Superbrowser Screenshot](screenshots/Superbrowser_2025-11-18.jpg)
+![SuperBrowser Screenshot](screenshots/Superbrowser_2025-11-18.jpg)
 
 ## Overview
 
-Superbrowser is a revolutionary feature that allows you to interact with ChatGPT, Claude, and Gemini simultaneously in a single window. No more switching between browser tabs or windows – see all three AI assistants side-by-side in resizable columns.
+SuperBrowser is a revolutionary feature that allows you to interact with ChatGPT, Claude, and Gemini simultaneously in a single window. No more switching between browser tabs or windows – see all three AI assistants side-by-side in resizable columns.
 
-## Why Superbrowser?
+## Why SuperBrowser?
 
 As translators and writers, we often need to:
 - **Compare AI responses** - See how different models handle the same prompt
@@ -55,10 +55,10 @@ Each column has:
 
 ## Getting Started
 
-### 1. Access Superbrowser
+### 1. Access SuperBrowser
 1. Open Supervertaler
 2. Navigate to **Specialised Tools** tab
-3. Click **🌐 Superbrowser**
+3. Click **🌐 SuperBrowser**
 
 ### 2. First-Time Setup
 The configuration panel is visible by default:
@@ -175,7 +175,7 @@ user_data_private/  (or user_data/)
 - **PyQt6-WebEngineCore** - Web engine core functionality
 
 ### OpenGL Context Sharing
-Superbrowser requires OpenGL context sharing to be enabled before QApplication initialization:
+SuperBrowser requires OpenGL context sharing to be enabled before QApplication initialization:
 ```python
 QApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts)
 ```
@@ -199,7 +199,7 @@ https://github.com/michaelbeijer/Supervertaler/issues
 
 ## Version History
 
-- **v1.6.4** (2025-11-18) - Initial release of Superbrowser
+- **v1.6.4** (2025-11-18) - Initial release of SuperBrowser
   - Three-column layout with ChatGPT, Claude, and Gemini
   - Persistent sessions with profile management
   - Collapsible configuration panel
@@ -207,4 +207,4 @@ https://github.com/michaelbeijer/Supervertaler/issues
 
 ---
 
-**Superbrowser** - Part of the Supervertaler suite of tools for translators and writers.
+**SuperBrowser** - Part of the Supervertaler suite of tools for translators and writers.

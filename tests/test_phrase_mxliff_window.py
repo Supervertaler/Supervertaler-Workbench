@@ -248,3 +248,137 @@ def test_phrase_docx_source_path_survives_reopen(S, monkeypatch, shown, tmp_path
     win.export_phrase_bilingual()
     assert asked == []                                # did not ask for the file
     assert loaded == [str(docx)]
+
+
+# ── Ctrl+B / Ctrl+I / Ctrl+U in a Phrase project ───────────────────────────
+
+def _apply(S, text, sel, tag):
+    start = text.index(sel)
+    from modules.tag_text import toggle_phrase_tag
+    s, e, rep = toggle_phrase_tag(text, start, start + len(sel), tag)
+    return text[:s] + rep + text[e:]
+
+
+@pytest.mark.parametrize("text, sel, tag, expected", [
+    ("Read this first.", "this", "b", "Read {b>this<b} first."),
+    ("Read {b>this<b} first.", "this", "b", "Read this first."),            # toggle off
+    ("Read {b>this<b} first.", "{b>this<b}", "b", "Read this first."),      # tags selected too
+    ("Read {b>this<b} first.", "this", "i", "Read {bi>this<bi} first."),    # combine
+    ("Read {bi>this<bi} first.", "this", "b", "Read {i>this<i} first."),    # remove one
+    ("Read {bi>this<bi} first.", "{bi>this<bi}", "u", "Read {biu>this<biu} first."),
+    ("{b>a<b} and {b>c<b}", "{b>a<b} and {b>c<b}", "i", "{i>{b>a<b} and {b>c<b}<i}"),  # not one pair
+])
+def test_toggle_phrase_tag(S, text, sel, tag, expected):
+    assert _apply(S, text, sel, tag) == expected
+
+
+class _MainWindowStub:
+    def __init__(self, project, mode):
+        self.current_project, self.tag_view_mode = project, mode
+
+
+def _select(cell, start, end):
+    cursor = cell.textCursor()
+    cursor.setPosition(start)
+    cursor.setPosition(end, cursor.MoveMode.KeepAnchor)
+    cell.setTextCursor(cursor)
+
+
+def test_ctrl_b_in_tags_view_writes_phrase_syntax_and_exports(S, monkeypatch, shown, tmp_path):
+    src = tmp_path / "Acme_PROJ-001.mxliff"
+    src.write_bytes(make())
+    win = _window(S, monkeypatch)
+    _pick(monkeypatch, open_path=src)
+    win.import_phrase_mxliff()
+
+    cell, _t = _wysiwyg_cell(S, "")
+    cell.update_display_mode("Open de behuizing niet.", True)          # Tags view
+    cell._get_main_window = lambda: _MainWindowStub(win.current_project, 'tags')
+    _select(cell, len("Open de "), len("Open de behuizing"))
+    cell._apply_formatting_tag('b')
+    assert cell.toPlainText() == "Open de {b>behuizing<b} niet."
+    cell._apply_formatting_tag('i')                                    # selection kept
+    assert cell.toPlainText() == "Open de {bi>behuizing<bi} niet."
+
+    seg = win.current_project.segments[2]
+    seg.target, seg.status = cell.toPlainText(), "confirmed"
+    out = tmp_path / "out.mxliff"
+    _pick(monkeypatch, save_path=out)
+    win.export_phrase_mxliff()
+    assert shown[-1][0] == "information", shown
+    assert MxliffDocument.load(str(out)).units[2].target == "Open de {bi>behuizing<bi} niet."
+
+
+def test_ctrl_b_in_wysiwyg_view_shows_bold_and_saves_phrase_syntax(S):
+    project = S.Project(name="Job", source_lang="en", target_lang="nl", segments=[])
+    project.mxliff_source_path = "job.mxliff"
+    win = S.SupervertalerQt.__new__(S.SupervertalerQt)
+
+    cell, _t = _wysiwyg_cell(S, "Open de behuizing niet.")            # no tags yet
+    cell._get_main_window = lambda: _MainWindowStub(project, 'wysiwyg')
+    _select(cell, len("Open de "), len("Open de behuizing"))
+    cell._apply_formatting_tag('b')
+    assert cell.toPlainText() == "Open de behuizing niet."            # shown bold, no tags
+    rebuilt = S.SupervertalerQt._wysiwyg_document_to_tagged_text(win, cell)
+    assert rebuilt == "Open de {b>behuizing<b} niet."
+    cell._apply_formatting_tag('b')                                    # toggle off
+    assert S.SupervertalerQt._wysiwyg_document_to_tagged_text(win, cell) == "Open de behuizing niet."
+
+    # an existing Phrase tag: add italic to a bold word
+    cell.update_display_mode("{b>Let op<b}: nu.", False)
+    _select(cell, 0, len("Let op"))
+    cell._apply_formatting_tag('i')
+    assert S.SupervertalerQt._wysiwyg_document_to_tagged_text(win, cell) == "{bi>Let op<bi}: nu."
+
+
+def test_ctrl_b_in_a_normal_project_still_writes_workbench_tags(S):
+    project = S.Project(name="Job", source_lang="en", target_lang="nl", segments=[])
+    cell, _t = _wysiwyg_cell(S, "")
+    cell.update_display_mode("Open de behuizing niet.", True)
+    cell._get_main_window = lambda: _MainWindowStub(project, 'tags')
+    _select(cell, len("Open de "), len("Open de behuizing"))
+    cell._apply_formatting_tag('b')
+    assert cell.toPlainText() == "Open de <b>behuizing</b> niet."
+
+
+def test_which_projects_count_as_phrase(S):
+    from modules.tag_text import is_phrase_project
+    plain = S.Project(name="Job", source_lang="en", target_lang="nl", segments=[])
+    docx = S.Project(name="Job", source_lang="en", target_lang="nl", segments=[])
+    docx.phrase_source_path = "job.docx"
+    assert is_phrase_project(docx)
+    assert not is_phrase_project(plain)
+    assert not is_phrase_project(None)               # no project open
+
+
+def test_ctrl_b_without_a_selection_changes_nothing(S):
+    project = S.Project(name="Job", source_lang="en", target_lang="nl", segments=[])
+    project.phrase_source_path = "job.docx"
+    for mode, show_tags in (('tags', True), ('wysiwyg', False)):
+        cell, _t = _wysiwyg_cell(S, "")
+        cell.update_display_mode("Open {b>de<b} behuizing.", show_tags)
+        cell._get_main_window = lambda mode=mode: _MainWindowStub(project, mode)
+        before = cell.toHtml()
+        cell._apply_formatting_tag('b')
+        assert cell.toHtml() == before
+
+
+def test_ctrl_b_with_no_window_found_falls_back_to_workbench_tags(S):
+    cell, _t = _wysiwyg_cell(S, "")
+    cell.update_display_mode("Open de behuizing niet.", True)
+    cell._get_main_window = lambda: None             # a cell outside the grid
+    _select(cell, len("Open de "), len("Open de behuizing"))
+    cell._apply_formatting_tag('b')
+    assert cell.toPlainText() == "Open de <b>behuizing</b> niet."
+
+
+def test_wysiwyg_format_change_counts_as_an_edit(S):
+    project = S.Project(name="Job", source_lang="en", target_lang="nl", segments=[])
+    project.mxliff_source_path = "job.mxliff"
+    cell, _t = _wysiwyg_cell(S, "Open de behuizing niet.")
+    cell._get_main_window = lambda: _MainWindowStub(project, 'wysiwyg')
+    fired = []
+    cell.textChanged.connect(lambda: fired.append(cell._phrase_tags))
+    _select(cell, len("Open de "), len("Open de behuizing"))
+    cell._apply_formatting_tag('u')
+    assert fired and all(fired)                      # saved, and as Phrase tags

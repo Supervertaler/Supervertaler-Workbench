@@ -2,20 +2,52 @@
 
 All notable changes to Supervertaler Workbench are documented in this file.
 
-**Current Version:** v1.10.381 (November 19, 2026)
+**Current Version:** v1.10.383 (November 26, 2026)
 
 
 ## Unreleased
 
 ### Improvements
 
-- **Gemini 3.8 Flash and 3.5 Flash-Lite can be chosen.** Google's newest Flash ($0.75/$3.75 per million tokens until the end of 2026) and its newer Flash-Lite ($0.30/$2.50) are now in the Gemini lists in Settings, QuickTrans, the AI chat and PDF Rescue, as in the Trados plugin. Both think at the lowest level they accept, so their thinking stays cheap. 3.1 Flash-Lite is still the default.
 - **Edit TM Entry: the source can be edited too.** Right-clicking a TM match and choosing **Edit TM Entry** let you change only the target. You can now correct the source as well. An entry needs both, so an empty source or target is refused.
-- **Double-click a termbase to open its terms.** In the Termbases tab, double-clicking a termbase's name (or its type, languages or term count) opens its terms window, as **Edit Terms…** in the right-click menu does. Double-clicking a checkbox still only ticks it.
 
 ### Fixes
 
 - **An edited or deleted TM entry no longer comes back.** After **Edit TM Entry** or **Delete TM Entry**, the TM itself was right, but going to another segment and back could show the entry as it was before, and insert that. Workbench now looks those matches up again. Deleting an entry that was already gone said it was deleted; it now says it couldn't be found. Editing or deleting a match found in the other direction ("reversed") now works too.
+
+
+## v1.10.383 - November 26, 2026
+
+Gemini 3.8 Flash is the recommended Gemini model, the formatting shortcuts work in Phrase projects, and SuperBrowser gets its capital B.
+
+### Improvements
+
+- **Gemini 3.8 Flash is now the recommended Gemini model, as in the Trados and memoQ plugins.** It is first in the Gemini lists in Settings, the AI Assistant and PDF Rescue, and it is what Workbench uses when no Gemini model has been chosen. Gemini 3.1 Flash-Lite, the previous recommendation, is still in every list, and a Gemini model already saved in your settings stays as it is.
+
+- **SuperBrowser is spelled with a capital B.** The Tools menu item, the window title and the panel's heading now say “SuperBrowser”, like SuperLookup and the other Super- names, and as the Help site already does. Only the name on screen changes: your saved logins for ChatGPT, Claude and Gemini are kept.
+
+### Fixes
+
+- **Ctrl+B, Ctrl+I and Ctrl+U use Phrase's tags in a Phrase project.** In a project imported from Phrase (MXLIFF or bilingual DOCX), these shortcuts on selected text now add Phrase's own tags (`{b>…<b}`, `{i>…<i}`, `{u>…<u}`), not Workbench's `<b>`, which Phrase would have taken as plain text. Pressing the same shortcut again removes the formatting, and on text that already has a Phrase tag the two are combined into one: Ctrl+I on `{b>word<b}` gives `{bi>word<bi}`. In WYSIWYG view the text simply turns bold, italic or underlined, and is saved with Phrase's tags. Other projects keep using `<b>`, `<i>` and `<u>`.
+
+
+## v1.10.382 - November 26, 2026
+
+Claude Desktop can now look at the project you have open in Workbench (read-only for now), the grid scrolls smoothly, and TermLens is faster and no longer shows “No matches” when your termbases do have terms.
+
+### Improvements
+
+- **Claude Desktop and ChatGPT Desktop can look at the project open in Workbench (first step, read-only).** Workbench now answers the Supervertaler MCP Server, as the Trados and memoQ plugins do. An AI assistant on your PC can see the open project and its progress, read segments (all, or by status, number, file or text), see which segment you are in and take you to another one, look up the terms your active termbases have for a piece of text, search your translation memories for a word or phrase, check the whole project (numbers that differ from the source, missing or extra tags, lost non-breaking spaces, and the same sentence translated in different ways), read comments, and read your prompt library. It cannot change your translations, termbases or TMs yet. It needs the Supervertaler Workbench – MCP Server extension (Windows only for now), and works only while Workbench is running. Everything stays on your PC: the connection only accepts calls from the same computer, with a password that changes each time Workbench starts.
+- **The grid scrolls smoothly.** The Editor's grid scrolled a whole row at a time, so the mouse wheel moved in uneven jumps (three rows per notch, whether they were one line or twenty) and a segment taller than the window couldn't be scrolled through: the view jumped from its top to the next segment. It now scrolls by an even distance, as Trados does, and you can stop anywhere in a long segment. Going to a segment still centres it. A move between segments that takes longer than a tenth of a second is now noted in the Log tab (it was a quarter of a second), with the part that took the time.
+- **TermLens redraws faster as you move.** Each move to a segment redraws TermLens, in both panels, and that was the largest part of a move's delay. The words without a term, which are most of a segment, are now drawn directly instead of being built from three parts each, and the row is laid out once instead of once per word. A redraw takes about half the time, and long segments gain the most. TermLens looks the same as before.
+- **Gemini 3.8 Flash and 3.5 Flash-Lite can be chosen.** Google's newest Flash ($0.75/$3.75 per million tokens until the end of 2026) and its newer Flash-Lite ($0.30/$2.50) are now in the Gemini lists in Settings, QuickTrans, the AI chat and PDF Rescue, as in the Trados plugin. Both think at the lowest level they accept, so their thinking stays cheap. 3.1 Flash-Lite is still the default.
+- **Double-click a termbase to open its terms.** In the Termbases tab, double-clicking a termbase's name (or its type, languages or term count) opens its terms window, as **Edit Terms…** in the right-click menu does. Double-clicking a checkbox still only ticks it.
+
+### Fixes
+
+- **TermLens always reads a segment's terms from one place.** Workbench kept a second copy of each segment's terms next to its remembered TM matches. Whenever the terms changed in a way that copy didn't follow, TermLens showed an old or empty list until F5, and each fix for one case left another. The second copy is gone: TermLens, the source highlighting and the match panes all ask the same place, which is cleared whenever the terms change. This also fixes a move that only refreshes the glossary showing “No matches” on a segment Workbench hadn't looked ahead to.
+- **TermLens no longer shows “No matches” after the terms change.** Workbench looks ahead and remembers each segment's matches, terms included. When the terms changed (a termbase ticked for the project, a term added, the terms loaded after a project opens) that memory was not cleared, so segments already looked ahead to kept their old term list, often an empty one, until F5. It showed on segments with a TM match, because those are the ones the look-ahead remembers. Changing the terms now clears what was remembered, in one place.
+- **TermLens shows its terms on a segment with a 100% TM match.** Landing on a segment that had an exact TM match, and that Workbench hadn't looked ahead to yet, showed “No matches” in TermLens although the termbases had terms for it; only F5 brought them back. The quick TM lookup that runs as you land noted the match with an empty term list, and TermLens took that list as final. It now notes the segment's terms as well.
 - **Gemini thinks less, so it costs less.** Gemini 3.5 Flash, 3.1 Pro and 4 Argon think before they answer, and Google bills the thinking as output. Workbench left them at Google's default level ("medium", or "high" for 3.1 Pro), so a short segment could cost many times its translation. They are now held at the lowest level each accepts ("minimal" for 3.5, "low" for the others), as in the Trados plugin. The thinking is now also counted in the token usage Workbench records.
 - **The same through OpenRouter.** Gemini models chosen under OpenRouter (Gemini 3.8 Flash and 4 Argon in its list, or a Gemini 3 model typed in) thought at their default too, and OpenRouter bills the thinking as output. They now get the same low level as when you use Google directly. Other OpenRouter models are unchanged.
 - **PDF Rescue: the same for Gemini, and room for OpenAI's thinking.** PDF Rescue now holds Gemini 3.1 Pro and 4 Argon at the same low level. OpenAI's GPT-6 models had 4,000 output tokens per page with their thinking included, so a dense page could come back short or empty; they now have 16,000 (only what is used is billed).

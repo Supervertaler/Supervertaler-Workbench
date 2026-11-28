@@ -212,7 +212,13 @@ class MatchPrefetchMixin:
                     continue
                 
                 # Fetch TM/termbase matches (pass cursor for thread-safe termbase lookups)
+                generation = getattr(self, 'termbase_index_generation', 0)
                 matches = self._fetch_all_matches_for_segment(segment, thread_db_cursor, tm_ids=active_tm_ids)
+                if generation != getattr(self, 'termbase_index_generation', 0):
+                    # The terms changed while this segment was being looked
+                    # up, and the caches were cleared for it: what we have
+                    # is from the old terms. Leave it to a later pass.
+                    continue
 
                 # Count matches for logging and proactive highlighting
                 tm_count = len(matches.get("TM", []))
@@ -225,7 +231,9 @@ class MatchPrefetchMixin:
                 # Don't cache empty results - let main thread do fresh lookup
                 if total_matches > 0:
                     with self.translation_matches_cache_lock:
-                        self.translation_matches_cache[segment_id] = matches
+                        # without the terms: they are read from _segment_terms
+                        self.translation_matches_cache[segment_id] = {
+                            kind: found for kind, found in matches.items() if kind != "Termbases"}
 
                 # PROACTIVE HIGHLIGHTING: Emit signal to apply highlighting on main thread
                 # This makes upcoming segments show their glossary matches immediately
@@ -349,82 +357,15 @@ class MatchPrefetchMixin:
             # LLM will still be fetched on-demand when user clicks
             pass
         
-        # 4. Termbase matches - try cache first, then direct lookup if cursor provided
-        termbase_matches_raw = None
-        
-        with self.termbase_cache_lock:
-            if segment.id in self.termbase_cache:
-                termbase_matches_raw = self.termbase_cache[segment.id]
-        
-        # If not in cache, match against the in-memory termbase index.
-        #
-        # v1.10.232: switched from the legacy per-word _search_termbases_thread_safe
-        # (LIKE %word% + LIMIT 30, no ORDER BY) to the same _search_termbase_in_memory
-        # that the interactive path and TermPicker use. The old path silently dropped
-        # matches when a common word (e.g. "fractie"/"fraction" in a patent termbase)
-        # appeared in >30 term entries — SQLite truncated the per-word result set
-        # arbitrarily, so a longer phrase like "non-ferrometalen fractie" could be
-        # cut while its shorter sibling "ferrometalen fractie" survived. TermLens
-        # (fed from this prefetch cache) then showed the wrong/shorter term while
-        # TermPicker (which falls back to the in-memory matcher) showed the correct
-        # one. The in-memory index scans every term with no cap, so all surfaces now
-        # agree. It reads self.termbase_index under termbase_index_lock, so it's
-        # thread-safe to call from this worker; no DB cursor needed.
-        if termbase_matches_raw is None:
-            try:
-                termbase_matches_raw = self._deduplicate_termbase_matches(
-                    self._search_termbase_in_memory(segment.source)
-                )
-                # Also populate the termbase cache for future use
-                if termbase_matches_raw:
-                    with self.termbase_cache_lock:
-                        self.termbase_cache[segment.id] = termbase_matches_raw
-            except Exception:
-                pass  # Silently continue
-        
-        # Convert raw termbase matches to TranslationMatch objects
-        if termbase_matches_raw:
-            for term_id, match_info in termbase_matches_raw.items():
-                # Extract source term, translation, ranking, and other metadata from match_info
-                if isinstance(match_info, dict):
-                    source_term = match_info.get('source', '')
-                    target_term = match_info.get('translation', '')
-                    ranking = match_info.get('ranking', None)
-                    forbidden = match_info.get('forbidden', False)
-                    is_project_termbase = match_info.get('is_project_termbase', False)
-                    termbase_name = match_info.get('termbase_name', 'Default')
-                else:
-                    # Backward compatibility: if just string (shouldn't happen with new code)
-                    source_term = str(term_id)
-                    target_term = match_info
-                    ranking = None
-                    forbidden = False
-                    is_project_termbase = False
-                    termbase_name = 'Default'
+        # 4. Termbase matches, for the caller to count and highlight with.
+        # They are not kept with the entry: see _segment_terms. This may be
+        # the look-ahead worker's thread, so the index is not built here.
+        try:
+            matches_dict["Termbases"] = self._terms_as_matches(
+                self._segment_terms(segment, build_index=False))
+        except Exception:
+            pass  # the move looks the terms up itself
 
-                match_obj = TranslationMatch(
-                    source=source_term,
-                    target=target_term,
-                    relevance=95,
-                    metadata={
-                        'termbase_name': termbase_name,
-                        'ranking': ranking,
-                        'forbidden': forbidden,
-                        'is_project_termbase': is_project_termbase,
-                        'term_id': match_info.get('term_id') if isinstance(match_info, dict) else None,
-                        'termbase_id': match_info.get('termbase_id') if isinstance(match_info, dict) else None,
-                        'domain': match_info.get('domain', '') if isinstance(match_info, dict) else '',
-                        'notes': match_info.get('notes', '') if isinstance(match_info, dict) else '',
-                        'project': match_info.get('project', '') if isinstance(match_info, dict) else '',
-                        'client': match_info.get('client', '') if isinstance(match_info, dict) else '',
-                        'target_synonyms': match_info.get('target_synonyms', []) if isinstance(match_info, dict) else []
-                    },
-                    match_type='Termbase',
-                    compare_source=source_term,
-                    provider_code='TB'
-                )
-                matches_dict["Termbases"].append(match_obj)
-        
         return matches_dict
 
     def stop_prefetch_worker(self):

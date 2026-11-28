@@ -827,6 +827,10 @@ class SupervertalerQt(TrayMixin, WindowShellMixin, MTEnginesMixin, FirstRunMixin
         # Structure: list of term dicts with pre-compiled regex patterns
         self.termbase_index = []
         self.termbase_index_lock = threading.Lock()
+        # Goes up each time the index is replaced. The look-ahead worker reads
+        # it before it searches and drops its result if it has moved on: the
+        # result was worked out from terms that are no longer the terms.
+        self.termbase_index_generation = 0
         # v1.10.153: distinguishes "no terms" from "not yet built". Without
         # this flag, find_termbase_matches_in_source treats an empty index
         # as "fall back to the per-word SQL query path" — fine when the
@@ -1204,7 +1208,7 @@ class SupervertalerQt(TrayMixin, WindowShellMixin, MTEnginesMixin, FirstRunMixin
     
     
     def open_superbrowser_window(self):
-        """Open Superbrowser (the multi-chat AI browser) in its own window.
+        """Open SuperBrowser (the multi-chat AI browser) in its own window.
 
         Removed in v1.9.385's simplification series, restored in v1.10.365
         because a user asked after it. Its old home - the Tools tab - no
@@ -1230,7 +1234,7 @@ class SupervertalerQt(TrayMixin, WindowShellMixin, MTEnginesMixin, FirstRunMixin
 
         window = QWidget()
         window.setWindowFlags(Qt.WindowType.Window)
-        window.setWindowTitle(self.tr("🌐 Superbrowser – Supervertaler"))
+        window.setWindowTitle(self.tr("🌐 SuperBrowser – Supervertaler"))
         # Three browser columns want width; height matches the TMX Editor.
         window.resize(1500, 850)
 
@@ -2882,6 +2886,11 @@ class SupervertalerQt(TrayMixin, WindowShellMixin, MTEnginesMixin, FirstRunMixin
             if self.project_modified:
                 title += " *"
         self.setWindowTitle(title)
+        # Every project open/close passes through here: keep the bridge's
+        # handshake naming the open project (see supervertaler_bridge_server).
+        bridge = getattr(self, '_bridge_server', None)
+        if bridge is not None:
+            bridge.note_state(self.current_project.name if self.current_project else "", __version__)
     
     def _go_to_superlookup(self, query=None, source_lang=None, target_lang=None,
                            switch_to_vertical=True):

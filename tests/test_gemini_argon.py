@@ -50,8 +50,8 @@ def test_argon_takes_images_and_is_sent_a_temperature():
     assert LLMClient(api_key="x", provider="gemini", model=ARGON).temperature == 0.3
 
 
-def test_the_gemini_default_is_unchanged():
-    assert LLMClient.DEFAULT_MODELS["gemini"] == "gemini-3.1-flash-lite"
+def test_the_gemini_default_is_3_8_flash_as_in_the_plugins():
+    assert LLMClient.DEFAULT_MODELS["gemini"] == "gemini-3.8-flash"
 
 
 def read(path):
@@ -78,7 +78,7 @@ def test_every_gemini_list_offers_argon(where, path, pattern):
     assert re.search(rf"[\"']{ARGON}[\"' ]", blocks[0]), f"{where} lacks {ARGON}"
 
 
-def test_settings_still_recommends_flash_lite_first():
+def test_settings_recommends_3_8_flash_first():
     block = re.search(r"gemini_combo\.addItems\(\[(.*?)\]\)", read(os.path.join("modules", "main_window", "settings.py")), re.S).group(1)
     first = re.search(r'"([^"]+)"', block).group(1)
-    assert first.startswith("gemini-3.1-flash-lite (Recommended")
+    assert first.startswith("gemini-3.8-flash (Recommended")

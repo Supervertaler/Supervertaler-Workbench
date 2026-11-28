@@ -1369,6 +1369,7 @@ class TermbasesMixin:
                                     ]
                                     self.termbase_index.append(index_entry)
                                     self.termbase_index.sort(key=lambda x: len(x['source_term_lower']), reverse=True)
+                                    self.termbase_index_generation = getattr(self, 'termbase_index_generation', 0) + 1
 
                                 # v1.10.232: recompute the FULL match set for this
                                 # segment rather than seeding the cache with only
@@ -4531,6 +4532,13 @@ class TermbasesMixin:
                 # find_termbase_matches_in_source knows an empty list
                 # means "no active terms" rather than "not yet built".
                 self._termbase_index_built = True
+                self.termbase_index_generation = getattr(self, 'termbase_index_generation', 0) + 1
+
+            # Everything worked out from the old terms goes. This is the only
+            # per-segment record of terms (see _segment_terms), so clearing
+            # it here covers every way the terms can change.
+            with self.termbase_cache_lock:
+                self.termbase_cache.clear()
 
             elapsed = time.time() - start_time
             self.log(f"✅ Built termbase index: {len(new_index)} terms in {elapsed:.2f}s")
@@ -4551,6 +4559,88 @@ class TermbasesMixin:
             self.log(f"❌ Failed to build termbase index: {e}")
             import traceback
             self.log(traceback.format_exc())
+
+    # --- A segment's terms: the one place they come from -------------------
+    # The match cache used to keep its own copy of each segment's terms.
+    # Every speed-up trusted that copy a little more, and every time the
+    # terms changed in a way nobody had thought of, TermLens showed an old
+    # or empty list until F5. There is no copy now. Everything that shows
+    # a segment's terms asks here; the answer is kept in termbase_cache,
+    # which _build_termbase_index clears whenever the terms change.
+
+    def _segment_terms(self, segment, build_index=True) -> dict:
+        """A segment's terms, {term id: term}, looked up at most once.
+
+        build_index=False is for the look-ahead worker: it must not build
+        the index (that reads the database on its thread), so before the
+        index is built it gets nothing, and nothing is remembered.
+        """
+        if not getattr(self, 'enable_termbase_matching', True):
+            return {}
+        use_cache = not getattr(self, 'disable_all_caches', False)
+        if use_cache:
+            with self.termbase_cache_lock:
+                if segment.id in self.termbase_cache:
+                    return self.termbase_cache[segment.id]
+        if not build_index and not getattr(self, '_termbase_index_built', False):
+            return {}
+        generation = getattr(self, 'termbase_index_generation', 0)
+        found = self.find_termbase_matches_in_source(segment.source) or {}
+        if use_cache:
+            with self.termbase_cache_lock:
+                # not if the terms were replaced while we searched
+                if generation == getattr(self, 'termbase_index_generation', 0):
+                    self.termbase_cache[segment.id] = found
+        return found
+
+    @staticmethod
+    def _terms_for_termlens(terms: dict) -> list:
+        """A segment's terms as the list TermLens takes."""
+        return [
+            {
+                'source_term': info.get('source', ''),
+                'target_term': info.get('translation', ''),
+                'termbase_name': info.get('termbase_name', ''),
+                'ranking': info.get('ranking', 0),
+                'is_project_termbase': info.get('is_project_termbase', False),
+                'term_id': info.get('term_id'),
+                'termbase_id': info.get('termbase_id'),
+                'notes': info.get('notes', ''),
+            }
+            for info in (terms or {}).values() if isinstance(info, dict)
+        ]
+
+    @staticmethod
+    def _terms_as_matches(terms: dict) -> list:
+        """A segment's terms as the match objects the results panels take."""
+        from modules.translation_results_panel import TranslationMatch
+        matches = []
+        for term_id, info in (terms or {}).items():
+            if not isinstance(info, dict):       # a bare translation, from very old data
+                info = {'source': str(term_id), 'translation': info, 'termbase_name': 'Default'}
+            source_term = info.get('source', '')
+            matches.append(TranslationMatch(
+                source=source_term,
+                target=info.get('translation', ''),
+                relevance=95,
+                metadata={
+                    'termbase_name': info.get('termbase_name', 'Default'),
+                    'ranking': info.get('ranking', None),
+                    'forbidden': info.get('forbidden', False),
+                    'is_project_termbase': info.get('is_project_termbase', False),
+                    'term_id': info.get('term_id'),
+                    'termbase_id': info.get('termbase_id'),
+                    'domain': info.get('domain', ''),
+                    'notes': info.get('notes', ''),
+                    'project': info.get('project', ''),
+                    'client': info.get('client', ''),
+                    'target_synonyms': info.get('target_synonyms', []),
+                },
+                match_type='Termbase',
+                compare_source=source_term,
+                provider_code='TB',
+            ))
+        return matches
 
     def _search_termbase_in_memory(self, source_text: str) -> dict:
         """
@@ -5071,68 +5161,18 @@ class TermbasesMixin:
             if not segment:
                 return
 
-            # --- Termbase grid highlighting (from cache) ---
-            if self.enable_termbase_grid_highlighting:
-                tb_dict = {}
-                with self.termbase_cache_lock:
-                    tb_dict = self.termbase_cache.get(segment_id, {})
+            terms = self._segment_terms(segment)
 
-                if not tb_dict:
-                    # Fall back to translation_matches_cache
-                    with self.translation_matches_cache_lock:
-                        cached_matches = self.translation_matches_cache.get(segment_id)
-                    if cached_matches:
-                        cached_tb = cached_matches.get("Termbases", [])
-                        if cached_tb:
-                            for match in cached_tb:
-                                term_id = match.metadata.get('term_id') if match.metadata else None
-                                key = term_id if term_id is not None else match.source
-                                tb_dict[key] = {
-                                    'source': match.source,
-                                    'translation': match.target,
-                                    'ranking': match.metadata.get('ranking', 0) if match.metadata else 0,
-                                    'is_project_termbase': match.metadata.get('is_project_termbase', False) if match.metadata else False,
-                                    'forbidden': match.metadata.get('forbidden', False) if match.metadata else False,
-                                    'termbase_name': match.metadata.get('termbase_name', '') if match.metadata else '',
-                                    'notes': match.metadata.get('notes', '') if match.metadata else '',
-                                    'term_id': term_id,
-                                    'termbase_id': match.metadata.get('termbase_id') if match.metadata else None,
-                                }
-                            if tb_dict:
-                                with self.termbase_cache_lock:
-                                    self.termbase_cache[segment_id] = tb_dict
-
-                if tb_dict:
-                    self.highlight_source_with_termbase(current_row, segment.source, tb_dict)
-                else:
-                    # No cached matches – do a fresh (cheap) termbase-only lookup
-                    fresh_tb = self.find_termbase_matches_in_source(segment.source)
-                    if fresh_tb:
-                        self.highlight_source_with_termbase(current_row, segment.source, fresh_tb)
+            # --- Termbase grid highlighting ---
+            if self.enable_termbase_grid_highlighting and terms:
+                self.highlight_source_with_termbase(current_row, segment.source, terms)
 
             # --- TermLens pane update ---
             if self.current_project and (
                 (hasattr(self, 'termlens_widget') and self.termlens_widget) or
                 (hasattr(self, 'termlens_widget_match') and self.termlens_widget_match)
             ):
-                termbase_matches = []
-                with self.translation_matches_cache_lock:
-                    tv_cached = self.translation_matches_cache.get(segment_id)
-                if tv_cached:
-                    termbase_matches = [
-                        {
-                            'source_term': match.source,
-                            'target_term': match.target,
-                            'termbase_name': match.metadata.get('termbase_name', '') if match.metadata else '',
-                            'ranking': match.metadata.get('ranking', 0) if match.metadata else 0,
-                            'is_project_termbase': match.metadata.get('is_project_termbase', False) if match.metadata else False,
-                            'term_id': match.metadata.get('term_id') if match.metadata else None,
-                            'termbase_id': match.metadata.get('termbase_id') if match.metadata else None,
-                            'notes': match.metadata.get('notes', '') if match.metadata else ''
-                        }
-                        for match in tv_cached.get("Termbases", [])
-                    ]
-
+                termbase_matches = self._terms_for_termlens(terms)
                 nt_matches = self.find_nt_matches_in_source(segment.source)
                 status_hint = self._get_termbase_status_hint()
                 self._update_both_termlens(segment.source, termbase_matches, nt_matches, status_hint)

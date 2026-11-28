@@ -3402,11 +3402,13 @@ class TranslationMemoriesMixin:
                     match_type='TM', compare_source=tm_match['source'], provider_code='TM')
                 with self.translation_matches_cache_lock:
                     entry = self.translation_matches_cache.get(segment.id)
-                    if entry is None:
-                        self.translation_matches_cache[segment.id] = {
-                            "LLM": [], "NT": [], "MT": [], "TM": [mo], "Termbases": []}
-                    else:
+                    if entry is not None:
                         entry["TM"] = [mo]
+                    else:
+                        # No entry yet. It holds no terms (see _segment_terms),
+                        # so one with only the TM match says nothing wrong.
+                        self.translation_matches_cache[segment.id] = {
+                            "LLM": [], "NT": [], "MT": [], "TM": [mo]}
             except Exception:
                 pass
             return True
@@ -3478,13 +3480,12 @@ class TranslationMemoriesMixin:
             # Cache results regardless of whether user moved
             if tm_match_objects:
                 with self.translation_matches_cache_lock:
-                    if segment_id in self.translation_matches_cache:
-                        self.translation_matches_cache[segment_id]["TM"] = tm_match_objects
+                    entry = self.translation_matches_cache.get(segment_id)
+                    if entry is not None:
+                        entry["TM"] = tm_match_objects
                     else:
                         self.translation_matches_cache[segment_id] = {
-                            "LLM": [], "NT": [], "MT": [], "TM": tm_match_objects,
-                            "Termbases": getattr(self, '_pending_termbase_matches', [])
-                        }
+                            "LLM": [], "NT": [], "MT": [], "TM": tm_match_objects}
 
             # If user moved to a different segment, don't update UI
             if current_segment_id is not None and current_segment_id != segment_id:

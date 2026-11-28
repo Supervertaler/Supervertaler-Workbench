@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QLabel, QFrame, QScrollArea,
                               QHBoxLayout, QPushButton, QToolTip, QLayout, QLayoutItem, QSizePolicy, QStyle,
                               QMenu, QMessageBox, QApplication)
 from PyQt6.QtCore import Qt, QPoint, pyqtSignal, QRect, QSize, QTimer
-from PyQt6.QtGui import QFont, QCursor, QAction, QPainter, QColor, QPen
+from PyQt6.QtGui import QFont, QFontMetrics, QCursor, QAction, QPainter, QColor, QPen
 from typing import Dict, List, Optional, Tuple
 import re
 from modules.shortcut_display import format_shortcut_for_display
@@ -560,8 +560,73 @@ class TermBlock(QWidget):
         if chip is not None and hasattr(chip, 'set_current'):
             chip.set_current(current)
 
+    # --- A word without a term: painted, no child widgets -----------------
+    # Sizes match the three widgets this replaced: a 1 px line, the word with
+    # 3 px beside it and 1 px above and below, then the dot in an 8 px font;
+    # 1 px of margin left, right and below.
+
+    def set_plain_font(self, family: str, size: int, bold: bool):
+        """Set the word's font and work out the block's size from it."""
+        font = QFont(family)
+        font.setPointSize(size)
+        font.setBold(bold)
+        self._plain_font = font
+        dot_font = QFont(self.font())
+        dot_font.setPixelSize(8)
+        self._plain_dot_font = dot_font
+        word = QFontMetrics(font)
+        self._plain_word_height = word.height() + 2
+        self._plain_dot_height = QFontMetrics(dot_font).height()
+        width = max(word.horizontalAdvance(self.source_text) + 6,
+                    QFontMetrics(dot_font).horizontalAdvance("·")) + 2
+        self._plain_size = QSize(width, 1 + self._plain_word_height + self._plain_dot_height + 1)
+        self.updateGeometry()
+        self.update()
+
+    def sizeHint(self):
+        return self._plain_size if self._plain else super().sizeHint()
+
+    def minimumSizeHint(self):
+        return self._plain_size if self._plain else super().minimumSizeHint()
+
+    def paintEvent(self, event):
+        if not self._plain:
+            return super().paintEvent(event)
+        line, word, dot = self._plain_colors
+        painter = QPainter(self)
+        inner = self.rect().adjusted(1, 0, -1, -1)
+        painter.fillRect(QRect(inner.left(), 0, inner.width(), 1), line)
+        painter.setFont(self._plain_font)
+        painter.setPen(word)
+        painter.drawText(QRect(inner.left(), 1, inner.width(), self._plain_word_height),
+                         Qt.AlignmentFlag.AlignCenter, self.source_text)
+        painter.setFont(self._plain_dot_font)
+        painter.setPen(dot)
+        painter.drawText(QRect(inner.left(), 1 + self._plain_word_height, inner.width(), self._plain_dot_height),
+                         Qt.AlignmentFlag.AlignCenter, "·")
+        painter.end()
+
     def init_ui(self):
         """Create the visual layout for this term block - COMPACT RYS-style"""
+        # A word without a term is most of a segment, and it is only a line,
+        # the word and a dot. Building that from three widgets, each with a
+        # stylesheet of its own, was most of the cost of a TermLens redraw
+        # (Nov 2026: ~2 ms a word, on every move, in both panels). Such a
+        # block is now painted and has no child widgets. See paintEvent.
+        self.source_label = None
+        self._plain = not self.translations
+        if self._plain:
+            is_dark = self.theme_manager and self.theme_manager.current_theme.name == "Dark"
+            self.bg_color = "#2A2A2A" if is_dark else "#F5F5F5"
+            self.is_effective_project = False
+            self._plain_colors = (
+                QColor("#555555" if is_dark else "#CCCCCC"),   # line
+                QColor("#FFFFFF" if is_dark else "#333333"),   # word
+                QColor("#666666" if is_dark else "#dddddd"),   # dot
+            )
+            self.set_plain_font(self.font_family, self.font_size, self.font_bold)
+            return
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(1, 0, 1, 1)
         layout.setSpacing(0)
@@ -1772,6 +1837,10 @@ class TermLensWidget(QWidget):
             
             # Update font for all term blocks
             for block in term_blocks:
+                if block.source_label is None:      # a painted word: no labels
+                    block.set_plain_font(self.current_font_family, self.current_font_size,
+                                         self.current_font_bold)
+                    continue
                 if hasattr(block, 'source_label'):
                     font = QFont(self.current_font_family)
                     font.setPointSize(self.current_font_size)
@@ -1837,6 +1906,20 @@ class TermLensWidget(QWidget):
             return
         self._pending_update = None
 
+        # Blocks added to a container that is on screen are shown one by one,
+        # and Qt lays out all of them again after each: for 33 words, 33
+        # passes over 33 blocks. Hidden while it is rebuilt, the container
+        # is laid out once. It comes back in the same turn of the event
+        # loop, so nothing is painted in between, and it comes back whatever
+        # happens while building.
+        self.terms_container.hide()
+        try:
+            self._render_matches(source_text, termbase_matches, nt_matches, status_hint)
+        finally:
+            self.terms_container.show()
+
+    def _render_matches(self, source_text, termbase_matches, nt_matches, status_hint):
+        """Rebuild the blocks. Only update_with_matches calls this."""
         self.current_source = source_text
         # Store matches for theme refresh
         self._last_termbase_matches = termbase_matches
