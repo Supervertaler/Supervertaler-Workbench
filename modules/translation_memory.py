@@ -443,9 +443,9 @@ class TMDatabase:
         """Clear all entries from a TM"""
         self.db.clear_tm(tm_id=tm_id)
     
-    def delete_entry(self, tm_id: str, source: str, target: str):
-        """Delete a specific entry from a TM"""
-        self.db.delete_entry(tm_id, source, target)
+    def delete_entry(self, tm_id: str, source: str, target: str) -> bool:
+        """Delete a specific entry from a TM. False if it was not found."""
+        return self.db.delete_entry(tm_id, source, target)
 
     def update_entry(self, tm_id: str, old_source: str, old_target: str,
                      new_source: str, new_target: str) -> bool:
@@ -850,9 +850,9 @@ class TMAgent:
         """Clear Project TM only"""
         self.tm_database.clear_tm('project')
     
-    def delete_entry(self, tm_id: str, source: str, target: str):
-        """Delete a specific entry from a TM"""
-        self.tm_database.delete_entry(tm_id, source, target)
+    def delete_entry(self, tm_id: str, source: str, target: str) -> bool:
+        """Delete a specific entry from a TM. False if it was not found."""
+        return self.tm_database.delete_entry(tm_id, source, target)
 
     def update_entry(self, tm_id: str, old_source: str, old_target: str,
                      new_source: str, new_target: str) -> bool:

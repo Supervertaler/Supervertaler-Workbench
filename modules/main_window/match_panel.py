@@ -756,120 +756,43 @@ class MatchPanelMixin:
         if not self.match_panel_tm_matches:
             return
 
-        from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QLabel,
-                                     QTextEdit, QDialogButtonBox, QMessageBox)
+        from modules.tm_entry_actions import edit_tm_entry
 
         match = self.match_panel_tm_matches[self.match_panel_tm_index]
         tm_id, tm_name, old_source, old_target = self._get_match_panel_tm_fields(match)
-
-        if not tm_id:
-            QMessageBox.warning(self, "Cannot Edit",
-                                "TM identifier is not available for this entry.")
+        edited = edit_tm_entry(self, tm_id, tm_name, old_source, old_target,
+                               reverse=self._match_panel_is_reverse(match))
+        if edited is None:
             return
 
-        dialog = QDialog(self)
-        dialog.setWindowTitle(f"Edit TM Entry – {tm_name}")
-        dialog.setMinimumWidth(520)
-        layout = QVBoxLayout(dialog)
-        layout.setSpacing(8)
-
-        layout.addWidget(QLabel(self.tr("Source (read-only):")))
-        source_edit = QTextEdit()
-        source_edit.setPlainText(old_source)
-        source_edit.setReadOnly(True)
-        source_edit.setMaximumHeight(90)
-        layout.addWidget(source_edit)
-
-        layout.addWidget(QLabel(self.tr("Target:")))
-        target_edit = QTextEdit()
-        target_edit.setPlainText(old_target)
-        target_edit.setMaximumHeight(120)
-        layout.addWidget(target_edit)
-
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
-        buttons.accepted.connect(dialog.accept)
-        buttons.rejected.connect(dialog.reject)
-        layout.addWidget(buttons)
-
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-
-        new_target = target_edit.toPlainText()
-        if new_target == old_target:
-            return  # Nothing changed
-
-        updated = False
-        try:
-            if hasattr(self, 'tm_manager') and self.tm_manager and hasattr(self.tm_manager, 'update_entry'):
-                updated = self.tm_manager.update_entry(tm_id, old_source, old_target,
-                                                       old_source, new_target)
-            elif hasattr(self, 'db_manager') and self.db_manager and hasattr(self.db_manager, 'update_entry'):
-                updated = self.db_manager.update_entry(tm_id, old_source, old_target,
-                                                       old_source, new_target)
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to update TM entry:\n{e}")
-            return
-
-        if updated:
-            self.log(f"✏️ Updated TM entry in '{tm_name}'")
-            # Patch the in-memory match so the display reflects the change immediately
-            if isinstance(match, dict):
-                match['target'] = new_target
-            else:
-                match.target = new_target
-            self._update_match_panel_tm_display()
-            # Force re-lookup next time this segment is navigated to
-            if hasattr(self, '_last_selected_row'):
-                self._last_selected_row = None
+        # Show the change at once; the cache was dropped, so the next visit
+        # to the segment looks the entry up again.
+        if isinstance(match, dict):
+            match['source'], match['target'] = edited
         else:
-            QMessageBox.warning(self, "Not Found",
-                                "The entry could not be found in the database.\n"
-                                "It may have already been changed or deleted.")
+            match.source, match.target = edited
+            match.compare_source = edited[0]
+        self._update_match_panel_tm_display()
+
+    @staticmethod
+    def _match_panel_is_reverse(match) -> bool:
+        """True when the match shows a TM entry found in the other direction."""
+        if isinstance(match, dict):
+            return bool(match.get('reverse_match', False))
+        return bool((getattr(match, 'metadata', None) or {}).get('reverse_match', False))
 
     def _match_panel_delete_tm_entry(self):
         """Delete the TM entry currently displayed in the Match Panel."""
         if not self.match_panel_tm_matches:
             return
 
-        from PyQt6.QtWidgets import QMessageBox
+        from modules.tm_entry_actions import delete_tm_entry
 
         match = self.match_panel_tm_matches[self.match_panel_tm_index]
         tm_id, tm_name, source_text, target_text = self._get_match_panel_tm_fields(match)
-
-        if not tm_id:
-            QMessageBox.warning(self, "Cannot Delete",
-                                "TM identifier is not available for this entry.")
+        if not delete_tm_entry(self, tm_id, tm_name, source_text, target_text,
+                               reverse=self._match_panel_is_reverse(match)):
             return
-
-        reply = QMessageBox.question(
-            self,
-            "Confirm Deletion",
-            f"Delete TM entry from '{tm_name}'?\n\n"
-            f"Source: {source_text[:120]}\n"
-            f"Target: {target_text[:120]}\n\n"
-            "This action cannot be undone.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
-        )
-        if reply != QMessageBox.StandardButton.Yes:
-            return
-
-        try:
-            if hasattr(self, 'tm_manager') and self.tm_manager and hasattr(self.tm_manager, 'delete_entry'):
-                self.tm_manager.delete_entry(tm_id, source_text, target_text)
-            elif hasattr(self, 'db_manager') and self.db_manager and hasattr(self.db_manager, 'delete_entry'):
-                self.db_manager.delete_entry(tm_id, source_text, target_text)
-            else:
-                QMessageBox.critical(self, "Error",
-                                     "No TM manager available to perform deletion.")
-                return
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to delete TM entry:\n{e}")
-            return
-
-        self.log(f"🗑️ Deleted TM entry from '{tm_name}'")
 
         # Remove from the in-memory list and update display
         self.match_panel_tm_matches.pop(self.match_panel_tm_index)
@@ -877,10 +800,6 @@ class MatchPanelMixin:
         if self.match_panel_tm_index >= len(self.match_panel_tm_matches):
             self.match_panel_tm_index = max(0, len(self.match_panel_tm_matches) - 1)
         self._update_match_panel_tm_display()
-
-        # Force re-lookup next time this segment is navigated to
-        if hasattr(self, '_last_selected_row'):
-            self._last_selected_row = None
 
     def _create_compare_panel_box(self, label: str, bg_color: str, text_color: str, border_color: str,
                                    has_navigation: bool = False, show_metadata_label: bool = False,

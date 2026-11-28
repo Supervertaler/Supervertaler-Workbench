@@ -5,6 +5,17 @@ All notable changes to Supervertaler Workbench are documented in this file.
 **Current Version:** v1.10.383 (November 26, 2026)
 
 
+## Unreleased
+
+### Improvements
+
+- **Edit TM Entry: the source can be edited too.** Right-clicking a TM match and choosing **Edit TM Entry** let you change only the target. You can now correct the source as well. An entry needs both, so an empty source or target is refused.
+
+### Fixes
+
+- **An edited or deleted TM entry no longer comes back.** After **Edit TM Entry** or **Delete TM Entry**, the TM itself was right, but going to another segment and back could show the entry as it was before, and insert that. Workbench now looks those matches up again. Deleting an entry that was already gone said it was deleted; it now says it couldn't be found. Editing or deleting a match found in the other direction ("reversed") now works too.
+
+
 ## v1.10.383 - November 26, 2026
 
 Gemini 3.8 Flash is the recommended Gemini model, the formatting shortcuts work in Phrase projects, and SuperBrowser gets its capital B.
